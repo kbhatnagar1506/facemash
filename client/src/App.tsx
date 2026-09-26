@@ -12,6 +12,7 @@ import { decodeLook, defaultLook, encodeLook, loadLook, saveLook } from './look'
 import { Hud } from './Hud'
 import { Shells } from './Shells'
 import { fetchMe, type Me } from './account'
+import { touchFirst } from './touch'
 import { PermissionsSheet, wantsPermissions, type PermResult } from './Permissions'
 import { CALIBRATION_SPOTS, HallCollider, HALL_BOUNDS, HALL_SPAWN, HALL_YAW, PERSON_SCALE, TABLE, TABLES, cameraCeiling, eastX, westX } from './hall/layout'
 // the Klaus hall is big: it downloads in its own chunk, only once you're near Klaus
@@ -607,7 +608,7 @@ function Cinematic() {
         <strong>HackGT 13</strong>
         <span>Klaus Advanced Computing Building · Seaside Market</span>
       </div>
-      <div className="cine-skip">Esc or click to skip</div>
+      <div className="cine-skip">{touchFirst() ? 'Tap to skip' : 'Esc or click to skip'}</div>
     </div>
   )
 }
