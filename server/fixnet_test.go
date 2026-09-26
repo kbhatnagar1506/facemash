@@ -103,7 +103,7 @@ func join(t *testing.T, url, ticket string) (*websocket.Conn, map[string]any, er
 
 func TestIdleSocketsDontLockOutPlayers(t *testing.T) {
 	e := newWSEnv(t, true)
-	e.hub.ipCap = 5000             // this test's sockets all come from 127.0.0.1
+	e.hub.ipCap = 5000              // this test's sockets all come from 127.0.0.1
 	helloTimeout = 10 * time.Second // long enough to open them all first, even under -race
 	const idle = maxPlayers
 	var conns []*websocket.Conn

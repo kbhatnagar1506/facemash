@@ -80,6 +80,9 @@ type talkNear struct {
 	capped   map[int64]time.Time    // at their daily cap for the event day starting then
 	pending  map[int64]bool         // an encounter call is in flight for them
 	prefetch map[talkPair]bool      // hot topics already asked for
+	arrived  map[int64]talkPos      // where each player appeared in their current room
+	walked   map[int64]bool         // has moved off that spot (spawn points don't count as meeting)
+	walkOffM float64                // how far that is (talkWalkOffM; 0 = off, for tests)
 
 	buf  []talkPos // scratch, reused every scan
 	grid map[talkCell][]int
@@ -87,6 +90,10 @@ type talkNear struct {
 	one  map[int64]bool
 	busy map[int64]bool
 }
+
+// talkWalkOffM: how far from where they appeared in a room someone must walk before they
+// can meet anyone there.
+const talkWalkOffM = 2.0
 
 type talkCell struct {
 	room string
@@ -98,7 +105,7 @@ func newTalkNear(t *agentTalk, src talkPositions, tenant string) *talkNear {
 		t: t, src: src, tenant: tenant,
 		opted: map[int64]bool{}, since: map[talkPair]time.Time{}, done: map[talkPair]bool{},
 		retry: map[talkPair]time.Time{}, capped: map[int64]time.Time{}, pending: map[int64]bool{},
-		prefetch: map[talkPair]bool{}, grid: map[talkCell][]int{}, seen: map[talkPair]bool{},
+		prefetch: map[talkPair]bool{}, arrived: map[int64]talkPos{}, walked: map[int64]bool{}, walkOffM: talkWalkOffM, grid: map[talkCell][]int{}, seen: map[talkPair]bool{},
 		one: map[int64]bool{}, busy: map[int64]bool{},
 	}
 	n.start = func(ctx context.Context, tenant string, a, b int64) (string, error) {
@@ -210,6 +217,16 @@ func (n *talkNear) scan(now time.Time) int {
 	}
 	ps := n.buf[:0]
 	for _, p := range n.buf {
+		// everyone lands on the same spawn spot: only count people who have walked off where
+		// they appeared in this room, so arriving together (or an idle tab at the door) isn't a meeting
+		if a, ok := n.arrived[p.uid]; !ok || a.room != p.room {
+			n.arrived[p.uid], n.walked[p.uid] = p, n.walkOffM <= 0
+		} else if !n.walked[p.uid] && math.Hypot(p.x-a.x, p.z-a.z) >= n.walkOffM {
+			n.walked[p.uid] = true
+		}
+		if !n.walked[p.uid] {
+			continue
+		}
 		if !n.opted[p.uid] || n.pending[p.uid] || one[p.uid] {
 			continue
 		}
@@ -263,10 +280,12 @@ func (n *talkNear) scan(now time.Time) int {
 					if !ok {
 						at = now
 						n.since[pair] = now
-						if !n.prefetch[pair] { // hot topics while they stand there
-							n.prefetch[pair] = true
-							n.t.prefetch(n.tenant, pair[0], pair[1])
-						}
+					}
+					// hot topics while they stand there, once they've lingered a moment (not
+					// for everyone who merely walks past)
+					if !n.prefetch[pair] && now.Sub(at) >= n.t.cfg.ms(cfg.DwellMS)/3 {
+						n.prefetch[pair] = true
+						n.t.prefetch(n.tenant, pair[0], pair[1])
 					}
 					if now.Sub(at) >= n.t.cfg.ms(cfg.DwellMS) {
 						due = append(due, ready{pair, at})

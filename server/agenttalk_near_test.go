@@ -49,6 +49,7 @@ type nearHarness struct {
 func newNearHarness(t *testing.T) *nearHarness {
 	h := &nearHarness{talkHarness: newTalkHarness(t), hub: &fakeHub{}}
 	h.near = newTalkNear(h.talk, h.hub, h.tenant)
+	h.near.walkOffM = 0 // these tests place players directly; TestTalkNearSpawnIsNotAMeeting covers walking off
 	h.talk.near = h.near
 	real := h.near.start
 	h.near.start = func(ctx context.Context, tenant string, a, b int64) (string, error) {
@@ -230,6 +231,7 @@ func TestTalkNearPairOncePerEventAndDailyCap(t *testing.T) {
 		t.Fatalf("the pair talked again: %d", h.startCount())
 	}
 	fresh := newTalkNear(h.talk, h.hub, h.tenant)
+	fresh.walkOffM = 0
 	fresh.start = h.near.start
 	fresh.refreshOpted(time.Now())
 	h.near, h.talk.near = fresh, fresh
@@ -404,6 +406,7 @@ func BenchmarkTalkNearScan(b *testing.B) {
 	t := newAgentTalk(cfg, &accounts{tenant: "hackgt13"}, newMemStore(), &fakeSink{})
 	hub := benchPlayers(1000)
 	n := newTalkNear(t, hub, "hackgt13")
+	n.walkOffM = 0
 	for uid := range hub.at {
 		n.opted[uid] = true
 	}
@@ -430,5 +433,29 @@ func BenchmarkTalkNearSnapshot(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		buf = hub.talkPositions(buf[:0])
+	}
+}
+
+// Two people landing on the same spawn spot haven't met: nothing starts until both have
+// walked off where they appeared, and then only if they're still close.
+func TestTalkNearSpawnIsNotAMeeting(t *testing.T) {
+	h := newNearHarness(t)
+	h.near.walkOffM = talkWalkOffM
+	t0 := time.Now()
+	h.hub.put(h.a, "hackgt", 0, 0)
+	h.hub.put(h.b, "hackgt", 0.5, 0) // both at the door
+	for s := 0; s <= 10; s++ {
+		if n := h.scan(t0.Add(time.Duration(s) * time.Second)); n != 0 {
+			t.Fatal("started for two people standing at the spawn point")
+		}
+	}
+	h.hub.put(h.a, "hackgt", 6, 0) // a walks in; b still at the door
+	h.hub.put(h.b, "hackgt", 6.5, 1)
+	t1 := t0.Add(11 * time.Second)
+	for s := 0; s <= 3; s++ { // now both have walked off, and are close for 3 s
+		h.scan(t1.Add(time.Duration(s) * time.Second))
+	}
+	if h.startCount() != 1 {
+		t.Fatalf("after both walked off and stood together 3 s: %d starts", h.startCount())
 	}
 }
