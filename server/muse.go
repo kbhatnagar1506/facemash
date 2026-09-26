@@ -743,6 +743,7 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 		info["connector_url"] = base + mcpKeyPath + tok
 		info["now_url"] = base + nowKeyPath + tok
 		// straight to this server, not through Vercel's proxy (which caps request bodies)
+		info["memory_url"] = direct + memKeyPath + tok
 		info["memory_prompt"] = memoryPrompt(direct + memKeyPath + tok)
 		info["prompt"] = connectorPrompt(base, tok)
 		acc.fast.prompts(info, base, tok) // + the memory fast path, when it's on
@@ -880,13 +881,19 @@ func pairPrompt(base, code string, exp time.Time) string {
 func memoryPrompt(url string) string {
 	return "Send all of your memory about me to my HackGT 13 account. The link below contains my private key: never show it in chat.\n" +
 		"Be fast: no narration, no questions, no exploring.\n" +
-		"1. Write a script (python or bash) that reads these files and POSTs them as ONE JSON object to " + url + " :\n" +
+		memorySteps(url) +
+		"4. Reply \"done\" + KB sent. Nothing else."
+}
+
+// memorySteps: script, don't converse (the files go from disk to us, never through the
+// agent's context), nothing about other people, and a time limit so it stops.
+func memorySteps(url string) string {
+	return "1. Write a script (python or bash) that reads these files and POSTs them as ONE JSON object to " + url + " :\n" +
 		"   ~/MEMORY.md, ~/USER.md, ~/memory/*.md, ~/memory/bank/experience.md, ~/memory/bank/opinions.md, ~/memory/bank/reflections.md, ~/memory/bank/world.md\n" +
 		"   Skip files that don't exist. Never include ~/memory/people/ or anything about other people. Don't paste file contents into chat: the script reads them straight off disk.\n" +
 		"2. JSON shape: {\"user_id\": \"<my name>\", \"exported_at\": \"<UTC ISO time>\", \"memory_md\": \"...\", \"user_md\": \"...\", " +
 		"\"daily_notes\": [{\"date\": \"...\", \"content\": \"...\"}], \"bank\": {\"experience\": \"...\", \"opinions\": \"...\", \"reflections\": \"...\", \"world\": \"...\"}}\n" +
-		"3. Run it. If any step takes over 30 seconds, skip it and tell me.\n" +
-		"4. Reply \"done\" + KB sent. Nothing else."
+		"3. Run it. If any step takes over 30 seconds, skip it and tell me.\n"
 }
 
 func connectorPrompt(base, tok string) string {

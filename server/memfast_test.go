@@ -809,8 +809,14 @@ func TestFastNowOnlyCallsMAPIWithAQuestion(t *testing.T) {
 			t.Errorf("prompt is missing %q", want)
 		}
 	}
-	if !strings.Contains(fmt.Sprint(got["memory_prompt"]), "/api/ask/t/"+tok) || got["ask_url"] != "https://site.test/api/ask/t/"+tok {
-		t.Errorf("memory prompt / ask_url: %v", got)
+	// one paste: the memory upload is in the same prompt, and nothing about other people
+	for _, want := range []string{"/api/memory/t/" + tok, "STEP 1, send my memory now", "Never include ~/memory/people/", "update my HackGT memory", "reply with the KB sent"} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("prompt is missing %q", want)
+		}
+	}
+	if _, separate := got["memory_prompt"]; separate || got["ask_url"] != "https://site.test/api/ask/t/"+tok {
+		t.Errorf("memory_prompt should be folded into prompt; ask_url: %v", got)
 	}
 }
 

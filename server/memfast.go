@@ -1039,11 +1039,29 @@ func (f *memFast) prompts(info map[string]any, base, tok string) {
 	}
 	ask := base + askKeyPath + tok
 	info["ask_url"] = ask
-	info["prompt"] = fastConnectorPrompt(base, tok)
-	if mp, ok := info["memory_prompt"].(string); ok {
-		info["memory_prompt"] = mp + "\nLater, for questions about me (\"what do you know about me\", \"what was I working on\"), make ONE HTTP POST to " + ask +
-			" with the JSON body {\"q\": \"<my question>\"} and answer from the snippets it returns. Keep that link secret too."
+	// one paste does everything: send the memory now, then save the fast paths
+	if mu, ok := info["memory_url"].(string); ok {
+		info["prompt"] = connectAndSendPrompt(base, tok, mu)
+		delete(info, "memory_prompt")
+		return
 	}
+	info["prompt"] = fastConnectorPrompt(base, tok)
+}
+
+// connectAndSendPrompt is the single thing an attendee pastes into their agent after
+// pairing: it sends what the agent remembers about them (by script, nothing about other
+// people), saves the two fast paths, and stops with a defined reply.
+func connectAndSendPrompt(base, tok, memoryURL string) string {
+	return "Connect me to HackGT 13 and send it what you remember about me. The links below contain my private key: keep them secret and never show them in chat.\n" +
+		"Be fast: no narration, no questions, no exploring.\n\n" +
+		"STEP 1, send my memory now:\n" + memorySteps(memoryURL) + "\n" +
+		"STEP 2, save this as my HackGT 13 skill:\n" +
+		"- HackGT questions: make ONE HTTP GET to " + base + nowKeyPath + tok + " and answer from the JSON it returns (what's on now and next, how many people are here, and my profile).\n" +
+		"- Questions about me (\"what do you know about me\", \"what was I working on\"): make ONE HTTP POST to " + base + askKeyPath + tok +
+		" with the JSON body {\"q\": \"<my question>\"} and answer from the snippets of my own notes it returns.\n" +
+		"- Don't list tools, don't do an MCP handshake, don't make other calls first.\n" +
+		"- Whenever I say \"update my HackGT memory\", run the STEP 1 script again.\n\n" +
+		"STEP 3: reply with the KB sent, then tell me what's happening at HackGT right now."
 }
 
 func fastConnectorPrompt(base, tok string) string {
