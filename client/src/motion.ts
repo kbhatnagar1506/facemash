@@ -16,8 +16,12 @@ export async function requestMotion(): Promise<boolean> {
   try {
     const dm = (window as unknown as { DeviceMotionEvent?: IOSPermission }).DeviceMotionEvent
     const dor = (window as unknown as { DeviceOrientationEvent?: IOSPermission }).DeviceOrientationEvent
-    const a = dm?.requestPermission ? await dm.requestPermission() : 'granted'
-    const b = dor?.requestPermission ? await dor.requestPermission() : 'granted'
+    // both asked synchronously, inside the same tap: after an await iOS may no longer
+    // count it as the user's gesture and refuses the second prompt
+    const [a, b] = await Promise.all([
+      dm?.requestPermission ? dm.requestPermission() : Promise.resolve('granted' as const),
+      dor?.requestPermission ? dor.requestPermission() : Promise.resolve('granted' as const),
+    ])
     return a === 'granted' && b === 'granted'
   } catch {
     return false

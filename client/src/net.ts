@@ -42,13 +42,15 @@ export class Net {
 
   private ws: WebSocket | null = null
   private listeners = new Set<Listener>()
-  private hello: { name: string; color: string; x: number; z: number; room: Room; look?: string }
+  private hello: { name: string; color: string; x: number; z: number; room: Room; look?: string; ticket?: string }
   private lastSent = ''
   private chatKey = 0
   private closed = false
 
-  constructor(name: string, color: string, x: number, z: number, look?: string) {
-    this.hello = { name, color, x, z, room: 'campus', look }
+  /** `ticket` (from /api/me) signs you in, so the server saves where you are as you play. */
+  constructor(name: string, color: string, x: number, z: number, look?: string, room: Room = 'campus', ticket?: string) {
+    this.hello = { name, color, x, z, room, look, ticket }
+    this.room = room
     this.open()
   }
 

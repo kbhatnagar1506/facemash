@@ -40,6 +40,8 @@ export type View =
       scale?: number
       /** Where you appear in this room (the cinematic lands behind you here). */
       spawn?: [number, number]
+      /** false: no fly-through (you're picking up inside, where you left off) */
+      intro?: boolean
     }
 
 export function Player({
@@ -115,8 +117,13 @@ export function Player({
       }
       introPath.current = { ...path, T: glideTiming(path.pos, 1) }
       introLook.current.copy(path.look.getPoint(0))
-      intro.current = 0
-      window.dispatchEvent(new CustomEvent('cinematic', { detail: true }))
+      if (view.intro === false) {
+        intro.current = -1
+        snap.current = true
+      } else {
+        intro.current = 0
+        window.dispatchEvent(new CustomEvent('cinematic', { detail: true }))
+      }
     } else {
       cam.near = 1
       cam.fov = 40

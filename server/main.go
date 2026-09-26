@@ -80,6 +80,9 @@ type client struct {
 	lastState []byte       // last state frame sent (identical frames are skipped)
 	msgWindow time.Time    // start of the current rate-limit second
 	msgCount  int
+
+	uid   int64    // signed-in account (0 = guest)
+	saved Progress // last position written to the database
 }
 
 type inbound struct {
@@ -94,6 +97,8 @@ type inbound struct {
 	Text  string  `json:"text"`
 	Room  string  `json:"room"`
 	Look  string  `json:"look"`
+	// signed-in players: the ticket from /api/me (their progress is saved as they play)
+	Ticket string `json:"ticket"`
 }
 
 type Hub struct {
@@ -296,6 +301,13 @@ func (c *client) handle(m inbound) {
 		if !rooms[c.p.Room] {
 			c.p.Room = "campus"
 		}
+		if acct != nil && m.Ticket != "" {
+			if id, ok := acct.sess.check(kindTicket, m.Ticket); ok {
+				c.uid = id
+				c.saved = Progress{Room: c.p.Room, X: c.p.X, Z: c.p.Z}
+				acct.saveProfile(id, Profile{Name: c.p.Name, Color: c.p.Color, Look: c.p.Look})
+			}
+		}
 		c.joined = true
 		c.lastMove = time.Now()
 
@@ -362,6 +374,9 @@ func (c *client) readLoop() {
 		h.mu.Lock()
 		delete(h.clients, c.p.ID)
 		h.dirty = true // neighbours' frames drop this player
+		if c.joined && c.uid != 0 {
+			acct.saveProgress(c.uid, c.progress())
+		}
 		if c.joined {
 			h.broadcast(c.p.Room, mustJSON(map[string]any{"t": "leave", "id": c.p.ID}), 0)
 			log.Printf("leave #%d %q (%d online)", c.p.ID, c.p.Name, len(h.clients))
@@ -370,7 +385,7 @@ func (c *client) readLoop() {
 		close(c.send)
 		c.conn.Close()
 	}()
-	c.conn.SetReadLimit(1024)
+	c.conn.SetReadLimit(2048)
 	c.conn.SetReadDeadline(time.Now().Add(pongTimeout))
 	c.conn.SetPongHandler(func(string) error {
 		return c.conn.SetReadDeadline(time.Now().Add(pongTimeout))
@@ -419,13 +434,29 @@ func (c *client) writeLoop() {
 	}
 }
 
+// acct is set when sign-in is on (see accounts.go); nil means everyone plays as a guest.
+var acct *accounts
+
 func main() {
 	addr := flag.String("addr", ":8080", "listen address")
 	static := flag.String("static", "../client/dist", "built client to serve")
 	eventFile := flag.String("event", "event.json", "HackGT event card")
 	geoFile := flag.String("geo", "geo.json", "GPS to Klaus atrium alignment")
 	samplesFile := flag.String("samples", "geo_samples.jsonl", "recorded location samples")
+	keyFile := flag.String("session-key", "session.key", "session signing key (created if missing)")
+	mintFor := flag.String("muse-token", "", "print a connector token for this email (a test account is made if needed) and exit")
+	sessionFor := flag.String("session-for", "", "print a session cookie value for this email's test account and exit (for testing signed-in flows before Google sign-in is on)")
+	devLogin := flag.Bool("dev-login", false, "local testing only: /api/dev/login?email= signs in a test account (localhost requests only)")
 	flag.Parse()
+	base := strings.TrimRight(envOr("PUBLIC_URL", "https://gt-campus-quest.vercel.app"), "/")
+	if *mintFor != "" {
+		mintTestToken(*mintFor, *keyFile, base)
+		return
+	}
+	if *sessionFor != "" {
+		mintTestSession(*sessionFor, *keyFile)
+		return
+	}
 
 	// ALLOWED_ORIGINS=https://gt.example.com,https://gt-campus-quest*.vercel.app
 	// (a * matches anything, e.g. Vercel preview deploys). Unset: same-host requests
@@ -442,7 +473,7 @@ func main() {
 			allowed[o] = true
 		}
 	}
-	upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool {
+	originOK := func(r *http.Request) bool {
 		origin := r.Header.Get("Origin")
 		if origin == "" || allowed[origin] {
 			return true
@@ -454,12 +485,38 @@ func main() {
 		}
 		host := strings.TrimPrefix(strings.TrimPrefix(origin, "http://"), "https://")
 		return host == r.Host || strings.HasPrefix(host, "localhost:") || strings.HasPrefix(host, "127.0.0.1:")
-	}}
+	}
+	upgrader := websocket.Upgrader{CheckOrigin: originOK}
 
 	hub := newHub()
 	go hub.run()
 
 	mux := http.NewServeMux()
+	// GOOGLE_CLIENT_ID=<web client id>[,<another>]: turns on Sign in with Google.
+	// DB_INSTANCE=project:region:instance (+ DB_NAME, DB_IAM_USER): accounts live in Cloud SQL;
+	// otherwise in memory. TENANT names the event this server hosts (default hackgt13).
+	var clientIDs []string
+	for _, id := range strings.Split(os.Getenv("GOOGLE_CLIENT_ID"), ",") {
+		if id = strings.TrimSpace(id); id != "" {
+			clientIDs = append(clientIDs, id)
+		}
+	}
+	acct = openAccounts(*keyFile)
+	if acct == nil {
+		clientIDs = nil // no database: sign-in off, everyone plays as a guest
+	} else {
+		defer acct.store.Close()
+		go hub.saveLoop()
+	}
+	if acct != nil {
+		mountAuth(mux, clientIDs, acct, originOK)
+		mountMuse(mux, acct, hub, *eventFile, base, originOK)
+		if *devLogin {
+			mountDevLogin(mux, acct)
+		}
+	} else {
+		mountAuth(mux, nil, &accounts{store: newMemStore(), tenant: envOr("TENANT", "hackgt13"), sess: sessions{secret: loadSecret(*keyFile)}}, originOK)
+	}
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		hub.mu.Lock()
 		full := len(hub.clients) >= maxPlayers
@@ -528,17 +585,8 @@ func main() {
 		w.Write(b)
 	})
 	mux.HandleFunc("/api/online", func(w http.ResponseWriter, r *http.Request) {
-		counts := map[string]int{"online": 0}
-		hub.mu.Lock()
-		for _, c := range hub.clients {
-			if c.joined {
-				counts["online"]++
-				counts[c.p.Room]++
-			}
-		}
-		hub.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(counts)
+		json.NewEncoder(w).Encode(hub.counts())
 	})
 	// Serve the client; unknown extension-less paths (like /avatar) get the app itself.
 	// Hashed build assets are cached for a year; JS/CSS/JSON are gzipped (≈3× smaller).

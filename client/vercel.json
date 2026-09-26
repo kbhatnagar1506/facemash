@@ -15,6 +15,10 @@
     {
       "source": "/play",
       "destination": "/index.html"
+    },
+    {
+      "source": "/muse",
+      "destination": "/index.html"
     }
   ],
   "headers": [
