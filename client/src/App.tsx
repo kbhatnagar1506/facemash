@@ -1,7 +1,6 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { Bloom, BrightnessContrast, DepthOfField, EffectComposer, HueSaturation, N8AO, SMAA, Vignette } from '@react-three/postprocessing'
-import { Environment } from '@react-three/drei'
+import { Bloom, BrightnessContrast, EffectComposer, HueSaturation, N8AO, SMAA, Vignette } from '@react-three/postprocessing'
 import { Collider, loadCampus, type Campus } from './map'
 import { Net } from './net'
 import { World } from './World'
@@ -93,13 +92,6 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
   }, [])
   const hallCollider = useMemo(() => new HallCollider(), [])
   const [room, setRoom] = useState<'campus' | 'hackgt'>('campus')
-  // true while the entrance cinematic plays (drives the depth-of-field pass)
-  const [cine, setCine] = useState(false)
-  useEffect(() => {
-    const h = (e: Event) => setCine(!!(e as CustomEvent).detail)
-    window.addEventListener('cinematic', h)
-    return () => window.removeEventListener('cinematic', h)
-  }, [])
   const view = useMemo<View>(
     () =>
       room === 'hackgt'
@@ -207,13 +199,6 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
         {/* inside Klaus: the mezzanine's downlights, as a soft shadowless top light so the
             lobby under the low ceiling isn't left dim when the sun can't reach it */}
         {room === 'hackgt' && <directionalLight position={[-6, 30, 30]} intensity={0.55} color="#fff3e2" />}
-        {/* a real indoor light probe (Poly Haven "Entrance Hall" HDRI): reflections on the
-            polished floor, glass and steel, plus soft natural fill */}
-        {room === 'hackgt' && (
-          <Suspense fallback={null}>
-            <Environment files="/textures/entrance_hall_1k.hdr" environmentIntensity={0.22} />
-          </Suspense>
-        )}
         <group visible={room === 'campus'}>
           <World campus={campus} onOpenEvent={() => setEventOpen(true)} />
           <Shells campus={campus} info={info} onOpen={() => setEventOpen(true)} active={room === 'campus'} />
@@ -238,14 +223,12 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
             buffer and can't share it with a multisampled target (that blit fails and freezes
             the frame), so the hall uses SMAA for edges instead of MSAA. */}
         {room === 'hackgt' ? (
-          <EffectComposer key={cine ? 'hall-cine' : 'hall'} multisampling={0}>
+          <EffectComposer key="hall" multisampling={0}>
             <N8AO halfRes aoRadius={1.4} distanceFalloff={0.6} intensity={2.6} color="#2a2420" />
-            {/* the intro flies in with a shallow focus, then cuts sharp to your avatar */}
-            {cine ? <DepthOfField worldFocusDistance={14} worldFocusRange={12} bokehScale={3.5} /> : <></>}
             <Bloom mipmapBlur intensity={0.35} luminanceThreshold={0.99} luminanceSmoothing={0.03} />
             {/* grade: a touch richer and punchier, warm vignette */}
             <HueSaturation saturation={0.1} />
-            <BrightnessContrast brightness={0.01} contrast={0.08} />
+            <BrightnessContrast brightness={-0.03} contrast={0.06} />
             <Vignette offset={0.3} darkness={0.55} />
             <SMAA />
           </EffectComposer>
@@ -341,7 +324,7 @@ function Cinematic() {
         <strong>HackGT 13</strong>
         <span>Klaus Advanced Computing Building · Seaside Market</span>
       </div>
-      <div className="cine-skip">Press any key to skip</div>
+      <div className="cine-skip">Esc or click to skip</div>
     </div>
   )
 }

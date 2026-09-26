@@ -125,15 +125,19 @@ export function Player({
     cam.updateProjectionMatrix()
   }, [view, camera])
 
-  // Skip the cinematic with any key or click.
+  // Skip the cinematic deliberately (Esc / Space / Enter or a click), never by a held
+  // movement key or the E you pressed to walk in, and not in its first half second.
   useEffect(() => {
     const skip = () => {
-      if (intro.current >= 0) intro.current = 1
+      if (intro.current > 0.1) intro.current = 1
     }
-    window.addEventListener('keydown', skip)
+    const key = (e: KeyboardEvent) => {
+      if (!e.repeat && (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter')) skip()
+    }
+    window.addEventListener('keydown', key)
     window.addEventListener('pointerdown', skip)
     return () => {
-      window.removeEventListener('keydown', skip)
+      window.removeEventListener('keydown', key)
       window.removeEventListener('pointerdown', skip)
     }
   }, [])
@@ -406,7 +410,7 @@ export function Player({
       // Indoors: a higher sun with a tight, sharp shadow map around the player so
       // tables, chairs, people and railings all throw crisp shadows on the terrazzo.
       light.current.position.set(sx + 34, 52, sz + 14)
-      light.current.intensity = 1.9
+      light.current.intensity = 1.25 // softer indoor sun
     } else {
       light.current.position.set(sx + 110, 55, sz + 25)
       light.current.intensity = 2

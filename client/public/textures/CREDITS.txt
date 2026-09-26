@@ -1,3 +1,2 @@
 Textures and HDRI from Poly Haven (https://polyhaven.com), CC0 public domain:
 - leafy_grass, asphalt_02, brick_pavement_02 (campus ground detail)
-- entrance_hall HDRI (indoor reflections and fill light)
