@@ -405,6 +405,7 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 			}
 			ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
 			defer cancel()
+			log.Printf("rest: #%d GET %s", c.id, r.URL.Path)
 			out, err := t.Run(ctx, c, args)
 			if err != nil {
 				log.Printf("muse: %s for #%d: %v", t.Name, c.id, err)
@@ -690,6 +691,16 @@ func handleRPC(ctx context.Context, c *museCaller, raw json.RawMessage) any {
 	if json.Unmarshal(raw, &m) != nil || m.JSONRPC != "2.0" {
 		return rpcError(nil, -32700, "parse error")
 	}
+	// one line per call, so we can see what agents actually ask (names only, no payloads)
+	tool := ""
+	if m.Method == "tools/call" {
+		var p struct {
+			Name string `json:"name"`
+		}
+		json.Unmarshal(m.Params, &p)
+		tool = " " + p.Name
+	}
+	log.Printf("mcp: #%d %s%s", c.id, m.Method, tool)
 	if m.Method == "" { // a response to something we never sent
 		return nil
 	}
