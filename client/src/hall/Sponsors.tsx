@@ -813,7 +813,7 @@ function Organizers({ art }: { art: Art }) {
       <Bear x={-2.9} z={-6.3} rot={Math.PI / 2 - 0.3} />
 
       {/* Hardware Desk under the high end of the stair: striped cloth, parts bins, the line */}
-      <group position={[-14.3, 0, 7.5]} rotation-y={Math.PI / 2}>
+      <group position={[-11.3, 0, 7.5]} rotation-y={Math.PI / 2}>
         <Cloth w={3.6} d={1.2} color="#2455a8" front={art.striped} seed={7} />
         {[-1.3, -0.65, 0, 0.65, 1.3].map((x, i) => (
           <Box key={x} p={[x, 0.84, 0.05]} s={[0.5, 0.12, 0.34]} color={['#e9eef2', '#cfd8df', '#f4f4f0', '#dfe6ea', '#e9eef2'][i]} />
@@ -826,7 +826,7 @@ function Organizers({ art }: { art: Art }) {
       </mesh>
 
       {/* MLH at the stair foot: card towers on the cloth, balloons piled under the stair */}
-      <group position={[-12.8, 0, 15.5]}>
+      <group position={[-9.8, 0, 15.5]}>
         <Cloth w={3.2} d={1.2} color="#1b2a4a" front={art.mlh} seed={5} />
         {[-1.2, 1.2].map((x) =>
           [0, 1, 2, 3].map((k) => (
@@ -853,7 +853,7 @@ const BALLOONS: [number, number, number, string][] = (() => {
   let r = 11
   const rnd = () => ((r = (r * 16807) % 2147483647) / 2147483647)
   for (let i = 0; i < 34; i++) {
-    const x = -18.9 + rnd() * 3.2
+    const x = -15.9 + rnd() * 3.2
     const z = 12 + rnd() * 3.6
     const s = 0.22 + rnd() * 0.08
     out.push([x, z, s, cols[Math.floor(rnd() * cols.length)]])

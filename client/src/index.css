@@ -188,3 +188,24 @@ kbd {
   background: #1f5566; box-shadow: 0 5px 0 #0e2f3a; animation: toast 2.5s ease forwards;
 }
 @keyframes toast { 0% { opacity: 0; transform: translate(-50%, 10px); } 10%, 80% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; } }
+
+/* live location */
+.live-ui { position: fixed; left: 12px; bottom: 96px; z-index: 40; display: grid; gap: 8px; justify-items: start; pointer-events: none; }
+.live-ui > * { pointer-events: auto; }
+.live-pill {
+  font: 800 13px var(--round); padding: 5px 12px; border-radius: 999px; cursor: pointer;
+  background: var(--paper); border: 3px solid var(--ink); color: #6b6f78;
+}
+.live-pill.on { color: #1f8a4c; }
+.calibrate {
+  width: min(340px, calc(100vw - 24px)); display: grid; gap: 6px; padding: 12px; font: 600 13px var(--round);
+  background: var(--paper); border: 3px solid var(--ink); border-radius: 12px;
+}
+.cal-fix { font-family: ui-monospace, monospace; font-size: 12px; }
+.cal-hint { opacity: .7; }
+.cal-spots { display: flex; flex-wrap: wrap; gap: 6px; }
+.cal-spots button, .cal-actions button {
+  font: 700 12px var(--round); padding: 4px 8px; border: 2px solid var(--ink); border-radius: 8px; background: #fff; cursor: pointer;
+}
+.calibrate textarea { width: 100%; font: 11px ui-monospace, monospace; }
+.cal-actions { display: flex; gap: 8px; align-items: center; font-size: 11px; }

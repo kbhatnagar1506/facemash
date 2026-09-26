@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import * as THREE from 'three'
-import { DOORS_Z, L1, SEMINAR_Z, X0, X1, Z1 } from './layout'
+import { CX, DOORS_Z, L1, SEMINAR_Z, X0, X1, Z1 } from './layout'
 import { textCard } from './textures'
 import { FoldingChair } from './Sponsors'
 
@@ -278,7 +278,7 @@ function SeminarRoom() {
         </group>
       </group>
       {/* side corridor off the lobby */}
-      <Plane p={[-18, 1.6, Z - 0.02]} w={4.2} h={3.2} map={corridor} basic />
+      <Plane p={[-13.6, 1.6, Z - 0.02]} w={4.2} h={3.2} map={corridor} basic />
       {/* folding tables where people hack in the lobby */}
       {[[-10.6, 22.5], [-6, 24.1]].map(([x, z]) => (
         <group key={x} position={[x, 0, z]}>
@@ -445,7 +445,7 @@ export function Entrance() {
   return (
     <group>
       {/* lobby wall under the mezzanine */}
-      <mesh position={[0, (L1 - 0.5) / 2, Z1]} rotation-y={Math.PI}>
+      <mesh position={[CX, (L1 - 0.5) / 2, Z1]} rotation-y={Math.PI}>
         <planeGeometry args={[X1 - X0, L1 - 0.5]} />
         <meshLambertMaterial color={WALL} />
       </mesh>

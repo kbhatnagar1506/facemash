@@ -4,9 +4,11 @@
 // north on your left to the 2nd-floor balcony; the checkerboard wall is the far
 // (north) end; sponsor booths run down the right under the stacked balconies.
 
-export const HALL = { w: 40, d: 56 } // 40 m across (east–west), 56 m from the back wall to the entrance
-export const X0 = -HALL.w / 2
-export const X1 = HALL.w / 2
+export const X0 = -17 // west wall, right behind the glass stair
+export const X1 = 20 // east windows
+export const HALL = { w: X1 - X0, d: 56 } // 37 m across, 56 m from the back wall to the entrance
+/** Centre line of the room (it isn't symmetric about x=0). */
+export const CX = (X0 + X1) / 2
 export const Z0 = -HALL.d / 2
 export const Z1 = HALL.d / 2
 export const CEIL = 22
@@ -14,7 +16,7 @@ export const L1 = 5 // 2nd-floor balcony height
 export const MEZZ_Z = 3 // the raised entrance mezzanine runs from here (the Table 7 row) to the doors
 /** Where the mezzanine's west wing starts (it only covers the stairwell beyond the stair foot). */
 export const MEZZ_WEST_Z = 17.6
-export const MEZZ_X0 = -14 // mezzanine's west edge over the stairwell
+export const MEZZ_X0 = -11 // mezzanine's west edge over the stairwell
 /** People are drawn at this scale inside Klaus so the building reads at true size. */
 export const PERSON_SCALE = 0.62
 
@@ -28,18 +30,18 @@ export const HALL_YAW = Math.PI / 2
 export const SEMINAR_Z = 24
 
 /** Glass stair on the left as you enter: bottom at z=17 (ground), top at z=5 (balcony). */
-export const STAIR = { x0: -19.5, x1: -15.5, zBottom: 17, zTop: 5, steps: 24 }
+export const STAIR = { x0: -16.5, x1: -12.5, zBottom: 17, zTop: 5, steps: 24 }
 
 /** Walkable 2nd-floor balcony: the left run and the back-left run (L-shape). */
 export const BALCONY = {
-  left: { x0: X0, x1: -13, z0: Z0, z1: STAIR.zTop },
+  left: { x0: X0, x1: -10, z0: Z0, z1: STAIR.zTop },
   back: { x0: X0, x1: -1, z0: Z0, z1: -14 },
 }
 
 /** Round white columns: [x, z, radius, height]. */
 export const COLUMNS: [number, number, number, number][] = [
-  [-13.2, 3.4, 0.4, L1],
-  [-13.2, -5, 0.4, L1],
+  [-10.2, 3.4, 0.4, L1],
+  [-10.2, -5, 0.4, L1],
   [-8, -14.2, 0.4, L1],
   [-1.6, -14.2, 0.4, L1],
   ...[-22, -14, -6, 2, 10].map((z): [number, number, number, number] => [X1 - 3.8, z, 0.45, 18.2]),
@@ -76,8 +78,8 @@ export const GROUND_BLOCKS: Box[] = [
   [18.3, 0.4, 19.9, 3.3],
   [18.1, 6.1, 19.9, 8.9],
   // organizers
-  [-15, 5.6, -13.6, 9.4], // Hardware Desk
-  [-14.4, 14.8, -11.2, 16.2], // MLH at the stair foot
+  [-12, 5.6, -10.6, 9.4], // Hardware Desk
+  [-11.4, 14.8, -8.2, 16.2], // MLH at the stair foot
   [-3.7, -11.8, -1.9, -5.8], // HackGT Help Desk + the bear (beside Tables 1 & 3)
   // entrance lobby (photos: doors, Seminar Room West, Research Wing)
   [X1 - 0.9, 16.1, X1 - 0.1, 16.9], // trash can by the doors
@@ -173,8 +175,8 @@ export interface Spot {
 export const SPOTS: Spot[] = [
   { id: 'helpdesk', x: -1.1, z: -9.2, r: 2.4, text: 'HackGT Help Desk: questions, lost & found, and the full schedule. Press E.', action: 'schedule' },
   { id: 'photo', x: 2, z: -15.8, r: 2.4, text: '📸 The HackGT 13 photo booth. Hop in the boat! Press E to take a photo.', action: 'photo' },
-  { id: 'hardware', x: -12.4, z: 7.5, r: 2.6, text: 'Hardware Desk: check out Arduinos, sensors, cables… the line is long for a reason.' },
-  { id: 'mlh', x: -12.8, z: 17.2, r: 2.4, text: 'Major League Hacking: stickers, swag and challenge cards.' },
+  { id: 'hardware', x: -9.4, z: 7.5, r: 2.6, text: 'Hardware Desk: check out Arduinos, sensors, cables… the line is long for a reason.' },
+  { id: 'mlh', x: -9.8, z: 17.2, r: 2.4, text: 'Major League Hacking: stickers, swag and challenge cards.' },
   { id: 'notability', x: -6, z: -23.2, r: 2.4, text: 'Notability: “the app your semester runs on.” Download it now.' },
   { id: 'visa', x: 0.6, z: -24.2, r: 1.8, text: 'Visa: chat with engineers about payments at planet scale.' },
   { id: 'tmobile', x: 4.6, z: -24.2, r: 1.8, text: 'T-Mobile: “Unstoppable. Together.” Explore what’s possible.' },
@@ -184,9 +186,9 @@ export const SPOTS: Spot[] = [
   { id: 'meta', x: 17.1, z: -12, r: 2.4, text: 'Meta: “Make Every Connection Matter.” Come say hi at the table.' },
   { id: 'impiricus', x: 17.2, z: -4, r: 2.4, text: 'Impiricus: the Agentic Commercialization Platform for Healthcare. self.build()' },
   { id: 'spacex', x: 17.2, z: 7.5, r: 2.2, text: 'SpaceX: ask about building rockets.' },
-  { id: 'balcony', x: -17.5, z: -8, y: L1, r: 5, text: 'Up on the 2nd floor: the whole Seaside Market below you.' },
+  { id: 'balcony', x: -14, z: -8, y: L1, r: 5, text: 'Up on the 2nd floor: the whole Seaside Market below you.' },
   { id: 'mezz', x: 4, z: 4.6, y: L1, r: 6, text: 'The entrance mezzanine: look out over the hacking floor and the photo booth.' },
-  { id: 'seminar', x: -20, z: SEMINAR_Z, r: 2.6, text: 'Seminar Room West: workshops and tech talks happen in here.' },
+  { id: 'seminar', x: X0 + 2, z: SEMINAR_Z, r: 2.6, text: 'Seminar Room West: workshops and tech talks happen in here.' },
   { id: 'research', x: 10, z: 26.2, r: 2.6, text: 'Klaus Research Wing: the 1100s. Directions to the classroom wing are on the kiosk.' },
   { id: 'tv', x: 13.4, z: 26.5, r: 2.2, text: 'The lobby screen: “AI4OPT Showcase & Social.”' },
 ]
@@ -235,3 +237,16 @@ export function cameraCeiling(x: number, z: number, py: number): number {
   }
   return CEIL - 1
 }
+
+/** The room's floor rectangle: [x0, z0, x1, z1]. */
+export const HALL_BOUNDS: [number, number, number, number] = [X0, Z0, X1, Z1]
+
+/** Spots to stand at when calibrating GPS on site (?calibrate). Far apart = better. */
+export const CALIBRATION_SPOTS: { name: string; h: [number, number] }[] = [
+  { name: 'Main doors', h: [X1 - 1.5, DOORS_Z] },
+  { name: 'Stair foot', h: [(STAIR.x0 + STAIR.x1) / 2, STAIR.zBottom + 1.2] },
+  { name: 'Help Desk', h: [-1.1, -9.2] },
+  { name: 'Photo booth boat', h: [2, -15.6] },
+  { name: 'Aramco backdrop', h: [15.3, -24.5] },
+  { name: 'Notability', h: [-6, -23.2] },
+]

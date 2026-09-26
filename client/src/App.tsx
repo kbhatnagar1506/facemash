@@ -7,7 +7,9 @@ import { Player, type PlayerInfo, type View } from './Player'
 import { Remotes } from './Remotes'
 import { Hud } from './Hud'
 import { Shells } from './Shells'
-import { HackGTHall, HallCollider, HALL, HALL_SPAWN, HALL_YAW, PERSON_SCALE, cameraCeiling } from './HackGTHall'
+import { CALIBRATION_SPOTS, HackGTHall, HallCollider, HALL_BOUNDS, HALL_SPAWN, HALL_YAW, PERSON_SCALE, cameraCeiling } from './HackGTHall'
+import { toHall, useLiveLocation, type GeoCfg } from './geo'
+import { Calibrate, LivePill } from './LiveLocation'
 import type { EventInfo } from './HackGTWelcome'
 
 const COLORS = ['#e0564f', '#4f7fd6', '#e89a3c', '#5aa56a', '#9b6bd1', '#d9c24a', '#3fa7b3', '#f06ba8']
@@ -92,7 +94,7 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
   const view = useMemo<View>(
     () =>
       room === 'hackgt'
-        ? { mode: 'inside', yaw0: HALL_YAW, scale: PERSON_SCALE, ceiling: cameraCeiling, bounds: [-HALL.w / 2 + 0.8, -HALL.d / 2 + 0.8, HALL.w / 2 - 0.8, HALL.d / 2 - 0.2] }
+        ? { mode: 'inside', yaw0: HALL_YAW, scale: PERSON_SCALE, ceiling: cameraCeiling, bounds: [HALL_BOUNDS[0] + 0.8, HALL_BOUNDS[1] + 0.8, HALL_BOUNDS[2] - 0.8, HALL_BOUNDS[3] - 0.2] }
         : { mode: 'overhead' },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [room === 'hackgt'],
@@ -101,6 +103,46 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
     if (!net) return
     return net.subscribe(() => setRoom(net.room))
   }, [net])
+  // Live location (GPS only): where you really are drives your avatar.
+  // Beta mode (the default) = move with the keys, no GPS. Turn beta off → live GPS positioning.
+  const [live, setLive] = useState(() => load('gt.gps', false))
+  const { fix, status } = useLiveLocation(live && room === 'hackgt')
+  const [geoCfg, setGeoCfg] = useState<GeoCfg | null>(null)
+  useEffect(() => {
+    fetch('/api/geo')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((c) => setGeoCfg(load<GeoCfg | null>('gt.geo', null) ?? c))
+      .catch(() => {})
+  }, [])
+  const gps = useRef<{ x: number; z: number } | null>(null)
+  const [where, setWhere] = useState<'in' | 'out' | null>(null)
+  useEffect(() => {
+    // Live location is only used inside the Klaus atrium; campus is always keys.
+    if (room !== 'hackgt' || !live || !fix || fix.acc > 60 || !geoCfg) {
+      gps.current = null
+      setWhere(null)
+      return
+    }
+    let [x, z] = toHall(geoCfg, fix.lat, fix.lon)
+    const b = HALL_BOUNDS
+    const slack = 12 // indoor GPS drifts; allow a little outside the walls
+    if (x < b[0] - slack || x > b[2] + slack || z < b[1] - slack || z > b[3] + slack) {
+      gps.current = null
+      setWhere('out')
+      return
+    }
+    x = Math.min(b[2] - 1, Math.max(b[0] + 1, x))
+    z = Math.min(b[3] - 1, Math.max(b[1] + 1, z))
+    // smooth out jitter; big jumps (new room, first fix) go straight through
+    const prev = gps.current
+    gps.current = prev && Math.hypot(prev.x - x, prev.z - z) < 15 ? { x: prev.x + (x - prev.x) * 0.5, z: prev.z + (z - prev.z) * 0.5 } : { x, z }
+    setWhere('in')
+  }, [fix, live, room, geoCfg])
+  useEffect(() => {
+    gps.current = null // re-place on the next fix after changing rooms
+  }, [room])
+  const calibrating = useMemo(() => new URLSearchParams(location.search).has('calibrate'), [])
+
   // Where to put the player back on campus when they leave the hall.
   const returnTo = useRef<[number, number]>(start)
 
@@ -158,6 +200,7 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
           info={info}
           zoom={zoom}
           view={view}
+          gps={gps}
         />
         <Remotes net={net} scale={room === 'hackgt' ? PERSON_SCALE : 1} />
       </Canvas>
@@ -173,6 +216,29 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
         onEnterHall={enterHall}
         onLeaveHall={leaveHall}
       />
+      <div className="live-ui">
+        {room === 'hackgt' && <LivePill
+          live={live}
+          status={status}
+          fix={fix}
+          where={where}
+          room={room}
+          onToggle={() => {
+            save('gt.gps', !live)
+            setLive(!live)
+          }}
+        />}
+        {calibrating && room === 'hackgt' && (
+          <Calibrate
+            fix={fix}
+            spots={CALIBRATION_SPOTS}
+            onApply={(c) => {
+              save('gt.geo', c)
+              setGeoCfg(c)
+            }}
+          />
+        )}
+      </div>
     </>
   )
 }

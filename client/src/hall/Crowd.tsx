@@ -139,8 +139,8 @@ export function Crowd() {
     const west = -Math.PI / 2
     add(walker([[0, 18], [-4, 8], [-5.5, -9], [-2, -15.3], [6.4, -15.3], [6.2, 14], [0, 18]], 1.5, true))
     add(fixed(-3.9, -9.6, Math.PI / 2), { pack: false }) // HackGT Help Desk
-    add(fixed(-15.4, 7.5, Math.PI / 2, { wave: false }), { pack: false }) // Hardware Desk
-    add(fixed(-12.8, 14.5, 0, { wave: false }), { pack: false }) // MLH
+    add(fixed(-12.4, 7.5, Math.PI / 2, { wave: false }), { pack: false }) // Hardware Desk
+    add(fixed(-9.8, 14.5, 0, { wave: false }), { pack: false }) // MLH
     add(fixed(18.9, -24.3, west, { sit: true, wave: false }), { pack: false }) // Aramco, in his folding chair
     add(fixed(19.5, -20.3, west, { wave: false }), { pack: false }) // NSA
     add(fixed(19.6, -4, west), { pack: false }) // Impiricus

@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import * as THREE from 'three'
-import { BALCONY, CEIL, COLUMNS, DOORS_Z, HALL, L1, MEZZ_WEST_Z, MEZZ_X0, MEZZ_Z, STAIR, X0, X1, Z0, Z1 } from './layout'
+import { BALCONY, CEIL, COLUMNS, CX, DOORS_Z, HALL, L1, MEZZ_WEST_Z, MEZZ_X0, MEZZ_Z, STAIR, X0, X1, Z0, Z1 } from './layout'
 import { Entrance } from './Entrance'
 import { ceilingTiles, checkerWall, netTexture, terrazzo, textCard, windowWall } from './textures'
 
@@ -33,13 +33,13 @@ function Floor() {
   // A real mirror pass halves the frame rate, so fake it with soft light pools.
   const pools = useMemo(() => {
     const out: [number, number][] = []
-    for (let x = X0 + 3; x < X1; x += 4.2) for (let z = Z0 + 3; z < MEZZ_Z; z += 4.4) if (!(x < -13 && z < STAIR.zTop)) out.push([x, z])
+    for (let x = X0 + 3; x < X1; x += 4.2) for (let z = Z0 + 3; z < MEZZ_Z; z += 4.4) if (!(x < BALCONY.left.x1 && z < STAIR.zTop)) out.push([x, z])
     out.push(...MEZZ_LIGHTS)
     return out
   }, [])
   return (
     <group>
-      <mesh rotation-x={-Math.PI / 2} receiveShadow>
+      <mesh rotation-x={-Math.PI / 2} position={[CX, 0, 0]} receiveShadow>
         <planeGeometry args={[HALL.w, HALL.d]} />
         <meshStandardMaterial map={map} roughness={0.32} metalness={0} />
       </mesh>
@@ -108,7 +108,7 @@ function Walls() {
   return (
     <group>
       {/* far (north) wall: full-height checkerboard with windows */}
-      <mesh position={[0, h / 2, Z0]}>
+      <mesh position={[CX, h / 2, Z0]}>
         <planeGeometry args={[HALL.w, h]} />
         <meshLambertMaterial map={back} />
       </mesh>
@@ -143,7 +143,7 @@ function Walls() {
         <meshLambertMaterial color="#ecebe7" />
       </mesh>
       {/* entrance (south) wall above the mezzanine; the lobby level is <Entrance /> */}
-      <mesh position={[0, L1 + (h - L1) / 2, Z1]} rotation-y={Math.PI}>
+      <mesh position={[CX, L1 + (h - L1) / 2, Z1]} rotation-y={Math.PI}>
         <planeGeometry args={[HALL.w, h - L1]} />
         <meshLambertMaterial color="#efece6" />
       </mesh>
@@ -160,12 +160,12 @@ function Ceiling() {
     const out: [number, number, number][] = []
     for (let x = X0 + 3; x < X1; x += 4.2) for (let z = Z0 + 3; z < MEZZ_Z; z += 4.4) out.push([x, CEIL - 0.02, z])
     for (const [x, z] of MEZZ_LIGHTS) out.push([x, L1 - 0.52, z])
-    for (let x = X0 + 2.5; x < -12; x += 3.5) for (let z = Z0 + 2.5; z < STAIR.zTop; z += 4) out.push([x, L1 - 0.52, z])
+    for (let x = X0 + 2.5; x < BALCONY.left.x1 + 1; x += 3.5) for (let z = Z0 + 2.5; z < STAIR.zTop; z += 4) out.push([x, L1 - 0.52, z])
     return out
   }, [])
   return (
     <group>
-      <mesh position={[0, CEIL, 0]} rotation-x={Math.PI / 2}>
+      <mesh position={[CX, CEIL, 0]} rotation-x={Math.PI / 2}>
         <planeGeometry args={[HALL.w, HALL.d]} />
         <meshLambertMaterial map={tiles} side={THREE.DoubleSide} />
       </mesh>
@@ -271,27 +271,27 @@ function UpperFloors() {
       {levels.map((y) => (
         <group key={y}>
           {/* left upper walkways */}
-          <Slab x0={X0} x1={-17} z0={Z0} z1={Z1} top={y} thick={0.6} />
-          <Railing from={[-17, Z0 + 0.3]} to={[-17, Z1 - 0.3]} y={y} />
+          <Slab x0={X0} x1={-14} z0={Z0} z1={Z1} top={y} thick={0.6} />
+          <Railing from={[-14, Z0 + 0.3]} to={[-14, Z1 - 0.3]} y={y} />
           {/* right stacked balconies */}
           <Slab x0={(X1 - 3.4)} x1={X1} z0={Z0} z1={Z1} top={y} thick={0.6} />
           <Railing from={[(X1 - 3.4), Z0 + 0.3]} to={[(X1 - 3.4), Z1 - 0.3]} y={y} />
-          <Slab x0={-17} x1={(X1 - 3.4)} z0={Z1 - 3} z1={Z1} top={y} thick={0.6} />
-          <Railing from={[-17, Z1 - 3]} to={[(X1 - 3.4), Z1 - 3]} y={y} />
+          <Slab x0={-14} x1={(X1 - 3.4)} z0={Z1 - 3} z1={Z1} top={y} thick={0.6} />
+          <Railing from={[-14, Z1 - 3]} to={[(X1 - 3.4), Z1 - 3]} y={y} />
         </group>
       ))}
       {/* right 2nd floor too (over the sponsor booths) */}
       <Slab x0={(X1 - 3.4)} x1={X1} z0={Z0} z1={MEZZ_Z} top={L1} thick={0.55} />
       <Railing from={[(X1 - 3.4), Z0 + 0.3]} to={[(X1 - 3.4), MEZZ_Z - 0.3]} y={L1} />
       {/* bridge across the back at the 3rd floor (seen from the entrance) */}
-      <Slab x0={-17} x1={(X1 - 3.4)} z0={Z0} z1={Z0 + 3.2} top={levels[0]} thick={0.6} />
-      <Railing from={[-17, Z0 + 3.2]} to={[(X1 - 3.4), Z0 + 3.2]} y={levels[0]} />
+      <Slab x0={-14} x1={(X1 - 3.4)} z0={Z0} z1={Z0 + 3.2} top={levels[0]} thick={0.6} />
+      <Railing from={[-14, Z0 + 3.2]} to={[(X1 - 3.4), Z0 + 3.2]} y={levels[0]} />
       {/* projecting study box on the left upper level (photo 6) */}
-      <mesh position={[-13.5, 11.2, -10]} castShadow>
+      <mesh position={[-10.5, 11.2, -10]} castShadow>
         <boxGeometry args={[7, 2.6, 6]} />
         <meshLambertMaterial color={BRONZE} transparent opacity={0.9} />
       </mesh>
-      <mesh position={[-13.5, 12.55, -10]}>
+      <mesh position={[-10.5, 12.55, -10]}>
         <boxGeometry args={[7.1, 0.1, 6.1]} />
         <meshLambertMaterial color={HANDRAIL} />
       </mesh>

@@ -40,9 +40,11 @@ export type View =
     }
 
 export function Player({
-  name, color, start, collider, net, info, zoom, view,
+  name, color, start, collider, net, info, zoom, view, gps,
 }: {
   view: View
+  /** Where the player really is (from GPS), in this room's coordinates; drives movement when set. */
+  gps?: React.MutableRefObject<{ x: number; z: number } | null>
   name: string
   color: string
   start: [number, number]
@@ -63,6 +65,7 @@ export function Player({
   const sendAcc = useRef(0)
   const light = useRef<THREE.DirectionalLight>(null!)
   const yaw = useRef(0) // camera heading in 'inside' view; 0 = camera south of player looking north
+  const pitch = useRef(0) // look up (+) / down (-) in the 'inside' view
   const { camera, scene, gl } = useThree()
 
   // Switching views: reset heading, and let the inside camera get close without clipping.
@@ -70,6 +73,7 @@ export function Player({
     const cam = camera as THREE.PerspectiveCamera
     if (view.mode === 'inside') {
       yaw.current = view.yaw0
+      pitch.current = 0
       facing.current = view.yaw0 + Math.PI // face away from the camera, into the room
       cam.near = 0.1
       cam.fov = 60
@@ -90,7 +94,10 @@ export function Player({
     const downH = () => (armed = true)
     const move = (e: PointerEvent) => {
       if (!(e.buttons & 1)) armed = false
-      else if (armed) yaw.current -= e.movementX * 0.006
+      else if (armed) {
+        yaw.current -= e.movementX * 0.006
+        pitch.current = Math.max(-0.6, Math.min(1.3, pitch.current - e.movementY * 0.006)) // drag up = look up
+      }
     }
     el.addEventListener('pointerdown', downH)
     window.addEventListener('pointermove', move)
@@ -132,9 +139,28 @@ export function Player({
       net.correction = null
     }
 
+    // Live location: walk (or, if far off, jump) to where you really are; keys are off.
+    const goal = gps?.current
+    let gpsDist = 0
+    if (goal) {
+      const walkable = (x: number, z: number) => (collider.surface ? collider.surface(x, z, 0) === 0 : !collider.blocked(x, z))
+      gpsDist = Math.hypot(goal.x - p.x, goal.z - p.y)
+      if (gpsDist > 25 || (height.current > 0.5 && gpsDist > 0.7)) {
+        const [fx, fz] = nearestWalkable(walkable, goal.x, goal.z)
+        p.set(fx, fz)
+        height.current = 0
+        gpsDist = 0
+      }
+    }
+
     let dx = 0
     let dz = 0
-    if (!typing()) {
+    if (goal) {
+      if (gpsDist > 0.7) {
+        dx = (goal.x - p.x) / gpsDist
+        dz = (goal.z - p.y) / gpsDist
+      }
+    } else if (!typing()) {
       if (keys.has('KeyW') || keys.has('ArrowUp')) dz -= 1
       if (keys.has('KeyS') || keys.has('ArrowDown')) dz += 1
       if (keys.has('KeyA') || keys.has('ArrowLeft')) dx -= 1
@@ -144,8 +170,10 @@ export function Player({
     if (inside && !typing()) {
       if (keys.has('KeyQ')) yaw.current += dt * 2.2
       if (keys.has('KeyR')) yaw.current -= dt * 2.2
+      if (keys.has('KeyT')) pitch.current = Math.min(1.3, pitch.current + dt * 1.2)
+      if (keys.has('KeyG')) pitch.current = Math.max(-0.6, pitch.current - dt * 1.2)
     }
-    if (inside && (dx || dz)) {
+    if (inside && !goal && (dx || dz)) {
       // Rotate input into camera space so W always walks away from the camera.
       const c = Math.cos(yaw.current)
       const sn = Math.sin(yaw.current)
@@ -158,9 +186,11 @@ export function Player({
     if (moving) {
       const len = Math.hypot(dx, dz)
       const k = view.mode === 'inside' ? (view.scale ?? 1) * 0.8 : 1 // indoor pace, relative to your size
-      const speed = (info.current.bike && view.mode !== 'inside' ? BIKE : keys.has('ShiftLeft') || keys.has('ShiftRight') ? RUN : WALK) * k
-      const sx = (dx / len) * speed * dt
-      const sz = (dz / len) * speed * dt
+      const running = goal ? gpsDist > 6 : keys.has('ShiftLeft') || keys.has('ShiftRight')
+      const speed = (info.current.bike && !goal && view.mode !== 'inside' ? BIKE : running ? RUN : WALK) * k
+      const step = goal ? Math.min(speed * dt, gpsDist) : speed * dt
+      const sx = (dx / len) * step
+      const sz = (dz / len) * step
       // Slide along walls: try the full step, then each axis on its own.
       const tryMove = (nx: number, nz: number) => {
         if (collider.surface) {
@@ -200,12 +230,13 @@ export function Player({
       const [x0, z0, x1, z1] = view.bounds
       const want = new THREE.Vector3(
         THREE.MathUtils.clamp(p.x + sn * dist, x0, x1),
-        height.current + 1.6 * ps + dist * 0.42,
+        height.current + 1.6 * ps + dist * 0.42 - Math.max(0, pitch.current) * dist * 0.3,
         THREE.MathUtils.clamp(p.y + c * dist, z0, z1),
       )
       if (view.ceiling) want.y = Math.min(want.y, view.ceiling(want.x, want.z, height.current))
       camera.position.lerp(want, 1 - Math.exp(-dt * 8))
-      camera.lookAt(p.x - sn * 3 * ps, height.current + 1.5 * ps, p.y - c * 3 * ps)
+      // pitch tilts the view: up toward the balconies and ceiling, down to the floor
+      camera.lookAt(p.x - sn * 3 * ps, height.current + 1.5 * ps + pitch.current * 6, p.y - c * 3 * ps)
     } else {
       // Classic overhead camera: fixed pitch, follows smoothly, no rotation.
       const d = zoom.current
@@ -243,4 +274,16 @@ export function Player({
       <Avatar ref={group} color={color} name={name} state={state} me hideTag={view.mode === 'inside'} />
     </>
   )
+}
+
+/** Closest spot to (x, z) you can stand on, searching outward in rings. */
+function nearestWalkable(ok: (x: number, z: number) => boolean, x: number, z: number): [number, number] {
+  if (ok(x, z)) return [x, z]
+  for (let r = 0.5; r < 40; r += 0.5)
+    for (let a = 0; a < Math.PI * 2; a += Math.PI / 12) {
+      const px = x + Math.cos(a) * r
+      const pz = z + Math.sin(a) * r
+      if (ok(px, pz)) return [px, pz]
+    }
+  return [x, z]
 }

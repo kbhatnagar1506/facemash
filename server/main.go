@@ -298,6 +298,7 @@ func main() {
 	addr := flag.String("addr", ":8080", "listen address")
 	static := flag.String("static", "../client/dist", "built client to serve")
 	eventFile := flag.String("event", "event.json", "HackGT event card")
+	geoFile := flag.String("geo", "geo.json", "GPS to Klaus atrium alignment")
 	flag.Parse()
 
 	// ALLOWED_ORIGINS=https://gt.example.com,https://other.example.com
@@ -346,6 +347,17 @@ func main() {
 		b, err := os.ReadFile(*eventFile)
 		if err != nil || !json.Valid(b) {
 			http.Error(w, "event.json missing or invalid", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(b)
+	})
+	// GPS → Klaus atrium alignment (see client/src/geo.ts). Re-read each request so an
+	// on-site calibration (?calibrate) can be pasted in without restarting.
+	mux.HandleFunc("/api/geo", func(w http.ResponseWriter, r *http.Request) {
+		b, err := os.ReadFile(*geoFile)
+		if err != nil || !json.Valid(b) {
+			http.Error(w, "geo.json missing or invalid", http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
