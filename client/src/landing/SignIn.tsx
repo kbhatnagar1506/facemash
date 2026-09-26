@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { loadGoogle, signInWithGoogle, type Me } from '../account'
-import { nextForGuest } from '../onboarding'
 
 // The door into the game: sign in with Google (which also creates your account the first
 // time) or carry on as a guest. Signing in is what saves your bean and where you were.
 
 /** `next` is where to go once signed in (it can depend on the account). */
 export function SignInSheet({ clientId, next, onClose }: { clientId: string; next: string | ((me: Me) => string); onClose: () => void }) {
-  const guestTo = nextForGuest()
   const button = useRef<HTMLDivElement>(null)
   const panel = useRef<HTMLDivElement>(null)
   const [state, setState] = useState<'loading' | 'ready' | 'busy' | 'error'>('loading')
@@ -73,15 +71,9 @@ export function SignInSheet({ clientId, next, onClose }: { clientId: string; nex
         <div className={state === 'busy' ? 'gbtn busy' : 'gbtn'} ref={button} aria-busy={state === 'loading' || state === 'busy'} />
         {state === 'error' && (
           <p className="sheet-error" role="alert">
-            {error || 'Sign-in failed'}. You can still continue as a guest.
+            {error || 'Sign-in failed'}. Please try again.
           </p>
         )}
-        <div className="sheet-or" aria-hidden="true">
-          <span>or</span>
-        </div>
-        <a className="btn btn-secondary sheet-guest" href={guestTo}>
-          Continue as guest
-        </a>
         <p className="sheet-legal">
           By continuing you agree to our <a href="/terms">Terms</a> and <a href="/privacy">Privacy Policy</a>.
         </p>

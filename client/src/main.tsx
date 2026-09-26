@@ -24,10 +24,19 @@ if (Page === AdminHome) document.title = 'Muse Admin'
 if (Page === AgentConsole) document.title = 'Agent Console'
 if (Page === Landing || Page === MusePage || Page === Privacy || Page === Terms) document.documentElement.classList.add('scroll-page')
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <Suspense fallback={null}>
-      <Page />
-    </Suspense>
-  </StrictMode>,
-)
+// The game and the Bean Studio need an account (no guest mode): signed out, you go back to
+// the homepage with the sign-in sheet open. With sign-in off (local dev), nothing changes.
+function mount() {
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <Suspense fallback={null}>
+        <Page />
+      </Suspense>
+    </StrictMode>,
+  )
+}
+if (Page === App || Page === AvatarStudio) {
+  import('./account').then(({ fetchMe }) =>
+    fetchMe().then((me) => (me.googleClientId && !me.user ? location.replace('/?signin') : mount())),
+  )
+} else mount()

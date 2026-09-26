@@ -105,11 +105,15 @@ function AccountChip({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
 
 export function Landing() {
   const shared = useMemo(makeShared, [])
-  // Enter asks you to sign in (skippable) when sign-in is on and you aren't yet
+  // Enter asks you to sign in when sign-in is on and you aren't yet (there is no guest mode);
+  // /play and /avatar send signed-out visitors here with ?signin to open it straight away
   const [me, setMe] = useState<Me | null>(null)
   const [sheet, setSheet] = useState(false)
   useEffect(() => {
-    fetchMe().then(setMe)
+    fetchMe().then((m) => {
+      setMe(m)
+      if (m.googleClientId && !m.user && new URLSearchParams(location.search).has('signin')) setSheet(true)
+    })
   }, [])
   const enter = (e: MouseEvent<HTMLAnchorElement>) => {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
