@@ -7,6 +7,7 @@ import { Net } from './net'
 import { World } from './World'
 import { Player, type PlayerInfo, type View } from './Player'
 import { Remotes } from './Remotes'
+import { requestMotion, useMotion } from './motion'
 import { defaultLook, encodeLook, loadLook } from './look'
 import { Hud } from './Hud'
 import { Shells } from './Shells'
@@ -14,10 +15,12 @@ import { CALIBRATION_SPOTS, HallCollider, HALL_BOUNDS, HALL_SPAWN, HALL_YAW, PER
 // the Klaus hall is big: it downloads in its own chunk, only once you're near Klaus
 const HackGTHall = lazy(() => import('./HackGTHall').then((m) => ({ default: m.HackGTHall })))
 import { toHall, useLiveLocation, type GeoCfg } from './geo'
-import { Calibrate, LivePill } from './LiveLocation'
+import { Calibrate, LivePill, MotionPill } from './LiveLocation'
 import type { EventInfo } from './HackGTWelcome'
 
 const COLORS = ['#e0564f', '#4f7fd6', '#e89a3c', '#5aa56a', '#9b6bd1', '#d9c24a', '#3fa7b3', '#f06ba8']
+
+const clampN = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 
 function load<T>(key: string, fallback: T): T {
   try {
@@ -176,7 +179,8 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
     if (!k) kf.current = { x, z, p: r, t: fix.at, rejects: 0 }
     else {
       const dt = Math.max(0.2, (fix.at - k.t) / 1000)
-      k.p += (1.6 * dt) ** 2 + 0.5 // you can have walked up to ~1.6 m/s since the last fix
+      // you can have walked up to ~1.6 m/s since the last fix (steps already moved us if motion is on)
+      k.p += motionActive.current ? 0.3 + (0.5 * dt) ** 2 : (1.6 * dt) ** 2 + 0.5
       const d = Math.hypot(x - k.x, z - k.z)
       const implausible = d > 3 * Math.sqrt(k.p + r) && d / dt > 3
       if (implausible && k.rejects < 3) {
@@ -188,6 +192,7 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
         k.z += (z - k.z) * g
         k.p *= 1 - g
         k.rejects = 0
+        learn.current.onGps(x, z, fix.acc)
       }
       k.t = fix.at
     }
@@ -195,6 +200,68 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
     gps.current = { x: Math.min(eastX(e.z) - 0.9, Math.max(westX(e.z) + 0.9, e.x)), z: e.z }
     setWhere('in')
   }, [fix, live, room, geoCfg])
+  // Motion sensors (optional boost): each step moves the filtered position along the
+  // compass heading, so your bean follows you instantly between GPS fixes; GPS keeps
+  // correcting the drift. The compass bias and your stride length are learned on the
+  // fly by comparing the step path with the GPS path over the last ~15 m.
+  const [motionOn, setMotionOn] = useState(() => load('gt.motion', false))
+  const motionActive = useRef(false)
+  const learn = useRef({
+    bias: 0, // compass correction (radians)
+    stride: 0.7, // metres per step
+    gps0: null as null | [number, number],
+    pdr: [0, 0] as [number, number],
+    onGps(x: number, z: number, acc: number) {
+      if (acc > 18 || !motionActive.current) return
+      if (!this.gps0) {
+        this.gps0 = [x, z]
+        this.pdr = [0, 0]
+        return
+      }
+      const gx = x - this.gps0[0]
+      const gz = z - this.gps0[1]
+      const gd = Math.hypot(gx, gz)
+      const pd = Math.hypot(this.pdr[0], this.pdr[1])
+      if (gd < 15 || pd < 12) return
+      // how far off the step path's direction and length are from what GPS saw
+      const diff = Math.atan2(this.pdr[0] * gz - this.pdr[1] * gx, this.pdr[0] * gx + this.pdr[1] * gz)
+      this.bias += clampN(diff, -0.6, 0.6) * 0.3
+      this.stride = clampN(this.stride * (1 + 0.3 * (gd / pd - 1)), 0.45, 1.0)
+      this.gps0 = [x, z]
+      this.pdr = [0, 0]
+    },
+  })
+  const onStep = (headingDeg: number) => {
+    const k = kf.current
+    if (!k || !fix || !geoCfg || room !== 'hackgt') return
+    // which way is compass north / east in the hall's coordinates (from the GPS alignment)
+    const [x0, z0] = toHall(geoCfg, fix.lat, fix.lon)
+    const [xn, zn] = toHall(geoCfg, fix.lat + 1e-5, fix.lon)
+    const [xe, ze] = toHall(geoCfg, fix.lat, fix.lon + 1e-5)
+    const nl = Math.hypot(xn - x0, zn - z0) || 1
+    const el = Math.hypot(xe - x0, ze - z0) || 1
+    const h = (headingDeg * Math.PI) / 180 + learn.current.bias
+    const L = learn.current.stride
+    const dx = (((xn - x0) / nl) * Math.cos(h) + ((xe - x0) / el) * Math.sin(h)) * L
+    const dz = (((zn - z0) / nl) * Math.cos(h) + ((ze - z0) / el) * Math.sin(h)) * L
+    k.x += dx
+    k.z += dz
+    k.p += (0.3 * L) ** 2 // each step adds a little uncertainty
+    learn.current.pdr[0] += dx
+    learn.current.pdr[1] += dz
+    const zc = Math.min(HALL_BOUNDS[3] - 1, Math.max(HALL_BOUNDS[1] + 1, k.z))
+    k.z = zc
+    k.x = Math.min(eastX(zc) - 0.9, Math.max(westX(zc) + 0.9, k.x))
+    gps.current = { x: k.x, z: k.z }
+  }
+  const motionStatus = useMotion(live && room === 'hackgt' && motionOn, onStep)
+  motionActive.current = motionStatus === 'on'
+  const enableMotion = async () => {
+    const ok = await requestMotion()
+    setMotionOn(ok)
+    save('gt.motion', ok)
+  }
+
   useEffect(() => {
     gps.current = null // re-place on the next fix after changing rooms
   }, [room])
@@ -342,6 +409,7 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
             setLive(!live)
           }}
         />}
+        {room === 'hackgt' && live && status === 'live' && <MotionPill status={motionStatus} wanted={motionOn} onEnable={enableMotion} />}
         {calibrating && room === 'hackgt' && (
           <Calibrate
             fix={fix}
