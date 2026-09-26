@@ -762,6 +762,7 @@ func main() {
 	}
 	// The routes are always mounted: with the database down at boot, connect keeps trying in
 	// the background and gate answers 503 on the routes that need it until it's up.
+	jwks := warmGoogleKeys() // the sign-in keys mountAuth uses, fetched by startWarm (warm.go)
 	acct = openAccounts(*keyFile)
 	if acct == nil {
 		clientIDs = nil // unusable database settings: sign-in off, everyone plays as a guest
@@ -844,6 +845,8 @@ func main() {
 	if acct != nil {
 		handler = acct.gate(mux)
 	}
+	// everything loaded and connected before the first request (warm.go): /api/readyz says when
+	startWarm(mux, hub, acct, jwks, *eventFile)
 	log.Printf("GT campus server on %s (static: %s)", *addr, *static)
 	// Headers must arrive promptly (a connection trickling them in holds a goroutine and a
 	// socket). No whole-request ReadTimeout: it would cut off the game's websockets; request

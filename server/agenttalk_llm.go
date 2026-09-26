@@ -17,7 +17,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -289,14 +288,10 @@ func talkKey(name string) string {
 	return k
 }
 
+// talkTransport: Gemini and jev go through the shared, tuned transport (warm.go), so the
+// connections the warmers keep open are the ones the talks use. Every call has a deadline.
 func talkTransport() *http.Client {
-	return &http.Client{Transport: &http.Transport{
-		DialContext:         (&net.Dialer{Timeout: 3 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
-		MaxIdleConns:        64,
-		MaxIdleConnsPerHost: 32,
-		IdleConnTimeout:     90 * time.Second,
-		ForceAttemptHTTP2:   true,
-	}}
+	return &http.Client{Transport: http.DefaultTransport}
 }
 
 // ---------- Gemini ----------
