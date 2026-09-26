@@ -105,15 +105,35 @@ function Shell({ children }: { children: React.ReactNode }) {
   )
 }
 
-/** Opened from your QR: redeem the code here, then one line for Muse. */
+function savedClaim(code: string): Claimed | null {
+  try {
+    const s = sessionStorage.getItem('gt.muse.' + code.slice(-12))
+    return s ? (JSON.parse(s) as Claimed) : null
+  } catch {
+    return null
+  }
+}
+
+/** Opened from your QR: redeem the code on a tap (never on load: QR scanners and link
+ *  previews open pages before you do, and would spend the code), then one line for Muse. */
 function Scanned({ code }: { code: string }) {
-  const [got, setGot] = useState<Claimed | null>(null)
+  const [got, setGot] = useState<Claimed | null>(() => savedClaim(code))
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  useEffect(() => {
-    claim(code).then(setGot, (e: Error) => setError(e.message))
-    // the code is spent; keep it out of the address bar (and screenshots of it)
-    history.replaceState(null, '', location.pathname)
-  }, [code])
+  const redeem = () => {
+    setBusy(true)
+    claim(code).then(
+      (c) => {
+        setGot(c)
+        // the code is spent; keep it out of the address bar (and screenshots of it)
+        history.replaceState(null, '', location.pathname)
+      },
+      (e: Error) => {
+        setError(e.message)
+        setBusy(false)
+      },
+    )
+  }
   return (
     <Shell>
       <section className="muse-card">
@@ -123,7 +143,12 @@ function Scanned({ code }: { code: string }) {
             {error}
           </p>
         ) : !got ? (
-          <p className="muse-sub">Linking to your account…</p>
+          <>
+            <p className="muse-sub">Tap to link your Muse to your HackGT 13 account. You'll get one line to paste into Muse.</p>
+            <button className="btn btn-primary muse-wide" type="button" onClick={redeem} disabled={busy}>
+              {busy ? 'Linking…' : 'Get my Muse link'}
+            </button>
+          </>
         ) : (
           <>
             <p className="muse-sub">Copy this, open Muse, paste it and send. That's all Muse needs.</p>
