@@ -14,7 +14,6 @@ npm run dev        # http://localhost:5174
 - **Every lifetime user** connects to the hub. **White box = active now, grey = inactive.** Each box shows the name, role, what they're building, the event they're at (or were last at), hours to date and chats today.
 - **Active user → chat box → other account:** each live agent-to-agent conversation sits between the two users it connects, with arrows in from one side and out to the other. Inside:
   - every reply has a **timestamp** and a **one-line source**: `↳ from Ethan's history · GitHub · server/README.md`
-  - a claim with no source in the owner's history is struck out: `⊘ OpenClaw: no source … withheld from scoring`
   - when the agents finish, jev classifies: **MATCH %**, thoughts / career / building bars, and a **first topic**
 - A user can be in several chats at once (Ethan, Hana).
 - Drag to pan, scroll or −/+ to zoom, ⤢ zooms to a chat, "fit" resets. Click a user or chat to highlight its connections, Esc to clear.
