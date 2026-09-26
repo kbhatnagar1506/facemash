@@ -370,6 +370,12 @@ type geminiChunk struct {
 		} `json:"content"`
 		FinishReason string `json:"finishReason"`
 	} `json:"candidates"`
+	// streamed: each chunk carries the running totals, so the last one counts (usage.go)
+	Usage *struct {
+		Prompt   int64 `json:"promptTokenCount"`
+		Output   int64 `json:"candidatesTokenCount"`
+		Thoughts int64 `json:"thoughtsTokenCount"`
+	} `json:"usageMetadata"`
 }
 
 func (c geminiChunk) text() string {
@@ -385,7 +391,14 @@ func (c geminiChunk) text() string {
 }
 
 // once: one attempt, streamed or not; onText (streaming only) sees each piece as it lands.
-func (g *talkGemini) once(ctx context.Context, m talkModel, body []byte, onText func(string)) (string, error) {
+func (g *talkGemini) once(ctx context.Context, m talkModel, body []byte, onText func(string)) (text string, err error) {
+	var in, out int64 // tokens, when Gemini says (a call cancelled mid-stream may not)
+	defer func() { meter.add("gemini", m.Model, err == nil, in, out, 0) }()
+	count := func(c geminiChunk) {
+		if c.Usage != nil {
+			in, out = c.Usage.Prompt, c.Usage.Output+c.Usage.Thoughts
+		}
+	}
 	res, err := g.post(ctx, m, onText != nil, body)
 	if err != nil {
 		return "", err
@@ -396,6 +409,7 @@ func (g *talkGemini) once(ctx context.Context, m talkModel, body []byte, onText 
 		if err := json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&c); err != nil {
 			return "", err
 		}
+		count(c)
 		return c.text(), nil
 	}
 	var all strings.Builder
@@ -410,6 +424,7 @@ func (g *talkGemini) once(ctx context.Context, m talkModel, body []byte, onText 
 		if json.Unmarshal([]byte(strings.TrimSpace(line)), &c) != nil {
 			continue
 		}
+		count(c)
 		if t := c.text(); t != "" {
 			all.WriteString(t)
 			onText(t)
@@ -588,7 +603,8 @@ func newTalkJev(key, model string) *talkJev {
 }
 
 // ask sends one call with any number of questions (choice / noul / score).
-func (j *talkJev) ask(ctx context.Context, state string, questions map[string]any) (map[string]jevAns, error) {
+func (j *talkJev) ask(ctx context.Context, state string, questions map[string]any) (ans map[string]jevAns, err error) {
+	defer func() { meter.add("jev", j.model, err == nil, 0, 0, 0) }()
 	body, _ := json.Marshal(map[string]any{"state": state, "model": j.model, "questions": questions})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, j.url, bytes.NewReader(body))
 	if err != nil {

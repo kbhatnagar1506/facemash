@@ -9,7 +9,7 @@
 //   ?mock=1&poll=1     the stream "fails", so the 3 s polling fallback runs
 
 import { ACCENT_COLORS, BODY_COLORS, EYES, HATS, ITEMS, PATTERNS, encodeLook } from '../look'
-import { ApiError, type AdminApi, type Checkpoint, type Line, type Overview, type Person, type Scores, type Side, type StreamHandlers, type TalkDetail, type TalkQuery, type TalkSummary } from './api'
+import { ApiError, type AdminApi, type Checkpoint, type Line, type Overview, type Person, type Scores, type Side, type StreamHandlers, type TalkDetail, type TalkQuery, type TalkSummary, type Usage } from './api'
 
 // deterministic randomness so screenshots are stable
 let seed = 1337
@@ -302,6 +302,44 @@ export function createMockApi(params: URLSearchParams): AdminApi {
     }
   }
 
+  // mock usage: a day of play shaped like an event (quiet overnight, busy afternoons)
+  const usage = (): Usage => {
+    const hasTalks = talks.length > 0
+    const end = Math.floor(Date.now() / 3600_000) * 3600_000
+    const hourly = Array.from({ length: 24 }, (_, i) => {
+      const at = new Date(end - (23 - i) * 3600_000)
+      const h = at.getHours()
+      const busy = !hasTalks ? 0 : h >= 1 && h < 8 ? 0.15 : h >= 13 && h < 19 ? 1 : 0.6
+      const ppl = Math.round(busy * (70 + (i * 37) % 25))
+      return { hour: at.toISOString(), people: ppl, minutes: round1(ppl * (22 + (i * 13) % 20)) }
+    })
+    const top = people.slice(0, hasTalks ? 10 : 0).map((p, i) => ({ ...p, minutes: round1(260 - i * 17.5), sessions: 6 - Math.floor(i / 2) }))
+    const rate = (inM: number, outM: number, tin: number, tout: number) => Math.round((tin / 1e6 * inM + tout / 1e6 * outM) * 100) / 100
+    const k = hasTalks ? 1 : 0
+    return {
+      play: {
+        people: 318 * k, people_today: 204 * k, sessions: 1102 * k, sessions_today: 486 * k,
+        hours: round1(1843.6 * k), hours_today: round1(612.4 * k), active_hours: round1(1021.2 * k), hall_hours: round1(733.9 * k),
+        avg_session_min: round1(100.4 * k), median_session_min: round1(41.5 * k), avg_per_person_min: round1(347.8 * k),
+        returning: 241 * k, peak_online: 142 * k, peak_at: hasTalks ? new Date(end - 5 * 3600_000).toISOString() : null, online_now: 37 * k,
+      },
+      hourly,
+      top,
+      voice: { calls: 71 * k, minutes: round1(152.3 * k), avg_call_sec: 129 * k, people: 63 * k },
+      services: hasTalks
+        ? [
+            { kind: 'gemini', model: 'gemini-3.1-flash-lite', calls: 18422, failed: 31, calls_today: 7310, tokens_in: 21_400_000, tokens_out: 2_950_000, minutes: 0, cost_usd: rate(0.1, 0.4, 21_400_000, 2_950_000), cost_today_usd: rate(0.1, 0.4, 8_100_000, 1_120_000) },
+            { kind: 'gemini', model: 'gemini-3.8-flash', calls: 2210, failed: 4, calls_today: 902, tokens_in: 4_800_000, tokens_out: 910_000, minutes: 0, cost_usd: rate(0.5, 3, 4_800_000, 910_000), cost_today_usd: rate(0.5, 3, 1_900_000, 360_000) },
+            { kind: 'jev', model: 'jev-latest', calls: 4411, failed: 12, calls_today: 1650, tokens_in: 0, tokens_out: 0, minutes: 0, cost_usd: null, cost_today_usd: null },
+            { kind: 'voice', model: 'elevenlabs', calls: 71, failed: 0, calls_today: 22, tokens_in: 0, tokens_out: 0, minutes: 152.3, cost_usd: 15.23, cost_today_usd: 4.9 },
+          ]
+        : [],
+      cost_usd: hasTalks ? 31.4 : null,
+      cost_today_usd: hasTalks ? 11.2 : null,
+      as_of: new Date().toISOString(),
+    }
+  }
+
   const subs = new Set<StreamHandlers>()
   let ticker = 0
   const emit = (f: (h: StreamHandlers) => void) => subs.forEach(f)
@@ -338,6 +376,7 @@ export function createMockApi(params: URLSearchParams): AdminApi {
   return {
     me: () => delay(() => (guard(), { admin: true, email: 'organizer@example.com', tenant: 'hackgt13' })),
     overview: () => delay(() => (guard(), overview())),
+    usage: () => delay(() => (guard(), usage())),
     talks: (q: TalkQuery = {}) =>
       delay(() => {
         guard()

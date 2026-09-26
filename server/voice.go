@@ -513,7 +513,8 @@ type conversation struct {
 		Message *string `json:"message"`
 	} `json:"transcript"`
 	Metadata struct {
-		StartTime int64 `json:"start_time_unix_secs"`
+		StartTime int64   `json:"start_time_unix_secs"`
+		Duration  float64 `json:"call_duration_secs"`
 	} `json:"metadata"`
 	ClientData struct {
 		Vars map[string]any `json:"dynamic_variables"`
@@ -726,6 +727,13 @@ func (v *voiceGuide) finish(ctx context.Context, acc *accounts, tenant string, i
 	log.Printf("voice: #%d saved %d answer(s), %.1f KB, %d redacted", id, len(res.Answers), res.KB, res.Redacted)
 	// saved: ElevenLabs doesn't need its copy any more
 	v.forget(owner.key, convID, id)
+
+	// counted once, when saved (a repeated finish is answered from v.finished above)
+	secs := conv.Metadata.Duration
+	if secs <= 0 || secs > voiceLiveFor.Seconds() {
+		secs = math.Min(time.Since(owner.started).Seconds(), voiceMaxCall.Seconds()) // not reported: at most the cap
+	}
+	meter.add("voice", "elevenlabs", true, 0, 0, secs)
 
 	v.mu.Lock()
 	owner.done = true

@@ -531,7 +531,7 @@ func TestAdminTalksContract(t *testing.T) {
 	json.Unmarshal([]byte(body), &rawO)
 	hasKeys(t, "overview", rawO, cOverviewKeys)
 	if ov.UsersTotal != 3 || ov.TalksTotal != 2 || ov.TalksToday != 2 || ov.MatchesTotal != 1 || ov.ApprovalsBoth != 1 || ov.RevealsTotal != 1 ||
-		ov.WorthItYes != 1 || ov.WorthItNo != 1 || ov.TalksLive != 0 || ov.ActivityHoursTotal != nil || ov.VoiceOnboarded != nil || ov.AsOf.IsZero() {
+		ov.WorthItYes != 1 || ov.WorthItNo != 1 || ov.TalksLive != 0 || ov.ActivityHoursTotal == nil || *ov.ActivityHoursTotal != 0 || ov.VoiceOnboarded == nil || *ov.VoiceOnboarded != 0 || ov.AsOf.IsZero() {
 		t.Fatalf("overview: %s", body)
 	}
 }

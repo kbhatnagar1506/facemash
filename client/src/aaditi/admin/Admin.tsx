@@ -5,6 +5,7 @@ import { Avatar } from './Avatar'
 import { ChatFocus } from './ChatFocus'
 import { SCORE_LABEL, duration, fmtInt, mmss, phaseOf, pillText, yn } from './format'
 import { AdminStore, matchesFilter, useAdmin, type Filter } from './live'
+import { UsageView } from './Usage'
 import './admin.css'
 
 // Architecture view of the platform: hub in the middle (the event's numbers), the people from the
@@ -81,7 +82,7 @@ function Gate({ kind, detail }: { kind: 'loading' | 'signin' | 'forbidden' | 'er
   )
 }
 
-type ViewMode = 'graph' | 'list'
+type ViewMode = 'graph' | 'list' | 'usage'
 const FILTERS: { f: Filter; label: string }[] = [
   { f: 'all', label: 'all' },
   { f: 'live', label: 'live' },
@@ -91,7 +92,7 @@ const FILTERS: { f: Filter; label: string }[] = [
 const readPref = (): ViewMode | null => {
   try {
     const v = localStorage.getItem('admin.view')
-    return v === 'graph' || v === 'list' ? v : null
+    return v === 'graph' || v === 'list' || v === 'usage' ? v : null
   } catch {
     return null
   }
@@ -149,7 +150,9 @@ function Console({ store }: { store: AdminStore }) {
 
   return (
     <div className="adm">
-      {view === 'graph' ? (
+      {view === 'usage' ? (
+        <UsageView store={store} now={now} />
+      ) : view === 'graph' ? (
         <Graph store={store} talks={talks} ov={ov} now={now} empty={noTalksAtAll} onOpen={openTalk} version={version} filter={filter} q={q} />
       ) : (
         <List store={store} talks={talks} ov={ov} now={now} filter={filter} q={q} empty={noTalksAtAll} onOpen={openTalk} />
@@ -158,12 +161,13 @@ function Console({ store }: { store: AdminStore }) {
       <div className="overlay toolbar" role="toolbar" aria-label="Admin view options">
         <span className="tb-title">Muse · admin</span>
         <div className="seg" role="group" aria-label="View">
-          {(['graph', 'list'] as const).map((v) => (
+          {(['graph', 'list', 'usage'] as const).map((v) => (
             <button key={v} className={view === v ? 'on' : ''} aria-pressed={view === v} onClick={() => pickView(v)}>
               {v}
             </button>
           ))}
         </div>
+        {view !== 'usage' && (<>
         <div className="seg" role="group" aria-label="Filter talks">
           {FILTERS.map(({ f, label }) => (
             <button key={f} className={filter === f ? 'on' : ''} aria-pressed={filter === f} onClick={() => setFilter(f)}>
@@ -172,6 +176,7 @@ function Console({ store }: { store: AdminStore }) {
           ))}
         </div>
         <input className="search" type="search" placeholder="search name, #id, talk id" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search talks" />
+        </>)}
         <span className={`conn ${store.mode}`} title={store.mode === 'poll' ? 'The event stream is unavailable; polling every 3 s' : undefined}>
           {store.mock ? '◆ mock · ' : ''}{store.mode === 'stream' ? '● live' : store.mode === 'poll' ? '↻ polling 3 s' : `${spinner(now)} connecting`}
         </span>

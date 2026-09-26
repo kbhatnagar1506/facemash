@@ -92,6 +92,7 @@ type client struct {
 	state    chan stateFrame // the latest position frame only: chat can't crowd it out
 	p        Player
 	joined   bool
+	joinedAt time.Time // hello (usage.go times sessions from it)
 	lastMove time.Time
 
 	chatTokens float64 // chat token bucket (chatBurst, one back per chatEvery)
@@ -481,6 +482,7 @@ func (c *client) handle(m inbound) {
 		c.joined = true
 		h.joinedN++
 		c.lastMove = time.Now()
+		c.joinedAt = c.lastMove
 		c.chatTokens, c.chatAt = chatBurst, c.lastMove
 
 		c.kmu.Lock()
@@ -785,6 +787,7 @@ func main() {
 		}
 		mountVoice(mux, acct, acct.voice, originOK)
 		mountAdmin(mux, acct, hub) // /api/admin/* for organizers in ADMIN_EMAILS (admin.go)
+		startUsage(acct, hub)      // play sessions and the service meter (usage.go)
 		if *devLogin {
 			mountDevLogin(mux, acct)
 		}

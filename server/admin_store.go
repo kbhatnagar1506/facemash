@@ -29,11 +29,12 @@ type adminPersonRow struct {
 	first string
 	look  string
 	test  bool
-	muse  bool // an agent memory upload, or a live Muse token
+	muse  bool // an agent's memory upload, or a live Muse token
+	voice bool // a memory from the voice guide (and no Muse)
 }
 
 type adminCountRow struct {
-	users, signedInToday, memories, museConnected int
+	users, signedInToday, memories, museConnected, voice int
 }
 
 type adminTalkStatRow struct {
@@ -113,7 +114,8 @@ func (s *pgStore) adminPeople(ctx context.Context, tenant string, ids []int64) (
 		return out, nil
 	}
 	rows, err := s.pool.Query(ctx, `SELECT u.id, u.email, u.name, u.given_name, m.display_name, m.look,
-		  EXISTS (SELECT 1 FROM agent_memory a WHERE a.tenant_id = m.tenant_id AND a.user_id = u.id)
+		  EXISTS (SELECT 1 FROM agent_memory a WHERE a.tenant_id = m.tenant_id AND a.user_id = u.id AND a.data->>'source' = 'voice'),
+		  EXISTS (SELECT 1 FROM agent_memory a WHERE a.tenant_id = m.tenant_id AND a.user_id = u.id AND a.data->>'source' IS DISTINCT FROM 'voice')
 		  OR EXISTS (SELECT 1 FROM api_tokens t WHERE t.tenant_id = m.tenant_id AND t.user_id = u.id AND t.label = $3 AND t.revoked_at IS NULL)
 		FROM users u JOIN memberships m ON m.user_id = u.id AND m.tenant_id = $1
 		WHERE u.id = ANY($2)`, tenant, ids, museLabel)
@@ -124,11 +126,11 @@ func (s *pgStore) adminPeople(ctx context.Context, tenant string, ids []int64) (
 	for rows.Next() {
 		var id int64
 		var email, name, given, display, look string
-		var muse bool
-		if err := rows.Scan(&id, &email, &name, &given, &display, &look, &muse); err != nil {
+		var voice, muse bool
+		if err := rows.Scan(&id, &email, &name, &given, &display, &look, &voice, &muse); err != nil {
 			return nil, err
 		}
-		out[id] = adminPersonRow{first: adminFirstName(given, name, display), look: look, test: isTestEmail(email), muse: muse}
+		out[id] = adminPersonRow{first: adminFirstName(given, name, display), look: look, test: isTestEmail(email), muse: muse, voice: voice && !muse}
 	}
 	return out, rows.Err()
 }
@@ -141,8 +143,9 @@ func (s *pgStore) adminCounts(ctx context.Context, tenant string, day time.Time,
 		  (SELECT count(*) FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.tenant_id = $1 AND u.last_seen >= $2 AND `+notTest+`),
 		  (SELECT count(*) FROM agent_memory a JOIN users u ON u.id = a.user_id WHERE a.tenant_id = $1 AND `+notTest+`),
 		  (SELECT count(DISTINCT t.user_id) FROM api_tokens t JOIN users u ON u.id = t.user_id
-		     WHERE t.tenant_id = $1 AND t.label = $4 AND t.revoked_at IS NULL AND `+notTest+`)`,
-		tenant, day, includeTest, museLabel).Scan(&c.users, &c.signedInToday, &c.memories, &c.museConnected)
+		     WHERE t.tenant_id = $1 AND t.label = $4 AND t.revoked_at IS NULL AND `+notTest+`),
+		  (SELECT count(*) FROM agent_memory a JOIN users u ON u.id = a.user_id WHERE a.tenant_id = $1 AND a.data->>'source' = 'voice' AND `+notTest+`)`,
+		tenant, day, includeTest, museLabel).Scan(&c.users, &c.signedInToday, &c.memories, &c.museConnected, &c.voice)
 	return c, err
 }
 
@@ -337,6 +340,14 @@ func memKeyID(k string) (string, int64, bool) {
 	return k[:i], id, err == nil
 }
 
+// memIsVoice: a memory the voice guide made (its "source", voice.go memoryFrom).
+func memIsVoice(data []byte) bool {
+	var v struct {
+		Source string `json:"source"`
+	}
+	return json.Unmarshal(data, &v) == nil && v.Source == "voice"
+}
+
 func (m *memStore) isTestID(id int64) bool { return isTestEmail(m.users[id].Email) }
 
 func (m *memStore) adminPeople(_ context.Context, tenant string, ids []int64) (map[int64]adminPersonRow, error) {
@@ -349,13 +360,15 @@ func (m *memStore) adminPeople(_ context.Context, tenant string, ids []int64) (m
 			continue
 		}
 		u := m.users[id]
-		_, muse := m.memory[memKey(tenant, id)]
+		mem, has := m.memory[memKey(tenant, id)]
+		voice := has && memIsVoice(mem.data)
+		muse := has && !voice
 		for _, t := range m.tokens {
 			if t.tenant == tenant && t.id == id && t.label == museLabel {
 				muse = true
 			}
 		}
-		out[id] = adminPersonRow{first: adminFirstName(u.Given, u.Name, mm.profile.Name), look: mm.profile.Look, test: isTestEmail(u.Email), muse: muse}
+		out[id] = adminPersonRow{first: adminFirstName(u.Given, u.Name, mm.profile.Name), look: mm.profile.Look, test: isTestEmail(u.Email), muse: muse, voice: voice && !muse}
 	}
 	return out, nil
 }
@@ -373,8 +386,11 @@ func (m *memStore) adminCounts(_ context.Context, tenant string, day time.Time, 
 		if !m.users[id].Seen.Before(day) {
 			c.signedInToday++
 		}
-		if _, ok := m.memory[k]; ok {
+		if mem, ok := m.memory[k]; ok {
 			c.memories++
+			if memIsVoice(mem.data) {
+				c.voice++
+			}
 		}
 	}
 	muse := map[int64]bool{}
@@ -545,6 +561,7 @@ func (m *memStore) purgeTestAccounts(_ context.Context, dryRun bool) (adminPurge
 			delete(tt.pairs, rec.Tenant+"/"+rec.pairKey())
 		}
 	}
+	m.memUsageForget(gone)
 	for id := range gone {
 		delete(m.byEmail, strings.ToLower(strings.TrimSpace(m.users[id].Email)))
 		delete(m.users, id)
