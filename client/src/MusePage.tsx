@@ -151,7 +151,7 @@ function Scanned({ code }: { code: string }) {
           </>
         ) : (
           <>
-            <p className="muse-sub">Copy this, open Muse, paste it and send. That's all Muse needs.</p>
+            <p className="muse-sub">Copy this, open Muse, paste it and send. Muse links to your account and sends what it remembers about you, never anything about other people.</p>
             <pre className="muse-prompt">{got.prompt}</pre>
             <div className="muse-actions">
               <CopyButton text={got.prompt} />
