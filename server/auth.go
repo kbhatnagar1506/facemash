@@ -44,40 +44,79 @@ type user struct {
 }
 
 // googleKeys caches Google's signing keys for as long as Google says they're good.
+// Fetches happen outside the lock and are shared (one in flight at a time), and a token
+// naming a key we don't have triggers at most one refetch a minute, so junk tokens can't
+// turn sign-in into a queue behind Google's certs endpoint.
 type googleKeys struct {
-	mu   sync.Mutex
-	keys map[string]*rsa.PublicKey
-	exp  time.Time
+	mu        sync.Mutex
+	keys      map[string]*rsa.PublicKey
+	exp       time.Time
+	inflight  chan struct{} // closed when the fetch in flight finishes
+	fetchErr  error         // how the last fetch went
+	unknownAt time.Time     // last refetch caused by an unknown key ID
 }
 
+const unknownKidRefetch = time.Minute
+
+var errUnknownKey = errors.New("unknown signing key")
+
 func (g *googleKeys) key(kid string) (*rsa.PublicKey, error) {
+	g.mu.Lock()
+	fresh := time.Now().Before(g.exp)
+	if k, ok := g.keys[kid]; ok && fresh {
+		g.mu.Unlock()
+		return k, nil
+	}
+	ch := g.inflight
+	if ch == nil {
+		// a stale set is always refetched (Google rotates keys every few days); an
+		// unknown key ID in a fresh set only once a minute
+		if fresh && time.Since(g.unknownAt) < unknownKidRefetch {
+			g.mu.Unlock()
+			return nil, errUnknownKey
+		}
+		if fresh {
+			g.unknownAt = time.Now()
+		}
+		ch = make(chan struct{})
+		g.inflight = ch
+		g.mu.Unlock()
+		keys, ttl, err := fetchGoogleKeys()
+		g.mu.Lock()
+		if err == nil {
+			g.keys, g.exp = keys, time.Now().Add(ttl)
+		}
+		g.fetchErr = err
+		g.inflight = nil
+		close(ch)
+		g.mu.Unlock()
+	} else {
+		g.mu.Unlock()
+		<-ch
+	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if k, ok := g.keys[kid]; ok && time.Now().Before(g.exp) {
 		return k, nil
 	}
-	// unknown kid or stale set: refetch (Google rotates keys every few days)
-	if err := g.fetch(); err != nil {
-		return nil, err
+	if g.fetchErr != nil {
+		return nil, g.fetchErr
 	}
-	if k, ok := g.keys[kid]; ok {
-		return k, nil
-	}
-	return nil, errors.New("unknown signing key")
+	return nil, errUnknownKey
 }
 
-func (g *googleKeys) fetch() error {
+func fetchGoogleKeys() (map[string]*rsa.PublicKey, time.Duration, error) {
 	c := http.Client{Timeout: 5 * time.Second}
 	res, err := c.Get(googleCerts)
 	if err != nil {
-		return err
+		return nil, 0, err
 	}
 	defer res.Body.Close()
 	var set struct {
 		Keys []struct{ Kid, N, E, Kty string }
 	}
 	if err := json.NewDecoder(io.LimitReader(res.Body, 64*1024)).Decode(&set); err != nil {
-		return err
+		return nil, 0, err
 	}
 	keys := map[string]*rsa.PublicKey{}
 	for _, k := range set.Keys {
@@ -92,7 +131,7 @@ func (g *googleKeys) fetch() error {
 		keys[k.Kid] = &rsa.PublicKey{N: new(big.Int).SetBytes(n), E: int(new(big.Int).SetBytes(e).Int64())}
 	}
 	if len(keys) == 0 {
-		return errors.New("no keys")
+		return nil, 0, errors.New("no keys")
 	}
 	ttl := time.Hour
 	for _, p := range strings.Split(res.Header.Get("Cache-Control"), ",") {
@@ -102,8 +141,7 @@ func (g *googleKeys) fetch() error {
 			}
 		}
 	}
-	g.keys, g.exp = keys, time.Now().Add(ttl)
-	return nil
+	return keys, ttl, nil
 }
 
 // verifyGoogle checks an ID token's signature, issuer, audience and expiry.
@@ -246,8 +284,8 @@ type accounts struct {
 	store  Store
 	tenant string
 	sess   sessions
-	fast   *memFast // attendees' memory in MAPI (memfast.go); nil when off
-	jev    *jevLook // outfits picked from agent memory (jevlook.go); nil when off
+	fast   *memFast   // attendees' memory in MAPI (memfast.go); nil when off
+	jev    *jevLook   // outfits picked from agent memory (jevlook.go); nil when off
 	talk   *agentTalk // agents talking when attendees meet (agenttalk.go); nil when off
 }
 
