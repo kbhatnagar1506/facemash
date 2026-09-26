@@ -306,7 +306,24 @@ export function Landing() {
       { rootMargin: innerWidth < 768 ? '0px 0px -4% 0px' : '0px 0px -18% 0px', threshold: 0 },
     )
     root.current.querySelectorAll('[data-beat]:not([data-beat="hero"]) .copy').forEach((el) => io.observe(el))
-    return () => io.disconnect()
+    // and a backstop on the section itself: once half of it is on screen its words play,
+    // wherever the copy happens to rest (reveal() only plays once)
+    const bySection = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue
+          bySection.unobserve(e.target)
+          const copy = e.target.querySelector<HTMLElement>('.copy')
+          if (copy) reveal(copy)
+        }
+      },
+      { threshold: 0.5 },
+    )
+    root.current.querySelectorAll('[data-beat]:not([data-beat="hero"])').forEach((el) => bySection.observe(el))
+    return () => {
+      io.disconnect()
+      bySection.disconnect()
+    }
   }, [])
 
   return (
@@ -453,8 +470,8 @@ export function Landing() {
       <footer className="about">
         <img src="/facemash-logo-66.png" alt="" width="22" height="22" loading="lazy" decoding="async" />
         <p>
-          <b>facemash</b> helps HackGT 13 attendees find the people they'd be glad to meet. You sign in with Google,
-          and we use it only for your account.
+          <b>facemash</b> helps HackGT 13 attendees find the people they'd be glad to meet. You sign in with Google so
+          we can save your bean and progress; we only use your name and email for your account.
         </p>
         <nav aria-label="Legal">
           <a href="/privacy">Privacy</a>
