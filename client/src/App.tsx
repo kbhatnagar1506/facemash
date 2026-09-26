@@ -12,6 +12,7 @@ import { decodeLook, defaultLook, encodeLook, loadLook, saveLook } from './look'
 import { Hud } from './Hud'
 import { Shells } from './Shells'
 import { fetchMe, type Me } from './account'
+import { PermissionsSheet, wantsPermissions, type PermResult } from './Permissions'
 import { CALIBRATION_SPOTS, HallCollider, HALL_BOUNDS, HALL_SPAWN, HALL_YAW, PERSON_SCALE, TABLE, TABLES, cameraCeiling, eastX, westX } from './hall/layout'
 // the Klaus hall is big: it downloads in its own chunk, only once you're near Klaus
 const HackGTHall = lazy(() => import('./HackGTHall').then((m) => ({ default: m.HackGTHall })))
@@ -84,7 +85,7 @@ function Title({ onStart, me }: { onStart: (name: string, color: string) => void
 
 type Resume = NonNullable<Me['progress']>
 
-function Game({ campus, name, color, resume, ticket }: { campus: Campus; name: string; color: string; resume?: Resume | null; ticket?: string }) {
+function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus; name: string; color: string; resume?: Resume | null; ticket?: string; preload?: boolean }) {
   // your bean from /avatar (or a default bean in your colour)
   const myLook = useMemo(() => loadLook() ?? defaultLook(color), [color])
   const collider = useMemo(() => new Collider(campus), [campus])
@@ -125,6 +126,10 @@ function Game({ campus, name, color, resume, ticket }: { campus: Campus; name: s
   const [lite, setLite] = useState(false)
   // The hall loads (and pre-compiles) once you get within 300 m of Klaus, then stays.
   const [hallWanted, setHallWanted] = useState(false)
+  useEffect(() => {
+    // new arrivals: the permission prompt is loading time, so build the hall now too
+    if (preload) setHallWanted(true)
+  }, [preload])
   useEffect(() => {
     if (hallWanted) return
     const ev = campus.event
@@ -302,6 +307,18 @@ function Game({ campus, name, color, resume, ticket }: { campus: Campus; name: s
   const motionStatus = useMotion(live && room === 'hackgt' && motionOn, onStep)
   motionActive.current = motionStatus === 'on'
   motionStatusRef.current = motionStatus
+  // answered the arrival prompt while the game was already up
+  useEffect(() => {
+    const on = (e: Event) => {
+      const r = (e as CustomEvent<PermResult>).detail
+      setLive(r.location)
+      if (r.location) save('gt.gps', true)
+      setMotionOn(r.motion)
+      save('gt.motion', r.motion)
+    }
+    addEventListener('gt-perms', on)
+    return () => removeEventListener('gt-perms', on)
+  }, [])
   const enableMotion = async () => {
     const ok = await requestMotion()
     setMotionOn(ok)
@@ -499,8 +516,21 @@ function Game({ campus, name, color, resume, ticket }: { campus: Campus; name: s
 export default function App() {
   const [campus, setCampus] = useState<Campus | null>(null)
   const [error, setError] = useState('')
-  const [who, setWho] = useState<{ name: string; color: string } | null>(null)
+  // straight from the Bean Studio (which asked your name): no title screen
+  const [who, setWho] = useState<{ name: string; color: string } | null>(() =>
+    location.search.includes('cheer') && load('gt.name', '') ? { name: load('gt.name', ''), color: load('gt.color', COLORS[0]) } : null,
+  )
   const [me, setMe] = useState<Me | null>(null)
+  // phones, first visit: one tap for location + motion, while everything loads behind it
+  const [perms, setPerms] = useState(wantsPermissions)
+  const permsDone = (r: PermResult | null) => {
+    setPerms(false)
+    if (!r) return
+    if (r.location) save('gt.gps', true)
+    save('gt.motion', r.motion)
+    dispatchEvent(new CustomEvent('gt-perms', { detail: r }))
+  }
+  const sheet = perms && who ? <PermissionsSheet onDone={permsDone} /> : null
 
   useEffect(() => {
     loadCampus().then(setCampus, (e) => setError(String(e)))
@@ -520,11 +550,20 @@ export default function App() {
   if (error) return <div className="loading">Couldn't load the campus map: {error}</div>
   if (!me) return <div className="loading">Loading…</div>
   if (!who) return <Title me={me} onStart={(name, color) => setWho({ name, color })} />
-  if (!campus) return <div className="loading">Loading Georgia Tech…</div>
+  if (!campus)
+    return (
+      <>
+        <div className="loading">Loading Georgia Tech…</div>
+        {sheet}
+      </>
+    )
   return (
-    <Suspense fallback={<div className="loading">Loading…</div>}>
-      <Game campus={campus} name={who.name} color={who.color} resume={me.user ? me.progress : null} ticket={me.ticket} />
-    </Suspense>
+    <>
+      <Suspense fallback={<div className="loading">Loading…</div>}>
+        <Game campus={campus} name={who.name} color={who.color} resume={me.user ? me.progress : null} ticket={me.ticket} preload={perms} />
+      </Suspense>
+      {sheet}
+    </>
   )
 }
 

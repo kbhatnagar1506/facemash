@@ -122,3 +122,18 @@ export function useLiveLocation(enabled: boolean) {
   }, [enabled])
   return { fix, status }
 }
+
+/**
+ * Ask for location access now (from a tap), so the prompt comes up front instead of
+ * mid-game. Resolves true unless the person says no; a slow first fix still counts as allowed.
+ */
+export function requestLocation(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (!('geolocation' in navigator) || !window.isSecureContext) return resolve(false)
+    navigator.geolocation.getCurrentPosition(
+      () => resolve(true),
+      (e) => resolve(e.code !== e.PERMISSION_DENIED),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+    )
+  })
+}
