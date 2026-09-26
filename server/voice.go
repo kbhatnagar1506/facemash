@@ -36,6 +36,7 @@ const (
 	voiceAgentName = "facemash-hackgt13-voice"
 	voiceAPI       = "https://api.elevenlabs.io"
 	voiceMaxCall   = 180 * time.Second // the agent hangs up by then
+	voiceSilentFor = 30 * time.Second  // and hangs up this long after the person last spoke, so a dead mic can't run the clock
 	// a started call counts against the cap until it's finished or this old
 	voiceLiveFor = voiceMaxCall + time.Minute
 	// pending calls are forgotten after this (finish then says "start again")
@@ -735,8 +736,9 @@ How to run the call:
 - Your first message already asked question 1. Ask the rest one at a time, in this order, word for word, each only once the person has answered the one before.
 - Be warm, natural and brief: at most a few words of acknowledgement between questions ("Love that." / "Nice."), then the next question. Don't give advice, don't summarize, don't answer your own questions.
 - If an answer is very short (a word or two), ask one short, friendly follow-up, then move on. Never more than one follow-up per question. If they'd rather skip a question, that's fine: move on.
-- After the fifth answer, thank them and say, in one sentence ending with "your bean is getting dressed": for example "Thanks {{first_name}}, that's everything, your bean is getting dressed." Then end the call.
+- After the fifth answer, thank them and say, in one sentence ending with "your bean is getting dressed": for example "Thanks {{first_name}}, that's everything, your bean is getting dressed." Then call end_call right away, in that same turn: don't wait for a reply and don't say anything else.
 - Never ask for contact details, phone numbers, emails, addresses, passwords, codes, or anything sensitive. If they say a password, key, code or number like that, don't repeat it back; just move on.
+- Before the fifth answer, if they go quiet, check in once, briefly ("Still there?"). If there's still no answer, say "No worries, you can come back to this any time on the Muse page." and end the call. Don't keep asking.
 - If they ask what this is: their answers become the memory facemash uses to dress their bean and help them find people at HackGT; they can delete it on the Muse page.
 - Keep the whole call under three minutes. Speak English.`
 	return map[string]any{
@@ -761,6 +763,9 @@ How to run the call:
 			},
 			"conversation": map[string]any{
 				"max_duration_seconds": int(voiceMaxCall / time.Second),
+			},
+			"turn": map[string]any{
+				"silence_end_call_timeout": int(voiceSilentFor / time.Second),
 			},
 		},
 		"platform_settings": map[string]any{
@@ -819,6 +824,25 @@ func provisionVoice(which string) {
 	})
 	if err != nil {
 		log.Fatalf("voice: provisioning failed: %v", err)
+	}
+	// read it back: ElevenLabs drops fields it doesn't know without saying so
+	var got struct {
+		ConversationConfig struct {
+			Conversation struct {
+				MaxDurationSeconds float64 `json:"max_duration_seconds"`
+			} `json:"conversation"`
+			Turn struct {
+				SilenceEndCallTimeout float64 `json:"silence_end_call_timeout"`
+			} `json:"turn"`
+		} `json:"conversation_config"`
+	}
+	if err := v.call(ctx, k, http.MethodGet, "/v1/convai/agents/"+url.PathEscape(agentID), nil, &got); err != nil {
+		log.Printf("voice: couldn't read the agent back: %v", err)
+	} else if cc := got.ConversationConfig; cc.Conversation.MaxDurationSeconds != voiceMaxCall.Seconds() || cc.Turn.SilenceEndCallTimeout != voiceSilentFor.Seconds() {
+		log.Printf("voice: WARNING the agent didn't keep its limits: max_duration_seconds %v (want %v), silence_end_call_timeout %v (want %v)",
+			cc.Conversation.MaxDurationSeconds, voiceMaxCall.Seconds(), cc.Turn.SilenceEndCallTimeout, voiceSilentFor.Seconds())
+	} else {
+		log.Printf("voice: agent limits confirmed: %v s per call, hangs up after %v s of silence", cc.Conversation.MaxDurationSeconds, cc.Turn.SilenceEndCallTimeout)
 	}
 	fmt.Fprintf(os.Stderr, "voice agent on the %s key (set ELEVENLABS_AGENT_ID%s):\n", k.name, map[bool]string{true: "_BACKUP"}[k.name == "backup"])
 	fmt.Println(agentID)

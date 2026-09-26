@@ -429,3 +429,17 @@ func TestMemoryFrom(t *testing.T) {
 		t.Fatalf("memory: %v", obj)
 	}
 }
+
+// A dead or muted mic must not run the clock: the agent hangs up on silence, well before the cap.
+func TestVoiceAgentHangsUpOnSilence(t *testing.T) {
+	cc := voiceAgentConfig()["conversation_config"].(map[string]any)
+	silent := cc["turn"].(map[string]any)["silence_end_call_timeout"].(int)
+	max := cc["conversation"].(map[string]any)["max_duration_seconds"].(int)
+	if silent <= 0 || silent >= max {
+		t.Fatalf("silence_end_call_timeout %d should be set and under max_duration_seconds %d", silent, max)
+	}
+	prompt := cc["agent"].(map[string]any)["prompt"].(map[string]any)["prompt"].(string)
+	if !strings.Contains(prompt, "Don't keep asking") {
+		t.Fatal("the prompt should tell the guide to stop checking in and end the call")
+	}
+}
