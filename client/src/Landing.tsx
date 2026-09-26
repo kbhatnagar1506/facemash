@@ -22,6 +22,21 @@ const DPRS = [0.85, 1, 1.25, 1.5]
 const DPRS_PHONE = [0.75, 1, 1.25, 1.5]
 const isPhone = () => matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 600
 
+/** Warm the HTTP cache with the next page's code (once per page), without running any of it. */
+function prefetchRoute(href: string) {
+  const files = (window as unknown as { __routeFiles?: Record<string, string[]> }).__routeFiles?.[new URL(href, location.href).pathname]
+  const saveData = (navigator as unknown as { connection?: { saveData?: boolean } }).connection?.saveData
+  if (!files || saveData) return
+  for (const f of files) {
+    if (document.head.querySelector(`link[href="${f}"]`)) continue
+    const l = document.createElement('link')
+    l.rel = 'prefetch'
+    l.href = f
+    document.head.appendChild(l)
+  }
+}
+const onIntent = (e: { currentTarget: HTMLAnchorElement }) => prefetchRoute(e.currentTarget.href)
+
 const GL = {
   antialias: true,
   alpha: false,
@@ -115,6 +130,12 @@ export function Landing() {
       if (m.googleClientId && !m.user && new URLSearchParams(location.search).has('signin')) setSheet(true)
     })
   }, [])
+  useEffect(() => {
+    if (sheet) prefetchRoute('/play')
+    if (!me?.user) return
+    const t = setTimeout(() => prefetchRoute(nextForMember(me)), 4000)
+    return () => clearTimeout(t)
+  }, [me, sheet])
   const enter = (e: MouseEvent<HTMLAnchorElement>) => {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
     if (me?.googleClientId && !me.user) {
@@ -326,7 +347,7 @@ export function Landing() {
             Make your bean
           </a>
           {me?.user && <AccountChip me={me} onSignedOut={() => fetchMe().then(setMe)} />}
-          <a className="btn btn-secondary btn-sm" href="/play" onClick={enter}>
+          <a className="btn btn-secondary btn-sm" href="/play" onClick={enter} onPointerDown={onIntent} onPointerEnter={onIntent}>
             Enter
             <Chevron />
           </a>
@@ -414,10 +435,10 @@ export function Landing() {
               <Ln k="d">two people meet _face to face_</Ln> <Ln k="b">with something real to say.</Ln>
             </p>
             <div className="ctas" data-ui="">
-              <a className="btn btn-primary" href="/avatar">
+              <a className="btn btn-primary" href="/avatar" onPointerDown={onIntent} onPointerEnter={onIntent}>
                 Make your bean
               </a>
-              <a className="btn btn-secondary" href="/play" onClick={enter}>
+              <a className="btn btn-secondary" href="/play" onClick={enter} onPointerDown={onIntent} onPointerEnter={onIntent}>
                 Enter HackGT 13
                 <Chevron />
               </a>
@@ -428,7 +449,7 @@ export function Landing() {
 
       {/* What the app is, in one line (also what Google's consent screen review reads) */}
       <footer className="about">
-        <img src="/facemash-logo.png" alt="" width="22" height="22" />
+        <img src="/facemash-logo-66.png" alt="" width="22" height="22" loading="lazy" decoding="async" />
         <p>
           <b>facemash</b> helps HackGT 13 attendees find the people they'd be glad to meet. Google sign-in is optional
           and only used for your account.

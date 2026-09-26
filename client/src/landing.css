@@ -25,7 +25,7 @@ html.scroll-page #root {
   --ease-press: cubic-bezier(0.2, 0.8, 0.2, 1);
   /* critically damped spring, x(t) = 1 − (1 + 9.5t)e^(−9.5t): settles, never bounces */
   --spring: linear(0, 0.0461, 0.1485, 0.271, 0.3936, 0.506, 0.604, 0.6866, 0.7545, 0.8093, 0.853, 0.8874, 0.9142, 0.935, 0.951, 0.9632, 0.9725, 0.9796, 0.9849, 0.989, 0.992, 0.9942, 0.9959, 0.9972, 0.9981, 0.9988, 0.9993, 0.9997, 1);
-  --gutter: clamp(20px, 5vw, 64px);
+  --gutter: max(clamp(20px, 5vw, 64px), env(safe-area-inset-left), env(safe-area-inset-right));
   /* left edge of the content column, so the nav and the scrim line up with the copy */
   --col: max(var(--gutter), calc((100vw - 1280px) / 2 + var(--gutter)));
   --display: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
@@ -499,7 +499,21 @@ html.scroll-page #root {
 }
 @media (max-width: 767px) {
   .landing-nav {
-    height: 56px;
+    height: calc(56px + env(safe-area-inset-top));
+    padding-top: env(safe-area-inset-top);
+  }
+  /* 44px to the thumb without changing how they look */
+  .brand {
+    padding: 11px 0;
+    margin: -11px 0;
+  }
+  .landing .btn-sm {
+    position: relative;
+  }
+  .landing .btn-sm::after {
+    content: '';
+    position: absolute;
+    inset: -4px -2px;
   }
   .nav-link {
     display: none;

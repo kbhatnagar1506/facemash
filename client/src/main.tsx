@@ -7,8 +7,10 @@ import './index.css'
 // /avatar  the Bean Studio
 // /privacy, /terms  the policies
 // /muse    connect your own AI agent (Muse): your personal QR, or the page it opens
-const App = lazy(() => import('./App.tsx'))
-const AvatarStudio = lazy(() => import('./AvatarStudio').then((m) => ({ default: m.AvatarStudio })))
+const loadApp = () => import('./App.tsx')
+const loadStudio = () => import('./AvatarStudio').then((m) => ({ default: m.AvatarStudio }))
+const App = lazy(loadApp)
+const AvatarStudio = lazy(loadStudio)
 const Landing = lazy(() => import('./Landing').then((m) => ({ default: m.Landing })))
 const MusePage = lazy(() => import('./MusePage').then((m) => ({ default: m.MusePage })))
 const Privacy = lazy(() => import('./Legal').then((m) => ({ default: m.Privacy })))
@@ -36,6 +38,9 @@ function mount() {
   )
 }
 if (Page === App || Page === AvatarStudio) {
+  // start downloading the page (and its 3D engine) while /api/me answers, not after:
+  // on a phone that's the difference between one round of waiting and two
+  void (Page === App ? loadApp() : loadStudio()).catch(() => {})
   import('./account').then(({ fetchMe }) =>
     fetchMe().then((me) => (me.googleClientId && !me.user ? location.replace('/?signin') : mount())),
   )

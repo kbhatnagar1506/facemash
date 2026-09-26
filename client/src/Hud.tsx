@@ -5,6 +5,8 @@ import type { PlayerInfo } from './Player'
 import { HackGTWelcome, InfoBoard, type EventInfo } from './HackGTWelcome'
 import { HALL_EXIT, PHOTO_EVENT, nearestSpot, type Spot, type Table } from './hall/layout'
 import { nearestShell } from './Shells'
+import { Stick } from './Stick'
+import { touchFirst } from './touch'
 
 const MAP_PX = 190
 
@@ -153,7 +155,7 @@ function Chat({ net }: { net: Net }) {
           ref={input}
           value={text}
           maxLength={140}
-          placeholder="Press Enter to chat"
+          placeholder={TOUCH ? 'Say something…' : 'Press Enter to chat'}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === 'Escape' && input.current.blur()}
         />
@@ -178,6 +180,8 @@ function nowNext(event: EventInfo | null) {
   const next = all.filter((it) => it.startMs > now).sort((a, b) => a.startMs - b.startMs)[0]
   return { live, next }
 }
+
+const TOUCH = touchFirst()
 
 export function Hud({
   campus, collider, net, info, eventOpen, setEventOpen, event, room, onEnterHall, onLeaveHall,
@@ -320,6 +324,7 @@ export function Hud({
         </>
       )}
       <Chat net={net} />
+      {TOUCH && <Stick />}
       <div className="help">
         <kbd>WASD</kbd> move · <kbd>Shift</kbd> run · {inHall ? <>drag or <kbd>Q</kbd>/<kbd>R</kbd>/<kbd>T</kbd>/<kbd>G</kbd> look · </> : <>drag or <kbd>Q</kbd>/<kbd>R</kbd> turn · <kbd>B</kbd> bike · <kbd>M</kbd> map · </>}<kbd>Enter</kbd> chat · <kbd>E</kbd> interact · scroll to zoom
       </div>
@@ -331,7 +336,7 @@ export function Hud({
             {near.kind === 'spot' && near.spot.text}
             {near.kind === 'table' && <>Grab a seat and start hacking! Press E to see the tracks.</>}
           </p>
-          {(near.kind !== 'spot' || near.spot.action) && <span className="dialog-hint">Press E ▼</span>}
+          {(near.kind !== 'spot' || near.spot.action) && <span className="dialog-hint">{TOUCH ? 'Tap ▼' : 'Press E ▼'}</span>}
         </div>
       )}
       {marks.length > 0 && Date.now() - marks[marks.length - 1].at < 3000 && (

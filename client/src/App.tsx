@@ -128,7 +128,7 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
   }, [room])
   // rendering quality (see <PerformanceMonitor>)
   const [dpr, setDpr] = useState(() => Math.min(MAX_DPR, window.devicePixelRatio))
-  const [lite, setLite] = useState(false)
+  const [lite, setLite] = useState(PHONE) // phones start without ambient occlusion; it comes back if frames allow
   // The hall loads (and pre-compiles) once you get within 300 m of Klaus, then stays.
   const [hallWanted, setHallWanted] = useState(false)
   useEffect(() => {
