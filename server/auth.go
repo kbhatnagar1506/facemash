@@ -246,9 +246,10 @@ type accounts struct {
 	store  Store
 	tenant string
 	sess   sessions
-	fast   *memFast // attendees' memory in MAPI (memfast.go); nil when off
-	jev    *jevLook // outfits picked from agent memory (jevlook.go); nil when off
-	talk   *agentTalk // agents talking when attendees meet (agenttalk.go); nil when off
+	fast   *memFast    // attendees' memory in MAPI (memfast.go); nil when off
+	jev    *jevLook    // outfits picked from agent memory (jevlook.go); nil when off
+	talk   *agentTalk  // agents talking when attendees meet (agenttalk.go); nil when off
+	voice  *voiceGuide // voice onboarding (voice.go); nil when off
 }
 
 // mountAuth adds /api/me, /api/auth/google and /api/auth/logout. With no client IDs
@@ -279,7 +280,7 @@ func mountAuth(mux *http.ServeMux, clientIDs []string, acc *accounts, originOK f
 	}
 
 	mux.HandleFunc("/api/me", func(w http.ResponseWriter, r *http.Request) {
-		out := map[string]any{"googleClientId": clientID, "tenant": acc.tenant, "user": nil}
+		out := map[string]any{"googleClientId": clientID, "tenant": acc.tenant, "user": nil, "voice": acc.voice != nil}
 		if id, ok := acc.sess.read(r); ok {
 			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 			a, err := acc.store.Account(ctx, acc.tenant, id)

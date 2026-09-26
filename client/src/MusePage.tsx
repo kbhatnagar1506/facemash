@@ -3,6 +3,7 @@ import QRCode from 'qrcode'
 import { fetchMe, type Me } from './account'
 import { SignInSheet } from './landing/SignIn'
 import { BEAN_STEP, MUSE_STEP } from './onboarding'
+import { VoiceCard } from './VoiceCard'
 import './landing.css'
 
 // Connect your own AI agent (Meta's Muse) to your HackGT 13 account.
@@ -207,7 +208,7 @@ function Memory() {
   if (!m?.stored) return null
   return (
     <p className="muse-fine">
-      Muse's memory about you: {m.kb} KB ({(m.sections ?? []).join(', ')}), received{' '}
+      Your memory here: {m.kb} KB ({(m.sections ?? []).join(', ')}), received{' '}
       {new Date(m.received_at!).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.{' '}
       <button className="muse-link" type="button" onClick={() => fetch('/api/muse/memory', { method: 'DELETE', credentials: 'same-origin' }).then(load)}>
         Delete it
@@ -292,8 +293,22 @@ function Onward({ connected }: { connected: boolean }) {
   )
 }
 
+/** No Muse: the way to the voice guide instead. */
+function VoiceLink({ onVoice }: { onVoice?: () => void }) {
+  if (!onVoice) return null
+  return (
+    <button className="btn btn-secondary muse-wide vc-alt" type="button" onClick={onVoice}>
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor" />
+        <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+      No Muse? Talk for a minute instead
+    </button>
+  )
+}
+
 /** Signed in: your personal QR, and whether your agent is connected. */
-function Pairing() {
+function Pairing({ onVoice }: { onVoice?: () => void }) {
   const [pair, setPair] = useState<Pair | null>(null)
   const [qr, setQr] = useState('')
   const [left, setLeft] = useState(0)
@@ -365,6 +380,7 @@ function Pairing() {
           <button className="btn btn-primary muse-wide" type="button" onClick={make}>
             Try again
           </button>
+          <VoiceLink onVoice={onVoice} />
           <Onward connected={false} />
         </div>
       </section>
@@ -438,15 +454,17 @@ function Pairing() {
         )}
       </div>
       <p className="muse-timer">{!pair ? 'Making your code…' : expired ? 'This code expired.' : `Works once · expires in ${mm}`}</p>
-      {pair && !expired && (
-        <div className="muse-actions">
+      <div className="muse-actions">
+        {pair && !expired && (
           <a className="btn btn-secondary muse-wide" href={'/muse#' + pair.code}>
             Muse is on this device
           </a>
-        </div>
-      )}
+        )}
+        <VoiceLink onVoice={onVoice} />
+      </div>
       <p className="muse-waiting">{pair && !expired ? 'Waiting for your Muse…' : ''}</p>
       <Onward connected={false} />
+      <Memory />
     </section>
   )
 }
@@ -474,9 +492,11 @@ export function MusePage() {
         {me.googleClientId && <SignInSheet clientId={me.googleClientId} next={onboarding() ? MUSE_STEP : '/muse'} onClose={() => (location.href = '/')} />}
       </Shell>
     )
-  return (
-    <Shell>
-      <Pairing />
-    </Shell>
-  )
+  return <SignedIn me={me} />
+}
+
+// ?voice opens the voice guide straight away (e.g. from a poster or a link)
+function SignedIn({ me }: { me: Me }) {
+  const [voice, setVoice] = useState(() => !!me.voice && new URLSearchParams(location.search).has('voice'))
+  return <Shell>{voice ? <VoiceCard step={onboarding()} onBack={() => setVoice(false)} /> : <Pairing onVoice={me.voice ? () => setVoice(true) : undefined} />}</Shell>
 }

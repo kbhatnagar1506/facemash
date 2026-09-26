@@ -450,7 +450,13 @@ func main() {
 	devTalk := flag.Bool("dev-talk", false, "local testing only: POST /api/talk/encounter {a_uid, b_uid} starts an agent talk (localhost requests only)")
 	talkConfig := flag.String("talk-config", "", "agent talk config file (default: the built-in talkdata/talk_config.json)")
 	sim := talkSimFlags()
+	voiceProvision := flag.Bool("voice-provision", false, "create or update the ElevenLabs voice agent ("+voiceAgentName+"), print its id and exit")
+	voiceKey := flag.String("voice-key", "", "with -voice-provision: which ElevenLabs key's account, primary or backup (default: the first that works)")
 	flag.Parse()
+	if *voiceProvision {
+		provisionVoice(*voiceKey)
+		return
+	}
 	if sim.on() {
 		os.Exit(runTalkSim(sim, *talkConfig))
 	}
@@ -517,6 +523,7 @@ func main() {
 	if acct != nil {
 		acct.fast = openMemFast(acct) // MAPI_READ_URL/MAPI_WRITE_URL + a tenant key; nil (off) otherwise
 		acct.jev = openJev(acct)      // JEV_API_KEY(_FILE); nil (off) otherwise
+		acct.voice = openVoice()      // ELEVENLABS_API_KEY(_FILE) + ELEVENLABS_AGENT_ID; nil (off) otherwise
 		mountAuth(mux, clientIDs, acct, originOK)
 		mountMuse(mux, acct, hub, *eventFile, base, originOK)
 		mountJev(mux, acct, acct.jev)
@@ -525,6 +532,7 @@ func main() {
 		if acct.talk != nil {
 			acct.talk.watchProximity(hub) // two opted-in players within 3 m for 3 s (talk_config.json)
 		}
+		mountVoice(mux, acct, acct.voice, originOK)
 		if *devLogin {
 			mountDevLogin(mux, acct)
 		}
