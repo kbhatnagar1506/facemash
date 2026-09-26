@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-import { X0, Z0 } from './layout'
+import { X0, Z0, wallZ } from './layout'
 
 // Every sponsor and organizer table in the Klaus atrium, from the on-site photos.
 // Tablecloths are real drapes: vertical folds that deepen towards the floor, a
@@ -544,6 +544,37 @@ function useArt() {
         g.lineTo(230, 560)
         g.stroke()
       }),
+      metaQR: paint(300, 300, (g) => {
+        g.fillStyle = '#f7f7f5'
+        g.fillRect(0, 0, 300, 300)
+        center(g, 'Get your free Meta', '700 20px Arial', '#1c2b33', 150, 26)
+        center(g, 'Model API credits', '700 20px Arial', '#1c2b33', 150, 50)
+        qr(g, 22, 90, 110, 11)
+        qr(g, 168, 90, 110, 12)
+        center(g, '1. Create an account', '500 13px Arial', '#444', 77, 222)
+        center(g, '2. Complete the form', '500 13px Arial', '#444', 223, 222)
+        center(g, '∞ Meta', '600 16px Arial', '#1d64d8', 250, 280)
+      }),
+      gameScreen: paint(320, 200, (g) => {
+        const grd = g.createLinearGradient(0, 0, 0, 200)
+        grd.addColorStop(0, '#8fd3ff')
+        grd.addColorStop(1, '#d9f1ff')
+        g.fillStyle = grd
+        g.fillRect(0, 0, 320, 200)
+        g.fillStyle = '#7fd06a'
+        g.beginPath()
+        g.arc(160, 330, 200, 0, Math.PI * 2)
+        g.fill()
+        g.fillStyle = '#fffdf6'
+        g.strokeStyle = '#2b2a33'
+        g.lineWidth = 4
+        g.fillRect(90, 40, 140, 110)
+        g.strokeRect(90, 40, 140, 110)
+        center(g, 'Campus Quest', '800 18px Arial', '#f5b700', 160, 64)
+        g.fillStyle = '#e0564f'
+        g.fillRect(105, 118, 110, 20)
+        center(g, 'Start ▸', '700 11px Arial', '#fff', 160, 128)
+      }),
       metaLong: print('#1a2748', (g, w, h) => center(g, '∞ Meta', '600 150px Arial', '#e9eef8', w / 2, h * 0.45)),
       meta: paint(400, 1000, (g) => {
         g.fillStyle = '#f6f8fb'
@@ -572,29 +603,36 @@ type Art = ReturnType<typeof useArt>
 
 /** Blue paper waves + life rings taped along the back wall behind the sponsor row. */
 function WaveWall() {
+  // Two torn-paper wave bands taped along the base of the curved back wall.
   const geo = useMemo(() => {
-    const mk = (top: number, amp: number, seed: number) => {
-      const s = new THREE.Shape()
-      const x0 = -2.8
-      const x1 = 13
-      s.moveTo(x0, 0.25)
-      for (let x = x0; x <= x1; x += 0.25) s.lineTo(x, top + amp * Math.sin(x * 2.3 + seed) + amp * 0.6 * Math.sin(x * 5.1 + seed * 2))
-      s.lineTo(x1, 0.25)
-      s.closePath()
-      return new THREE.ShapeGeometry(s)
+    const strip = (top: number, amp: number, seed: number, off: number) => {
+      const pos: number[] = []
+      const x0 = X0 + 0.5
+      const x1 = 16.5
+      const step = 0.2
+      for (let x = x0; x < x1; x += step) {
+        const y = (xx: number) => top + amp * Math.sin(xx * 2.3 + seed) + amp * 0.6 * Math.sin(xx * 5.1 + seed * 2)
+        const za = wallZ(x) + off
+        const zb = wallZ(x + step) + off
+        pos.push(x, 0.25, za, x + step, 0.25, zb, x + step, y(x + step), zb, x, 0.25, za, x + step, y(x + step), zb, x, y(x), za)
+      }
+      const g = new THREE.BufferGeometry()
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+      g.computeVertexNormals()
+      return g
     }
-    return { navy: mk(1.25, 0.08, 1), teal: mk(1.75, 0.1, 4) }
+    return { teal: strip(1.75, 0.1, 4, 0.04), navy: strip(1.25, 0.08, 1, 0.06) }
   }, [])
   return (
-    <group position={[0, 0, Z0 + 0.03]}>
+    <group>
       <mesh geometry={geo.teal}>
-        <meshLambertMaterial color="#2fb3d8" />
+        <meshLambertMaterial color="#2fb3d8" side={THREE.DoubleSide} />
       </mesh>
-      <mesh geometry={geo.navy} position={[0, 0, 0.01]}>
-        <meshLambertMaterial color="#27479a" />
+      <mesh geometry={geo.navy}>
+        <meshLambertMaterial color="#27479a" side={THREE.DoubleSide} />
       </mesh>
-      {[1.2, 6.2, 10.8].map((x) => (
-        <group key={x} position={[x, 1.7, 0.1]}>
+      {[-9, 1.2, 6.2, 10.8].map((x) => (
+        <group key={x} position={[x, 1.7, wallZ(x) + 0.14]}>
           <mesh>
             <torusGeometry args={[0.32, 0.1, 10, 28]} />
             <meshLambertMaterial color="#f6f3ee" />
@@ -703,8 +741,36 @@ function EastRow({ art }: { art: Art }) {
       {/* Meta's long table along the windows, in a Meta cloth */}
       <group position={[20.7, 0, -12.5]} rotation-y={west}>
         <Cloth w={2.4} d={0.9} color="#1a2748" front={art.metaLong} seed={15} />
-        <Box p={[-0.6, 0.8, 0]} s={[0.46, 0.03, 0.32]} color="#c9ccd2" />
-        <Box p={[0.5, 0.82, 0.1]} s={[0.3, 0.06, 0.22]} color="#e8e2c9" />
+        {/* "Get your free Meta Model API credits" acrylic QR stands on wooden bases */}
+        {[-0.95, -0.45].map((x, i) => (
+          <group key={x} position={[x, 0.76, -0.15]} rotation-y={0.25 - i * 0.2}>
+            <Box p={[0, 0.03, 0]} s={[0.34, 0.05, 0.1]} color="#b98652" />
+            <mesh position={[0, 0.2, 0]}>
+              <planeGeometry args={[0.3, 0.3]} />
+              <meshBasicMaterial map={art.metaQR} side={THREE.DoubleSide} />
+            </mesh>
+          </group>
+        ))}
+        {/* water bottle */}
+        <mesh position={[-1.05, 0.88, 0.2]}>
+          <cylinderGeometry args={[0.035, 0.035, 0.24, 12]} />
+          <meshLambertMaterial color="#d8ecf8" transparent opacity={0.75} />
+        </mesh>
+        <Box p={[-1.05, 1.01, 0.2]} s={[0.035, 0.03, 0.035]} color="#2a5cc8" />
+        {/* phone, and the laptop running this game */}
+        <Box p={[-0.1, 0.77, 0.1]} s={[0.08, 0.01, 0.16]} color="#141417" />
+        <group position={[0.35, 0.77, 0.05]}>
+          <Box p={[0, 0.01, 0]} s={[0.34, 0.015, 0.24]} color="#c9ccd2" />
+          <group position={[0, 0.01, -0.12]} rotation-x={-0.25}>
+            <Box p={[0, 0.11, 0]} s={[0.34, 0.22, 0.012]} color="#c9ccd2" />
+            <mesh position={[0, 0.11, 0.007]}>
+              <planeGeometry args={[0.31, 0.2]} />
+              <meshBasicMaterial map={art.gameScreen} toneMapped={false} />
+            </mesh>
+          </group>
+        </group>
+        <Box p={[0.9, 0.78, 0]} s={[0.4, 0.02, 0.3]} color="#1d1f24" />
+        <Box p={[0.72, 0.77, 0.25]} s={[0.12, 0.005, 0.18]} color="#f2c230" />
       </group>
       {[-13.1, -11.9].map((z) => (
         <FoldingChair key={z} x={21.5} z={z} rot={west} />
@@ -746,11 +812,11 @@ function EastRow({ art }: { art: Art }) {
   )
 }
 
-function Bear({ x, z, rot }: { x: number; z: number; rot: number }) {
+export function Bear({ x, z, rot, y = 0, chair = true }: { x: number; z: number; rot: number; y?: number; chair?: boolean }) {
   const teal = '#56c6d8'
   return (
-    <group position={[x, 0, z]} rotation-y={rot}>
-      <FoldingChair x={0} z={0} rot={0} />
+    <group position={[x, y, z]} rotation-y={rot}>
+      {chair && <FoldingChair x={0} z={0} rot={0} />}
       <group position={[0, 0.5, 0.02]}>
         <mesh position={[0, 0.32, 0]} scale={[1, 1.1, 0.85]}>
           <sphereGeometry args={[0.28, 16, 12]} />

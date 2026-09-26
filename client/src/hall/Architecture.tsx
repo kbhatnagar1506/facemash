@@ -1,6 +1,7 @@
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
+import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { BALCONY, CEIL, COLUMNS, CX, DOORS_Z, HALL, L1, MEZZ_WEST_Z, MEZZ_X0, MEZZ_Z, STAIR, X0, X1, Z0, Z1 } from './layout'
+import { BALCONY, CEIL, COLUMNS, CX, SAG, wallZ, DOORS_Z, HALL, L1, MEZZ_WEST_Z, MEZZ_X0, MEZZ_Z, STAIR, X0, X1, Z0, Z1 } from './layout'
 import { Entrance } from './Entrance'
 import { ceilingTiles, checkerWall, netTexture, terrazzo, textCard, windowWall } from './textures'
 
@@ -105,12 +106,30 @@ function Walls() {
   const leftUpper = useMemo(() => checkerWall(14, 5, [2, 5, 8, 11], 9), [])
   const glassR = useMemo(() => windowWall(15), [])
   const h = CEIL
+  const curvedWall = useMemo(() => {
+    const g = new THREE.PlaneGeometry(HALL.w, h, 48, 1)
+    const p = g.getAttribute('position')
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i) + CX
+      p.setXYZ(i, x, p.getY(i) + h / 2, wallZ(x))
+    }
+    g.computeVertexNormals()
+    return g
+  }, [h])
   return (
     <group>
       {/* far (north) wall: full-height checkerboard with windows */}
-      <mesh position={[CX, h / 2, Z0]}>
-        <planeGeometry args={[HALL.w, h]} />
+      <mesh geometry={curvedWall}>
         <meshLambertMaterial map={back} />
+      </mesh>
+      {/* floor and ceiling carry on into the curve */}
+      <mesh rotation-x={-Math.PI / 2} position={[CX, 0.001, Z0 - SAG / 2]}>
+        <planeGeometry args={[HALL.w, SAG]} />
+        <meshStandardMaterial color="#e3dfd6" roughness={0.35} />
+      </mesh>
+      <mesh rotation-x={Math.PI / 2} position={[CX, h, Z0 - SAG / 2]}>
+        <planeGeometry args={[HALL.w, SAG]} />
+        <meshLambertMaterial color="#efece6" side={THREE.DoubleSide} />
       </mesh>
       {/* left wall: white corridor wall at ground/2nd floor, checker panels above */}
       <mesh position={[X0, L1 + (h - L1) / 2, 0]} rotation-y={Math.PI / 2}>
@@ -163,8 +182,47 @@ function Ceiling() {
     for (let x = X0 + 2.5; x < BALCONY.left.x1 + 1; x += 3.5) for (let z = Z0 + 2.5; z < STAIR.zTop; z += 4) out.push([x, L1 - 0.52, z])
     return out
   }, [])
+  // Camera-style starbursts on the high atrium downlights (like the photos).
+  const star = useMemo(() => {
+    const c = document.createElement('canvas')
+    c.width = c.height = 128
+    const g = c.getContext('2d')!
+    const glow = g.createRadialGradient(64, 64, 0, 64, 64, 64)
+    glow.addColorStop(0, 'rgba(255,252,240,1)')
+    glow.addColorStop(0.12, 'rgba(255,248,225,.6)')
+    glow.addColorStop(1, 'rgba(255,248,225,0)')
+    g.fillStyle = glow
+    g.fillRect(0, 0, 128, 128)
+    g.globalCompositeOperation = 'lighter'
+    for (let k = 0; k < 6; k++) {
+      g.save()
+      g.translate(64, 64)
+      g.rotate((k * Math.PI) / 6)
+      const ray = g.createLinearGradient(-64, 0, 64, 0)
+      ray.addColorStop(0, 'rgba(255,250,235,0)')
+      ray.addColorStop(0.5, `rgba(255,250,235,${k % 3 === 0 ? 0.7 : 0.3})`)
+      ray.addColorStop(1, 'rgba(255,250,235,0)')
+      g.fillStyle = ray
+      g.fillRect(-64, -1, 128, 2)
+      g.restore()
+    }
+    return new THREE.CanvasTexture(c)
+  }, [])
+  const starGeo = useMemo(() => {
+    const hi = lights.filter((l) => l[1] > CEIL - 1).map((l) => [l[0], l[1] - 0.1, l[2]]).flat()
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(hi, 3))
+    return g
+  }, [lights])
+  const starMat = useRef<THREE.PointsMaterial>(null!)
+  useFrame(({ clock }) => {
+    if (starMat.current) starMat.current.size = 2.2 + Math.sin(clock.elapsedTime * 1.3) * 0.15 // gentle shimmer
+  })
   return (
     <group>
+      <points geometry={starGeo}>
+        <pointsMaterial ref={starMat} map={star} size={2.2} sizeAttenuation transparent depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
+      </points>
       <mesh position={[CX, CEIL, 0]} rotation-x={Math.PI / 2}>
         <planeGeometry args={[HALL.w, HALL.d]} />
         <meshLambertMaterial map={tiles} side={THREE.DoubleSide} />

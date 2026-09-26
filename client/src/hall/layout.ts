@@ -261,3 +261,10 @@ export const CALIBRATION_SPOTS: { name: string; h: [number, number] }[] = [
   { name: 'Aramco backdrop', h: [15.3, -24.5] },
   { name: 'Notability', h: [-6, -23.2] },
 ]
+
+/** The checkerboard back wall is curved: it bows out (north) by SAG metres at the middle. */
+export const SAG = 3.5
+export function wallZ(x: number) {
+  const u = (x - CX) / ((X1 - X0) / 2)
+  return Z0 - SAG * (1 - Math.min(1, u * u))
+}

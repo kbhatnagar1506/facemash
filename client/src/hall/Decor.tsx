@@ -4,7 +4,7 @@ import { Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { CEIL, HALL_EXIT, TABLE, TABLES, type Table } from './layout'
 import { curtain, textCard } from './textures'
-import { FoldingChair, Sponsors } from './Sponsors'
+import { Bear, FoldingChair, Sponsors } from './Sponsors'
 
 
 /* ------------------------------------------------------------------ bunting */
@@ -245,7 +245,8 @@ function PhotoBooth() {
           </mesh>
         ))}
       </group>
-      {/* the wooden boat hackers pose in */}
+      {/* the wooden boat hackers pose in, with the HackGT bear sitting in it */}
+      <Bear x={2.9} z={-17.5} y={0.5} rot={0.15} chair={false} />
       <group position={[2, 0, -17.4]}>
         <mesh geometry={hull} castShadow receiveShadow>
           <meshToonMaterial color="#f2e9d6" />
