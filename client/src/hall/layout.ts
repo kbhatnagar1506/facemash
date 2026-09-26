@@ -95,11 +95,12 @@ export interface Table {
   x: number
   z: number
 }
-/** 10 hacking tables in the open floor, 2 columns × 5 rows. */
-export const TABLES: Table[] = [-12, -6.5, -1, 4.5, 10].flatMap((z, row) =>
-  [2.2, 9.8].map((x, col) => ({ n: row * 2 + col + 1, x, z })),
+/** 18 hacking tables packed into the open floor, 3 columns × 6 rows, tight aisles like on the day. */
+export const TABLES: Table[] = [-12, -8, -4, 0, 4, 8].flatMap((z, row) =>
+  [2.3, 7.5, 12.7].map((x, col) => ({ n: row * 3 + col + 1, x, z })),
 )
-export const TABLE = { r: 0.9, h: 0.76 } // round grey hacking tables
+/** Long maple folding tables (two leaves end to end), long axis east–west. */
+export const TABLE = { w: 4.4, d: 0.9, h: 0.76 }
 
 type Box = [number, number, number, number] // x0, z0, x1, z1
 
@@ -113,16 +114,19 @@ export const GROUND_BLOCKS: Box[] = [
   [-0.7, -27.4, 12.1, -25.1],
   [12.1, -27.9, 18.5, -25.5],
   [18.5, -25, 19.3, -23.6], // Aramco's folding chair
-  // east windows (NSA, Meta, Impiricus, SpaceX)
-  [18.1 + ex(-20), -22.9, 19.9 + ex(-20), -17.9],
-  [18.1 + ex(-10.6), -11.1, 19.1 + ex(-10.6), -10.1], // Meta roll-up beside the long table
-  [18.1 + ex(-12.5), -13.9, 19.9 + ex(-12.5), -11.1], // Meta long table
-  [18.2 + ex(-4), -6.7, 19.9 + ex(-4), -1.3],
-  [18.3 + ex(1.8), 0.4, 19.9 + ex(1.8), 3.3],
-  [18.1, 6.1, 19.9, 8.9],
+  // east windows, inside the glass (NSA, Meta, Impiricus, maple table, SpaceX, maple tables)
+  [17.6 + ex(-20), -21.8, 19.9 + ex(-20), -18.2],
+  [17.6 + ex(-12.5), -14.2, 19.9 + ex(-12.5), -10],
+  [18.4 + ex(-6.6), -7, 19.9 + ex(-6.6), -6.2],
+  [17.6 + ex(-4.2), -5.9, 19.9 + ex(-4.2), -2.5],
+  [18.2 + ex(-1.9), -2.3, 19.9 + ex(-1.9), -0.9],
+  [17.4 + ex(0.6), -0.4, 19.9 + ex(0.6), 2.5],
+  [17.6, 3.3, 19.9, 6.3],
+  [17.6, 7.6, 19.9, 9.6],
+  [17.6, 10.6, 19.9, 12.6],
   // organizers
   [-4, 5.6, -2.6, 9.4], // Hardware Desk
-  [-3.4, 14.8, -0.2, 16.2], // MLH at the stair foot
+  [-2.5, 13.8, -1.1, 17.2], // MLH at the stair foot (runs along the stair)
   [-3.7, -11.8, -1.9, -5.8], // HackGT Help Desk + the bear (beside Tables 1 & 3)
   // entrance lobby (photos: doors, Seminar Room West, Research Wing)
   [X1 - 0.9, 16.1, X1 - 0.1, 16.9], // trash can by the doors
@@ -135,7 +139,7 @@ export const GROUND_BLOCKS: Box[] = [
   [westX(-15.3) + 2.3, -15.6, westX(-15.3) + 2.9, -15], // trash can
   [6.4, 26.6, 7.3, 27.9], // info kiosk
   [13.2, 25.6, 15.6, 27.9], // folding table + chair
-  ...TABLES.map((t): Box => [t.x - 1.55, t.z - 1.55, t.x + 1.55, t.z + 1.55]),
+  ...TABLES.map((t): Box => [t.x - TABLE.w / 2 - 0.3, t.z - TABLE.d / 2 - 0.85, t.x + TABLE.w / 2 + 0.3, t.z + TABLE.d / 2 + 0.85]),
 ]
 
 function inBox(x: number, z: number, [x0, z0, x1, z1]: Box, r: number) {
@@ -243,7 +247,7 @@ export const SPOTS: Spot[] = [
   { id: 'nsa', x: 17.2 + ex(-20), z: -20, r: 2.4, text: 'National Security Agency: IntelligenceCareers.gov/NSA' },
   { id: 'meta', x: 17.1 + ex(-12), z: -12, r: 2.4, text: 'Meta: “Make Every Connection Matter.” Come say hi at the table.' },
   { id: 'impiricus', x: 17.2 + ex(-4), z: -4, r: 2.4, text: 'Impiricus: the Agentic Commercialization Platform for Healthcare. self.build()' },
-  { id: 'spacex', x: 17.2, z: 7.5, r: 2.2, text: 'SpaceX: ask about building rockets.' },
+  { id: 'spacex', x: 17.2, z: 4.8, r: 2.2, text: 'SpaceX: ask about building rockets.' },
   { id: 'balcony', x: -9, z: -8, y: L1, r: 5, text: 'Up on the 2nd floor: the whole Seaside Market below you.' },
   { id: 'mezz', x: 4, z: 4.6, y: L1, r: 6, text: 'The entrance mezzanine: look out over the hacking floor and the photo booth.' },
   { id: 'seminar', x: westX(SEMINAR_Z) + 2, z: SEMINAR_Z, r: 2.6, text: 'Seminar Room West: workshops and tech talks happen in here.' },
@@ -271,7 +275,7 @@ export function nearestTable(x: number, z: number, y = 0, range = 2.8): Table | 
   let best: Table | null = null
   let bestD = range
   for (const t of TABLES) {
-    const d = Math.max(0, Math.hypot(x - t.x, z - t.z) - TABLE.r)
+    const d = Math.hypot(Math.max(0, Math.abs(x - t.x) - TABLE.w / 2), Math.max(0, Math.abs(z - t.z) - TABLE.d / 2))
     if (d < bestD) {
       bestD = d
       best = t

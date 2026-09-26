@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import * as THREE from 'three'
-import { CEIL, HALL_EXIT, TABLE, TABLES, type Table } from './layout'
-import { curtain, metaScreen, textCard } from './textures'
-import { Bear, FoldingChair, Sponsors } from './Sponsors'
+import { CEIL, HALL_EXIT } from './layout'
+import { HackTables } from './HackTables'
+import { curtain, textCard } from './textures'
+import { Bear, Sponsors } from './Sponsors'
 
 
 /* ------------------------------------------------------------------ bunting */
@@ -273,79 +274,6 @@ function PhotoBooth() {
   )
 }
 
-/* ------------------------------------------------------------ hacking tables */
-
-const LAPTOP_COLORS = ['#c9ccd2', '#2b2d33', '#c9ccd2', '#8c9097']
-const SCREEN_COLORS = ['#7fd3ff', '#b5f5c8', '#ffd98a', '#d7c2ff', '#9fe7ff']
-const SEATS = 6
-
-/** Round grey hacking table: pedestal base, six folding chairs, laptops facing each seat. */
-function HackTable({ t }: { t: Table }) {
-  const screens = useRef<THREE.MeshBasicMaterial[]>([])
-  const seats = useMemo(
-    () =>
-      Array.from({ length: SEATS }, (_, k) => {
-        const a = (k / SEATS) * Math.PI * 2 + t.n * 0.4
-        const laptop = (t.n * 3 + k * 5) % 4 !== 0
-        return { a, laptop, body: LAPTOP_COLORS[(t.n + k) % 4], screen: SCREEN_COLORS[(t.n * 2 + k) % 5] }
-      }),
-    [t.n],
-  )
-  // screens flicker gently as code scrolls
-  useFrame(({ clock }) => {
-    screens.current.forEach((m, i) => {
-      if (m) m.color.setScalar(0.92 + 0.08 * Math.sin(clock.elapsedTime * 3 + i * 1.7 + t.n)) // gentle screen flicker
-    })
-  })
-  return (
-    <group position={[t.x, 0, t.z]}>
-      <mesh position={[0, TABLE.h, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[TABLE.r, TABLE.r, 0.05, 40]} />
-        <meshLambertMaterial color="#a9aeb4" />
-      </mesh>
-      <mesh position={[0, TABLE.h - 0.035, 0]}>
-        <cylinderGeometry args={[TABLE.r - 0.02, TABLE.r - 0.05, 0.03, 40]} />
-        <meshLambertMaterial color="#7d8288" />
-      </mesh>
-      <mesh position={[0, TABLE.h / 2, 0]}>
-        <cylinderGeometry args={[0.06, 0.06, TABLE.h, 12]} />
-        <meshLambertMaterial color="#6b7077" />
-      </mesh>
-      <mesh position={[0, 0.02, 0]}>
-        <cylinderGeometry args={[0.38, 0.42, 0.04, 24]} />
-        <meshLambertMaterial color="#6b7077" />
-      </mesh>
-      {seats.map((s, i) => (
-        <group key={i}>
-          <FoldingChair x={Math.sin(s.a) * (TABLE.r + 0.42)} z={Math.cos(s.a) * (TABLE.r + 0.42)} rot={s.a + Math.PI} />
-          {s.laptop && (
-            <group position={[Math.sin(s.a) * 0.55, TABLE.h + 0.04, Math.cos(s.a) * 0.55]} rotation-y={s.a}>
-              <mesh>
-                <boxGeometry args={[0.42, 0.025, 0.3]} />
-                <meshLambertMaterial color={s.body} />
-              </mesh>
-              <group position={[0, 0.01, -0.15]} rotation-x={-0.3}>
-                <mesh position={[0, 0.14, 0]}>
-                  <boxGeometry args={[0.42, 0.28, 0.02]} />
-                  <meshLambertMaterial color={s.body} />
-                </mesh>
-                <mesh position={[0, 0.14, 0.012]}>
-                  <planeGeometry args={[0.37, 0.23]} />
-                  <meshBasicMaterial ref={(m) => { if (m) screens.current[i] = m }} map={metaScreen()} toneMapped={false} />
-                </mesh>
-              </group>
-            </group>
-          )}
-        </group>
-      ))}
-      <mesh position={[0.15, TABLE.h + 0.1, -0.1]}>
-        <cylinderGeometry args={[0.04, 0.04, 0.15, 10]} />
-        <meshLambertMaterial color={t.n % 2 ? '#2f80ed' : '#e8543f'} />
-      </mesh>
-    </group>
-  )
-}
-
 function ExitShell({ active }: { active: boolean }) {
   const g = useRef<THREE.Group>(null!)
   useFrame(({ clock }) => {
@@ -374,9 +302,7 @@ export function Decor({ active }: { active: boolean }) {
       <Seagulls />
       <PhotoBooth />
       <Sponsors />
-      {TABLES.map((t) => (
-        <HackTable key={t.n} t={t} />
-      ))}
+      <HackTables />
       <ExitShell active={active} />
     </group>
   )

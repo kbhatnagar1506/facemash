@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-import { SLANT, X0, Z0, ex, wallZ, westSlope, westX } from './layout'
+import { SLANT, X0, X1, Z0, ex, wallZ, westSlope, westX } from './layout'
+import { FoldingTable, Swag } from './HackTables'
 import { metaScreen } from './textures'
 
 // Every sponsor and organizer table in the Klaus atrium, from the on-site photos.
@@ -662,7 +663,8 @@ function BackRow({ art }: { art: Art }) {
       </mesh>
       <RollUp map={art.notabilityRoll} x={-3.5} z={Z0 + 1.5} w={0.8} h={2} dark />
       <group position={[-6, 0, -24.6]}>
-        <Cloth w={2.3} d={0.8} color="#63b8ea" front={art.notability} seed={2} />
+        <Cloth w={2.8} d={0.9} color="#63b8ea" front={art.notability} seed={2} />
+        <Swag w={2.8} seed={2} />
       </group>
       <Cardboard x={-3.1} z={-25} rot={0.4} />
       <Cardboard x={-2.7} z={-24.4} rot={-0.3} s={0.4} />
@@ -673,7 +675,8 @@ function BackRow({ art }: { art: Art }) {
 
       {/* Visa */}
       <group position={[0.6, 0, zT]}>
-        <Cloth w={2.4} d={0.8} color="#1a47b0" front={art.visa} seed={5} loose={1.3} />
+        <Cloth w={2.8} d={0.9} color="#1a47b0" front={art.visa} seed={5} loose={1.3} />
+        <Swag w={2.8} seed={5} />
       </group>
       {[0.1, 1.1].map((x) => (
         <FoldingChair key={x} x={x} z={-26.7} rot={0} />
@@ -683,7 +686,8 @@ function BackRow({ art }: { art: Art }) {
       {/* T-Mobile: photo-collage roll-up, table, "Unstoppable. Together.", road case */}
       <RollUp map={art.tmoCollage} x={2.9} z={-26.7} />
       <group position={[4.6, 0, zT]}>
-        <Cloth w={2.2} d={0.8} color="#e20074" front={art.tmobile} seed={9} loose={1.2} />
+        <Cloth w={2.8} d={0.9} color="#e20074" front={art.tmobile} seed={9} loose={1.2} />
+        <Swag w={2.8} seed={9} />
       </group>
       <Card p={[4.6, 0.9, zT]} w={0.2} h={0.28} map={art.qrCard} />
       <RollUp map={art.tmoTogether} x={6.3} z={-26.5} />
@@ -692,7 +696,8 @@ function BackRow({ art }: { art: Art }) {
       {/* Citadel: silver "Welcome" roll-up + royal-blue table with QR stands */}
       <RollUp map={art.citadelWelcome} x={8.5} z={-26.5} w={1.1} h={2.3} />
       <group position={[10.5, 0, zT]}>
-        <Cloth w={2.2} d={0.8} color="#1f5fc4" front={art.citadel} seed={4} loose={1.4} />
+        <Cloth w={2.8} d={0.9} color="#1f5fc4" front={art.citadel} seed={4} loose={1.4} />
+        <Swag w={2.8} seed={4} laptops={0} />
       </group>
       {[9.8, 11.2].map((x) => (
         <Card key={x} p={[x, 0.93, zT]} w={0.22} h={0.3} map={art.qrCard} />
@@ -706,10 +711,12 @@ function BackRow({ art }: { art: Art }) {
         <meshLambertMaterial map={art.aramcoBack} side={THREE.DoubleSide} />
       </mesh>
       <group position={[14.3, 0, -26]}>
-        <Cloth w={1.9} d={0.8} color="#63676e" seed={6} />
+        <Cloth w={1.95} d={0.9} color="#63676e" seed={6} />
+        <Swag w={1.95} seed={6} laptops={0} />
       </group>
       <group position={[16.3, 0, -26]}>
-        <Cloth w={2.1} d={0.8} color="#63676e" front={art.aramco} seed={8} />
+        <Cloth w={2.05} d={0.9} color="#63676e" front={art.aramco} seed={8} />
+        <Swag w={2.05} seed={8} />
       </group>
       {[14.3, 16.3].map((x) => (
         <FoldingChair key={x} x={x} z={-26.9} rot={0} />
@@ -720,107 +727,146 @@ function BackRow({ art }: { art: Art }) {
   )
 }
 
+/** A booth frame along the east glass: x = glass - `in` metres, following the splay. */
+function Along({ z, children }: { z: number; children: React.ReactNode }) {
+  const splay = z < 3
+  return (
+    <group position={[X1 + ex(z), 0, z]} rotation-y={splay ? -SLANT : 0}>
+      <group position={[-X1, 0, -z]}>{children}</group>
+    </group>
+  )
+}
+
+const TX = X1 - 1.15 // sponsor table centre line, reps' chairs between it and the glass
+const REP = X1 - 0.45
+const FRONT = TX - 1.05 // a visitor chair on the aisle side
+
+function SuitCase({ x, z, rot = 0 }: { x: number; z: number; rot?: number }) {
+  return (
+    <group position={[x, 0, z]} rotation-y={rot}>
+      <Box p={[0, 0.38, 0]} s={[0.42, 0.66, 0.26]} color="#2c63c9" />
+      {[-0.1, 0.1].map((x) => <Box key={x} p={[x, 0.95, -0.08]} s={[0.02, 0.5, 0.02]} color="#9aa0a6" />)}
+      <Box p={[0, 1.2, -0.08]} s={[0.24, 0.03, 0.03]} color="#1d1e22" />
+      {[-0.15, 0.15].map((x) => <Box key={x} p={[x, 0.03, 0.08]} s={[0.05, 0.05, 0.05]} color="#141417" />)}
+      {/* T-Mobile swag tote hanging off the handle */}
+      <Box p={[0, 0.95, 0.12]} s={[0.36, 0.42, 0.08]} color="#e20074" />
+      <Box p={[0, 1.02, 0.165]} s={[0.26, 0.1, 0.005]} color="#f4f4f0" />
+    </group>
+  )
+}
+
+function Backpack({ x, z, rot = 0, color = '#2b2d33', y = 0 }: { x: number; z: number; rot?: number; color?: string; y?: number }) {
+  return (
+    <group position={[x, y, z]} rotation-y={rot}>
+      <Box p={[0, 0.2, 0]} s={[0.34, 0.4, 0.2]} color={color} />
+      <mesh position={[0, 0.4, 0]} rotation-x={Math.PI / 2}>
+        <cylinderGeometry args={[0.17, 0.17, 0.2, 12]} />
+        <meshLambertMaterial color={color} />
+      </mesh>
+      <Box p={[0, 0.15, 0.12]} s={[0.26, 0.18, 0.06]} color={color} />
+    </group>
+  )
+}
+
 function EastRow({ art }: { art: Art }) {
-  // Along the east windows; table fronts face west, into the atrium.
+  // Along the east windows, back corner to the lobby; table fronts face west, into the atrium.
   const west = -Math.PI / 2
   return (
     <group>
-      <group position={[20.7 + ex(-20), 0, -20]} rotation-y={-SLANT}>
-        <group position={[-20.7, 0, 20]}>
-      {/* NSA */}
-      <group position={[20.7, 0, -20]} rotation-y={west}>
-        <Cloth w={2.6} d={0.9} color="#18264a" front={art.nsa} seed={3} />
-        <Box p={[-0.8, 0.95, 0]} s={[0.4, 0.34, 0.25]} color="#2a5cc8" />
-        <Box p={[-0.35, 0.9, 0.05]} s={[0.3, 0.26, 0.2]} color="#2a5cc8" />
-        <Box p={[0.3, 0.86, 0]} s={[0.4, 0.2, 0.26]} color="#a67c4e" />
-        <Box p={[0.9, 0.79, 0.1]} s={[0.5, 0.04, 0.3]} color="#e9e9e4" />
-      </group>
-      {[-21.2, -18.9].map((z) => (
-        <FoldingChair key={z} x={21.5} z={z} rot={west} />
-      ))}
-      <Bin x={21.3} z={-22.6} />
+      {/* NSA: navy cloth, swag and blue cups, two reps' chairs, a spare pair of chairs by the bin */}
+      <Along z={-20}>
+        <group position={[TX, 0, -20]} rotation-y={west}>
+          <Cloth w={3} d={0.9} color="#18264a" front={art.nsa} seed={3} />
+          <Swag w={3} seed={3} />
+          <Box p={[-1.1, 0.83, 0.2]} s={[0.3, 0.14, 0.2]} color="#2a5cc8" />
+          <Box p={[-0.8, 0.82, 0.25]} s={[0.22, 0.12, 0.16]} color="#2a5cc8" />
+        </group>
+        {[-20.8, -19.2].map((z) => <FoldingChair key={z} x={REP} z={z} rot={west} />)}
+        <Backpack x={REP + 0.05} z={-18.3} rot={0.4} color="#1f2f4a" />
+        <Bin x={REP} z={-22.4} />
+        {[-23.2, -22.5].map((z, i) => <FoldingChair key={z} x={TX - 0.2 - i * 0.2} z={z - 0.4} rot={west + 0.3 * i} />)}
+      </Along>
 
+      {/* Meta: long navy table, QR stands, two laptops, the white roll-up at the south end */}
+      <Along z={-12.5}>
+        <group position={[TX, 0, -12.5]} rotation-y={west}>
+          <Cloth w={3} d={0.9} color="#2d434d" front={art.metaLong} seed={15} />
+          {[-1.2, -0.7].map((x, i) => (
+            <group key={x} position={[x, 0.76, -0.15]} rotation-y={0.25 - i * 0.2}>
+              <Box p={[0, 0.03, 0]} s={[0.34, 0.05, 0.1]} color="#b98652" />
+              <mesh position={[0, 0.2, 0]}>
+                <planeGeometry args={[0.3, 0.3]} />
+                <meshBasicMaterial map={art.metaQR} side={THREE.DoubleSide} />
+              </mesh>
+            </group>
+          ))}
+          <mesh position={[-1.35, 0.88, 0.2]}>
+            <cylinderGeometry args={[0.035, 0.035, 0.24, 12]} />
+            <meshLambertMaterial color="#d8ecf8" transparent opacity={0.75} />
+          </mesh>
+          {[0.2, 0.85].map((x, i) => (
+            <group key={x} position={[x, 0.77, -0.05]} rotation-y={Math.PI + (i ? -0.15 : 0.1)}>
+              <Box p={[0, 0.01, 0]} s={[0.34, 0.015, 0.24]} color={i ? '#2b2d33' : '#c9ccd2'} />
+              <group position={[0, 0.01, -0.12]} rotation-x={-0.25}>
+                <Box p={[0, 0.11, 0]} s={[0.34, 0.22, 0.012]} color={i ? '#2b2d33' : '#c9ccd2'} />
+                <mesh position={[0, 0.11, 0.007]}>
+                  <planeGeometry args={[0.31, 0.2]} />
+                  <meshBasicMaterial map={metaScreen()} toneMapped={false} />
+                </mesh>
+              </group>
+            </group>
+          ))}
+          <Box p={[-0.2, 0.77, 0.2]} s={[0.08, 0.01, 0.16]} color="#141417" />
+          <Box p={[1.3, 0.77, 0.25]} s={[0.12, 0.005, 0.18]} color="#f2c230" />
         </group>
-      </group>
-      {/* Meta: roll-up and the round navy table, full of people */}
-      <group position={[20.7 + ex(-12), 0, -12]} rotation-y={-SLANT}>
-        <group position={[-20.7, 0, 12]}>
-      {/* Meta's long table along the windows, in a Meta cloth */}
-      <group position={[20.7, 0, -12.5]} rotation-y={west}>
-        <Cloth w={2.4} d={0.9} color="#2d434d" front={art.metaLong} seed={15} />
-        {/* "Get your free Meta Model API credits" acrylic QR stands on wooden bases */}
-        {[-0.95, -0.45].map((x, i) => (
-          <group key={x} position={[x, 0.76, -0.15]} rotation-y={0.25 - i * 0.2}>
-            <Box p={[0, 0.03, 0]} s={[0.34, 0.05, 0.1]} color="#b98652" />
-            <mesh position={[0, 0.2, 0]}>
-              <planeGeometry args={[0.3, 0.3]} />
-              <meshBasicMaterial map={art.metaQR} side={THREE.DoubleSide} />
-            </mesh>
-          </group>
-        ))}
-        {/* water bottle */}
-        <mesh position={[-1.05, 0.88, 0.2]}>
-          <cylinderGeometry args={[0.035, 0.035, 0.24, 12]} />
-          <meshLambertMaterial color="#d8ecf8" transparent opacity={0.75} />
-        </mesh>
-        <Box p={[-1.05, 1.01, 0.2]} s={[0.035, 0.03, 0.035]} color="#2a5cc8" />
-        {/* phone, and the laptop running this game */}
-        <Box p={[-0.1, 0.77, 0.1]} s={[0.08, 0.01, 0.16]} color="#141417" />
-        <group position={[0.35, 0.77, 0.05]}>
-          <Box p={[0, 0.01, 0]} s={[0.34, 0.015, 0.24]} color="#c9ccd2" />
-          <group position={[0, 0.01, -0.12]} rotation-x={-0.25}>
-            <Box p={[0, 0.11, 0]} s={[0.34, 0.22, 0.012]} color="#c9ccd2" />
-            <mesh position={[0, 0.11, 0.007]}>
-              <planeGeometry args={[0.31, 0.2]} />
-              <meshBasicMaterial map={metaScreen()} toneMapped={false} />
-            </mesh>
-          </group>
-        </group>
-        <Box p={[0.9, 0.78, 0]} s={[0.4, 0.02, 0.3]} color="#1d1f24" />
-        <Box p={[0.72, 0.77, 0.25]} s={[0.12, 0.005, 0.18]} color="#f2c230" />
-      </group>
-      {[-13.1, -11.9].map((z) => (
-        <FoldingChair key={z} x={21.5} z={z} rot={west} />
-      ))}
-      {/* the white Meta roll-up right beside the long table */}
-      <RollUp map={art.meta} x={20.6} z={-10.6} rot={-1.28} w={1} h={2.3} />
+        {[-13.3, -11.7].map((z) => <FoldingChair key={z} x={REP} z={z} rot={west} />)}
+        <FoldingChair x={FRONT} z={-12.9} rot={Math.PI / 2 + 0.35} />
+        <Backpack x={REP} z={-10.9} rot={-0.3} />
+        <RollUp map={art.meta} x={TX - 0.1} z={-10.5} rot={-1.28} w={1} h={2.3} />
+      </Along>
 
+      {/* Impiricus: roll-ups either side of the black cloth, swag spread, reps behind */}
+      <Along z={-4.2}>
+        <RollUp map={art.impRoll} x={TX} z={-6.6} rot={west} w={0.9} h={2.1} dark />
+        <group position={[TX, 0, -4.2]} rotation-y={west}>
+          <Cloth w={3} d={0.9} color="#0c0c10" front={art.impiricus} seed={11} />
+          <Swag w={3} seed={11} laptops={2} />
         </group>
-      </group>
-      <group position={[20.7 + ex(-2.5), 0, -2.5]} rotation-y={-SLANT}>
-        <group position={[-20.7, 0, 2.5]}>
-      {/* Impiricus: two roll-ups either side, black cloth, then a tan folding table + big box */}
-      <RollUp map={art.impRoll} x={20.6} z={-6.3} rot={west} w={0.9} h={2.1} dark />
-      <group position={[20.8, 0, -4]} rotation-y={west}>
-        <Cloth w={3} d={0.9} color="#0c0c10" front={art.impiricus} seed={11} />
-        {[-1, -0.5, 0, 0.5, 1].map((x, i) => (
-          <Box key={x} p={[x, 0.8, 0]} s={[0.35, 0.05, 0.25]} color={['#e8d27a', '#3a6fd8', '#e8e2c9', '#1d1d20', '#c9a14a'][i]} />
-        ))}
-      </group>
-      <RollUp map={art.selfBuild} x={20.7} z={-1.7} rot={west} w={0.95} h={2.2} dark />
-      <group position={[20.9, 0, 1.4]}>
-        <Box p={[0, 0.74, 0]} s={[0.9, 0.04, 1.8]} color="#dcb77e" />
-        {[-0.8, 0.8].map((z) => (
-          <Box key={z} p={[0, 0.37, z]} s={[0.04, 0.74, 0.04]} color="#bfc3c7" />
-        ))}
-      </group>
-      <group position={[21.6, 0, 2.6]} rotation-z={0.12}>
-        <Box p={[0, 1.2, 0]} s={[0.3, 2.4, 1.1]} color="#b98d5c" />
-      </group>
+        {[-5, -3.4].map((z) => <FoldingChair key={z} x={REP} z={z} rot={west} />)}
+        <Backpack x={REP + 0.05} z={-6} rot={0.2} color="#6d2e2e" />
+        <RollUp map={art.selfBuild} x={TX} z={-1.9} rot={west} w={0.95} h={2.2} dark />
+        <SuitCase x={TX - 0.2} z={-1.2} rot={0.3} />
+      </Along>
 
+      {/* maple folding table where two hackers set up, the big carton leaning on the column */}
+      <Along z={0.6}>
+        <group position={[TX - 0.2, 0, 0.6]} rotation-y={Math.PI / 2}>
+          <FoldingTable len={1.9} leaves={1} seed={41} seats={[-0.4, 0.4]} seatsBack={[0]} />
         </group>
+        <group position={[REP, 0, 2]} rotation-z={0.1}>
+          <Box p={[0, 0.8, 0]} s={[0.3, 1.6, 0.8]} color="#b98d5c" />
+        </group>
+      </Along>
+
+      {/* SpaceX: plain black cloth, the banner on the glass, bags on the reps' chairs */}
+      <group position={[TX, 0, 4.8]} rotation-y={west}>
+        <Cloth w={2.8} d={0.9} color="#0d0d10" seed={13} loose={1.5} />
+        <Swag w={2.8} seed={13} laptops={0} />
       </group>
-      {/* SpaceX: plain black cloth, banner on the glass behind */}
-      <group position={[20.7, 0, 7.5]} rotation-y={west}>
-        <Cloth w={2.4} d={0.9} color="#0d0d10" seed={13} loose={1.5} />
-      </group>
-      {[6.9, 8.1].map((z) => (
-        <FoldingChair key={z} x={21.5} z={z} rot={west} />
-      ))}
-      <mesh position={[21.95, 2.5, 7.5]} rotation-y={west}>
+      {[4.1, 5.5].map((z) => <FoldingChair key={z} x={REP} z={z} rot={west} />)}
+      <Box p={[REP, 0.72, 4.1]} s={[0.4, 0.34, 0.14]} color="#b98a55" />
+      <Backpack x={REP} z={5.5} y={0.46} rot={Math.PI / 2} color="#4a3a31" />
+      <mesh position={[X1 - 0.03, 2.5, 4.8]} rotation-y={west}>
         <planeGeometry args={[1.6, 0.9]} />
         <meshBasicMaterial map={art.spacex} />
       </mesh>
+
+      {/* maple tables along the glass where people eat and hack */}
+      {[8.6, 11.6].map((z, i) => (
+        <group key={z} position={[X1 - 0.95, 0, z]} rotation-y={Math.PI / 2}>
+          <FoldingTable len={1.9} leaves={1} seed={51 + i * 4} seats={i ? [0] : [-0.45, 0.45]} seatsBack={[0.3]} />
+        </group>
+      ))}
     </group>
   )
 }
@@ -905,7 +951,7 @@ function Organizers({ art }: { art: Art }) {
       </mesh>
 
       {/* MLH at the stair foot: card towers on the cloth, balloons piled under the stair */}
-      <group position={[-1.8, 0, 15.5]}>
+      <group position={[-1.8, 0, 15.5]} rotation-y={Math.PI / 2}>
         <Cloth w={3.2} d={1.2} color="#1b2a4a" front={art.mlh} seed={5} />
         {[-1.2, 1.2].map((x) =>
           [0, 1, 2, 3].map((k) => (
