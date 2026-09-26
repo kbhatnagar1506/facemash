@@ -215,7 +215,8 @@ func (j *jevLook) suggest(tenant string, id int64, obj map[string]any) {
 	}()
 }
 
-func (j *jevLook) decide(ctx context.Context, state string) (string, map[string]lookPick, error) {
+func (j *jevLook) decide(ctx context.Context, state string) (look string, picks map[string]lookPick, err error) {
+	defer func() { meter.add("jev", jevModel+" (outfit)", err == nil, 0, 0, 0) }()
 	questions := map[string]any{}
 	for _, s := range jevSlots {
 		crit := map[string]string{}
@@ -240,7 +241,7 @@ func (j *jevLook) decide(ctx context.Context, state string) (string, map[string]
 	if err := json.NewDecoder(res.Body).Decode(&out); err != nil || res.StatusCode != http.StatusOK {
 		return "", nil, fmt.Errorf("jev http %d", res.StatusCode)
 	}
-	look, err := jevToLook(out.Answers)
+	look, err = jevToLook(out.Answers)
 	return look, out.Answers, err
 }
 

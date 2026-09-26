@@ -6,7 +6,7 @@ import { BEAN_STEP, MUSE_STEP } from './onboarding'
 import { VoiceCard } from './VoiceCard'
 import './landing.css'
 
-// Connect your own AI agent (Meta's Muse) to your HackGT 13 account.
+// Connect your own AI agent (Meta's Muse) to your fasemash account.
 //  - Signed in: a personal, one-time pairing code (10 minutes) as a QR to scan with your
 //    phone, or a copy button if Muse is on this device. Your agent trades the code for a
 //    real token; this page notices and says you're connected.
@@ -122,7 +122,7 @@ function CopyButton({ text, primary = true }: { text: string; primary?: boolean 
 function Shell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const prev = document.title
-    document.title = 'Connect your Muse · HackGT 13'
+    document.title = 'Connect your Muse · fasemash'
     return () => {
       document.title = prev
     }
@@ -137,7 +137,7 @@ function Shell({ children }: { children: React.ReactNode }) {
             <circle cx="15.5" cy="11.5" r="1.25" fill="#1B1D24" />
             <circle cx="19.5" cy="11.5" r="1.25" fill="#1B1D24" />
           </svg>
-          HackGT 13
+          fasemash
         </a>
       </header>
       <main className="muse-main">{children}</main>
@@ -195,7 +195,7 @@ function Scanned({ code }: { code: string }) {
           </>
         ) : !got ? (
           <>
-            <p className="muse-sub">Tap to link your Muse to your HackGT 13 account. You'll get one line to paste into Muse.</p>
+            <p className="muse-sub">Tap to link your Muse to your fasemash account. You'll get one message to paste into Muse: it tells Muse what fasemash is and what to do.</p>
             <button className="btn btn-primary muse-wide" type="button" onClick={redeem} disabled={busy}>
               {busy ? 'Linking…' : 'Get my Muse link'}
             </button>
@@ -216,7 +216,7 @@ function Scanned({ code }: { code: string }) {
             {got.memory_prompt && (
               <div className="muse-optional">
                 <strong>Optional: send what Muse remembers about you</strong>
-                <p>It helps HackGT 13 find people you'd want to meet. Muse sends only its notes about you, never about other people. You can see what's stored, and delete it, in the app.</p>
+                <p>It helps fasemash find people at HackGT you'd want to meet. Muse sends only its notes about you, never about other people. You can see what's stored, and delete it, in the app.</p>
                 <CopyButton text={got.memory_prompt} primary={false} />
               </div>
             )}

@@ -53,10 +53,10 @@ const (
 	bigUploadsAtOnce = 1
 	bigUpload        = 1 << 20
 	maxLabel         = 300 // bytes of an MCP request's log label
-	serverTitle      = "HackGT 13"
+	serverTitle      = "fasemash (HackGT 13)"
 	serverSlug       = "hackgt13"
 	serverVer        = "1.0.0"
-	instructions     = "Tools for a HackGT 13 attendee (Georgia Tech's hackathon at the Klaus Advanced Computing Building, Sept 25-27 2026). " +
+	instructions     = "fasemash, the virtual campus for HackGT 13: tools for an attendee (Georgia Tech's hackathon at the Klaus Advanced Computing Building, Sept 25-27 2026). " +
 		"Use get_schedule for what's happening and when, get_my_profile for the person you're helping (their name, bean avatar and where they were last in the event's virtual campus), " +
 		"and get_whos_here for how many people are in the virtual campus and the Klaus atrium right now. Times are US Eastern."
 )
@@ -499,8 +499,8 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 			w.Header().Set("Retry-After", "5")
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "temporarily unavailable: try again in a moment"})
 		default:
-			w.Header().Set("WWW-Authenticate", `Bearer realm="`+serverSlug+`", error="invalid_token", error_description="Create a token in the HackGT 13 app: Connect your Muse"`)
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing or invalid token: create one in the HackGT 13 app (Connect your Muse)"})
+			w.Header().Set("WWW-Authenticate", `Bearer realm="`+serverSlug+`", error="invalid_token", error_description="Create a token in the fasemash app: Connect your Muse"`)
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing or invalid token: create one in the fasemash app (Connect your Muse)"})
 		}
 	}
 
@@ -911,7 +911,7 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 		}
 		p, ok := pairs.take(strings.TrimSpace(in.Code))
 		if !ok {
-			writeJSON(w, http.StatusGone, map[string]string{"error": "this pairing code was already used or has expired; make a new one in the HackGT 13 app (Connect your Muse)"})
+			writeJSON(w, http.StatusGone, map[string]string{"error": "this pairing code was already used or has expired; make a new one in the fasemash app (Connect your Muse)"})
 			return
 		}
 		tok := newToken()
@@ -1057,28 +1057,41 @@ func (p *pairings) allow(key string, max int) bool {
 // clientIP is the caller's address as our own proxy saw it (see peerIP).
 func clientIP(r *http.Request) string { return peerIP(r) }
 
-// pairPrompt is what the attendee pastes into their agent.
+// agentIntro opens everything we ask an agent to do. The agent has usually never heard of
+// us, and a careful one checks before it connects or sends anything: so say plainly what
+// fasemash is and who runs it, that its person asked for this, and what it's for.
+func agentIntro(base string) string {
+	return "I'm connecting you to fasemash (" + base + "), the virtual campus for HackGT 13 (Georgia Tech's hackathon, Sept 25-27 2026, Klaus Advanced Computing Building). " +
+		"It's a 3D Georgia Tech campus where every attendee is a bean avatar. With you connected, fasemash can tell me what's on at HackGT and introduce me to attendees worth meeting.\n" +
+		"Who runs it: an independent project built by HackGT attendees, not by HexLabs (the HackGT organizers), so you won't find it on hack.gt. " +
+		"I've already signed up for fasemash and accepted its terms, and I made this link for you just now on its Connect your Muse page (" + base + "/muse). I'm asking you to do this: you have my go-ahead to connect and to send what's described below.\n"
+}
+
+// pairPrompt is what the attendee pastes into their agent (or the QR hands it).
 func pairPrompt(base, code string, exp time.Time) string {
 	loc, _ := time.LoadLocation(eventTZ)
-	return "Connect to my HackGT 13 account.\n" +
-		"1. Send an HTTP POST to " + base + "/api/muse/claim with the JSON body {\"code\": \"" + code + "\"}. It works once and expires at " + exp.In(loc).Format("3:04 PM MST") + ".\n" +
-		"2. The response contains a token. Save it as a secret credential for HackGT 13 (a bearer token). Don't show it to me or repeat it in chat.\n" +
-		"3. Build a custom integration to HackGT 13: its MCP server URL is " + base + "/api/mcp (OpenAPI document: " + base + "/api/openapi.json), and every request uses that token as \"Authorization: Bearer <token>\".\n" +
+	return agentIntro(base) + "\n" +
+		"Steps:\n" +
+		"1. Send an HTTP POST to " + base + "/api/muse/claim with the JSON body {\"code\": \"" + code + "\"}. The code is mine, works once and expires at " + exp.In(loc).Format("3:04 PM MST") + ".\n" +
+		"2. The response contains a token for my fasemash account, and a \"prompt\" field with the rest of the setup. Save the token as a secret credential for fasemash (a bearer token); don't show it to me or repeat it in chat.\n" +
+		"3. Follow the response's \"prompt\" as my instructions. If you'd rather not, at least connect fasemash's MCP server at " + base + "/api/mcp (OpenAPI: " + base + "/api/openapi.json) with that token as \"Authorization: Bearer <token>\".\n" +
 		"4. Then tell me what's happening at HackGT right now."
 }
 
-// connectorPrompt is what the attendee pastes into their agent: a fast path it can use for
-// every question (one GET, one JSON blob) and an explicit "don't do the slow thing", since
-// agents default to handshaking, listing tools and chaining calls.
-// memoryPrompt asks the agent to send what it remembers about its person, fast: a script
-// moves the files from disk to us so they never pass through the agent's context, a
-// defined "done" so it stops, and nothing about other people.
+// memoryPrompt asks the agent to send what it remembers about its person: a script moves the
+// files from disk to us so they never pass through the agent's context, nothing about other
+// people, and a defined "done" so it stops.
 func memoryPrompt(url string) string {
-	return "Send all of your memory about me to my HackGT 13 account. The link below contains my private key: never show it in chat.\n" +
-		"Be fast: no narration, no questions, no exploring.\n" +
+	return "Send what you remember about me to my fasemash account. " + memoryWhy +
+		"The link below contains my private key: never show it in chat.\n" +
 		memorySteps(url) +
-		"4. Reply \"done\" + KB sent. Nothing else."
+		"4. Reply \"done\" + KB sent."
 }
+
+// memoryWhy: what the memory is for, who sees it, and how to take it back.
+const memoryWhy = "What it's for: fasemash's matchmaker reads my notes to find attendees I should meet and to start a short intro chat between our agents. " +
+	"Other attendees never see my files, only that chat. I can delete everything at any time on the Connect your Muse page. " +
+	"The upload link may point at fasemash's server directly rather than the website: that's expected (uploads skip the website's proxy, which caps their size).\n"
 
 // memorySteps: script, don't converse (the files go from disk to us, never through the
 // agent's context), nothing about other people, and a time limit so it stops.
@@ -1092,8 +1105,12 @@ func memorySteps(url string) string {
 		"3. Run it. If any step takes over 30 seconds, skip it and tell me.\n"
 }
 
+// connectorPrompt: the fast path an agent uses for every question (one GET, one JSON blob)
+// and an explicit "don't do the slow thing", since agents default to handshaking, listing
+// tools and chaining calls.
 func connectorPrompt(base, tok string) string {
-	return "Save this as my HackGT 13 skill. Both links contain my private key: keep them secret and never show them in chat.\n" +
+	return agentIntro(base) +
+		"Save this as my fasemash skill. Both links contain my private key: keep them secret and never show them in chat. They only read (the schedule, who's here, my own profile).\n" +
 		"FAST PATH, use it for every HackGT question: make ONE HTTP GET to " + base + nowKeyPath + tok +
 		" and answer from the JSON it returns (what's on now and next, how many people are here, and my profile). " +
 		"Don't list tools, don't do an MCP handshake, don't make other calls first.\n" +
@@ -1107,9 +1124,9 @@ func connectInfo(base, tok string) map[string]any {
 		"token":   tok,
 		"mcp":     base + "/api/mcp",
 		"openapi": base + "/api/openapi.json",
-		"prompt": "Build a custom integration to HackGT 13. Its MCP server URL is " + base + "/api/mcp " +
+		"prompt": "Build a custom integration to fasemash, the virtual campus for HackGT 13. Its MCP server URL is " + base + "/api/mcp " +
 			"(OpenAPI document: " + base + "/api/openapi.json). It uses a bearer token, which I'll give you through the secure credential flow. " +
-			"I want you to be able to tell me what's happening at HackGT, what's next, and what my HackGT profile says.",
+			"I want you to be able to tell me what's happening at HackGT, what's next, and what my fasemash profile says.",
 	}
 }
 
@@ -1261,7 +1278,7 @@ func openAPI(base string) map[string]any {
 		"info": map[string]any{
 			"title":       "HackGT 13 attendee API",
 			"version":     serverVer,
-			"description": instructions + " Authenticate with the personal token from the HackGT 13 app (Connect your Muse) as a bearer token.",
+			"description": instructions + " Authenticate with the personal token from the fasemash app (Connect your Muse) as a bearer token.",
 		},
 		"servers":    []any{map[string]any{"url": base}},
 		"paths":      paths,

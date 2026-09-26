@@ -513,7 +513,8 @@ type conversation struct {
 		Message *string `json:"message"`
 	} `json:"transcript"`
 	Metadata struct {
-		StartTime int64 `json:"start_time_unix_secs"`
+		StartTime int64   `json:"start_time_unix_secs"`
+		Duration  float64 `json:"call_duration_secs"`
 	} `json:"metadata"`
 	ClientData struct {
 		Vars map[string]any `json:"dynamic_variables"`
@@ -696,6 +697,13 @@ func (v *voiceGuide) finish(ctx context.Context, acc *accounts, tenant string, i
 		log.Printf("voice: #%d finish refused: conversation isn't theirs", id)
 		return voiceResult{}, errVoiceNotYours
 	}
+
+	// the call happened whatever comes next: count it once (a retried finish is answered above)
+	secs := conv.Metadata.Duration
+	if secs <= 0 || secs > voiceLiveFor.Seconds() {
+		secs = math.Min(time.Since(owner.started).Seconds(), voiceMaxCall.Seconds()) // not reported: at most the cap
+	}
+	meter.add("voice", "elevenlabs", true, 0, 0, secs)
 
 	a, err := acc.store.Account(ctx, tenant, id)
 	if err != nil {

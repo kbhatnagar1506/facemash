@@ -179,10 +179,10 @@ type adminOverview struct {
 	UsersSignedInToday int       `json:"users_signed_in_today"`
 	ActiveNow          int       `json:"active_now"`
 	InKlausNow         int       `json:"in_klaus_now"`
-	ActivityHoursTotal *float64  `json:"activity_hours_total"` // not tracked: null
+	ActivityHoursTotal *float64  `json:"activity_hours_total"` // time in the game (usage.go); null if not tracked
 	MemoriesTotal      int       `json:"memories_total"`
 	MuseConnected      int       `json:"muse_connected"`
-	VoiceOnboarded     *int      `json:"voice_onboarded"` // not tracked: null
+	VoiceOnboarded     *int      `json:"voice_onboarded"` // people with a voice-guide memory
 	TalksTotal         int       `json:"talks_total"`
 	TalksLive          int       `json:"talks_live"`
 	TalksToday         int       `json:"talks_today"`
@@ -218,6 +218,9 @@ type adminAPI struct {
 
 	ovMu sync.Mutex
 	ov   map[bool]*adminOverview
+
+	usageMu sync.Mutex
+	usage   map[bool]*usageReportT
 }
 
 type adminAuthEntry struct {
@@ -252,6 +255,7 @@ func mountAdmin(mux *http.ServeMux, acc *accounts, hub *Hub) *adminAPI {
 		acc: acc, hub: hub, store: st, ts: ts, admins: talkAdmins(), now: time.Now, ovTTL: 5 * time.Second, scanBatch: 100, scanMax: 3000,
 		lim:  newKeyLimiter(60, 200*time.Millisecond, 8), // 60 at once, then 5 a second; 8 in flight
 		auth: map[int64]adminAuthEntry{}, people: map[int64]adminPeopleEntry{}, ov: map[bool]*adminOverview{},
+		usage: map[bool]*usageReportT{},
 	}
 	a.bc = newAdminBroadcaster(a)
 	if len(a.admins) == 0 {
@@ -264,6 +268,7 @@ func mountAdmin(mux *http.ServeMux, acc *accounts, hub *Hub) *adminAPI {
 	mux.HandleFunc("/api/admin/talks", a.guard(false, a.handleTalks))
 	mux.HandleFunc("/api/admin/talks/", a.guard(false, a.handleTalk))
 	mux.HandleFunc("/api/admin/stream", a.guard(true, a.handleStream))
+	mux.HandleFunc("/api/admin/usage", a.guard(false, a.handleUsage))
 	mux.HandleFunc("/api/admin/", a.guard(false, func(w http.ResponseWriter, r *http.Request, _ adminCaller) {
 		adminJSON(w, http.StatusNotFound, map[string]string{"error": "no such admin endpoint"})
 	}))
@@ -385,7 +390,13 @@ func (a *adminAPI) overview(ctx context.Context, withTest bool) (*adminOverview,
 		UsersTotal: c.users, UsersSignedInToday: c.signedInToday, MemoriesTotal: c.memories, MuseConnected: c.museConnected,
 		TalksTotal: ts.total, TalksLive: ts.live, TalksToday: ts.today, MatchesTotal: ts.matches, ApprovalsBoth: ts.approvalsBoth,
 		RevealsTotal: ts.reveals, WorthItYes: ts.worthYes, WorthItNo: ts.worthNo, WithheldLinesTotal: ts.withheldLines,
-		AsOf: now.UTC().Truncate(time.Millisecond),
+		VoiceOnboarded: &c.voice, AsOf: now.UTC().Truncate(time.Millisecond),
+	}
+	if u, err := a.usageReport(ctx, withTest); err == nil {
+		h := math.Round(u.Play.Hours*10) / 10
+		ov.ActivityHoursTotal = &h
+	} else if !errors.Is(err, errNoUsage) {
+		log.Printf("admin: overview: usage: %v", err)
 	}
 	if a.hub != nil {
 		counts := a.hub.counts()
@@ -459,6 +470,9 @@ func adminPersonOf(id int64, p adminPersonRow) adminPerson {
 	out := adminPerson{ID: id, FirstName: p.first, Bean: p.look}
 	if p.muse {
 		s := "muse"
+		out.Source = &s
+	} else if p.voice {
+		s := "voice"
 		out.Source = &s
 	}
 	return out
