@@ -1,0 +1,312 @@
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import type { Campus, Collider } from './map'
+import type { Net } from './net'
+import type { PlayerInfo } from './Player'
+import { HackGTWelcome, InfoBoard, type EventInfo } from './HackGTWelcome'
+import { HALL_EXIT, PHOTO_EVENT, nearestSpot, nearestTable, type Spot, type Table } from './HackGTHall'
+import { nearestShell } from './Shells'
+
+const MAP_PX = 190
+
+function Minimap({ campus, net, info }: { campus: Campus; net: Net; info: React.MutableRefObject<PlayerInfo> }) {
+  const canvas = useRef<HTMLCanvasElement>(null!)
+  const [big, setBig] = useState(false)
+
+  useEffect(() => {
+    const [x0, z0, x1, z1] = campus.bounds
+    const size = big ? 520 : MAP_PX
+    const scale = size / Math.max(x1 - x0, z1 - z0)
+    const dpr = window.devicePixelRatio || 1
+    const cv = canvas.current
+    cv.width = cv.height = size * dpr
+    cv.style.width = cv.style.height = `${size}px`
+
+    // Static layer drawn once.
+    const base = document.createElement('canvas')
+    base.width = base.height = size * dpr
+    const b = base.getContext('2d')!
+    b.scale(dpr, dpr)
+    const tx = (x: number) => (x - x0) * scale
+    const tz = (z: number) => (z - z0) * scale
+    b.fillStyle = '#9ad97a'
+    b.fillRect(0, 0, size, size)
+    b.lineCap = 'round'
+    for (const r of campus.roads) {
+      b.strokeStyle = r.foot ? '#efdcae' : '#8d93a3'
+      b.lineWidth = Math.max(0.6, r.w * scale)
+      b.beginPath()
+      r.pts.forEach(([x, z], i) => (i ? b.lineTo(tx(x), tz(z)) : b.moveTo(tx(x), tz(z))))
+      b.stroke()
+    }
+    for (const bl of campus.buildings) {
+      b.fillStyle = bl.event ? '#f5b700' : bl.roof
+      b.beginPath()
+      bl.pts.forEach(([x, z], i) => (i ? b.lineTo(tx(x), tz(z)) : b.moveTo(tx(x), tz(z))))
+      b.fill()
+    }
+
+    const ctx = cv.getContext('2d')!
+    let raf = 0
+    const draw = (t: number) => {
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+      ctx.drawImage(base, 0, 0)
+      ctx.scale(dpr, dpr)
+      if (campus.event) {
+        const [ex, ez] = campus.event.center
+        const pulse = 5 + Math.sin(t / 200) * 2
+        ctx.fillStyle = '#ffd23f'
+        ctx.strokeStyle = '#2b2a33'
+        ctx.lineWidth = 1.5
+        ctx.beginPath()
+        ctx.arc(tx(ex), tz(ez), pulse, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+      }
+      for (const p of net.players.values()) {
+        ctx.fillStyle = p.color
+        ctx.beginPath()
+        ctx.arc(tx(p.x), tz(p.z), 3, 0, Math.PI * 2)
+        ctx.fill()
+      }
+      ctx.fillStyle = '#fff'
+      ctx.strokeStyle = '#e0564f'
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.arc(tx(info.current.x), tz(info.current.z), 4, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+      raf = requestAnimationFrame(draw)
+    }
+    raf = requestAnimationFrame(draw)
+    return () => cancelAnimationFrame(raf)
+  }, [campus, net, info, big])
+
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (e.code === 'KeyM' && !(document.activeElement instanceof HTMLInputElement)) setBig((v) => !v)
+    }
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }, [])
+
+  return (
+    <div className={big ? 'minimap big' : 'minimap'} onClick={() => setBig((v) => !v)} title="Map (M)">
+      <div className="minimap-head">
+        <img src="/gt-logo.svg" alt="Georgia Tech" />
+      </div>
+      <canvas ref={canvas} />
+    </div>
+  )
+}
+
+/** Pokémon-style "area name" sign that slides in when you walk up to a building. */
+function LocationSign({ collider, info }: { collider: Collider; info: React.MutableRefObject<PlayerInfo> }) {
+  const [name, setName] = useState<string | null>(null)
+  useEffect(() => {
+    const id = setInterval(() => {
+      setName(collider.nearestNamed(info.current.x, info.current.z)?.name ?? null)
+    }, 250)
+    return () => clearInterval(id)
+  }, [collider, info])
+  return (
+    <div className={name ? 'location show' : 'location'}>
+      <span>{name}</span>
+    </div>
+  )
+}
+
+function Chat({ net }: { net: Net }) {
+  const [, rerender] = useReducer((n: number) => n + 1, 0)
+  const [text, setText] = useState('')
+  const input = useRef<HTMLInputElement>(null!)
+  useEffect(() => net.subscribe(rerender), [net])
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (e.code === 'Enter' && document.activeElement !== input.current) {
+        e.preventDefault()
+        input.current.focus()
+      }
+    }
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }, [])
+
+  return (
+    <div className="chat">
+      <div className="chat-log">
+        {net.chat.slice(-8).map((c) => (
+          <div key={c.key} className={c.id ? 'chat-line' : 'chat-line system'}>
+            {c.id ? <b>{c.name}: </b> : null}
+            {c.text}
+          </div>
+        ))}
+      </div>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (text.trim()) net.say(text.trim())
+          setText('')
+          input.current.blur()
+        }}
+      >
+        <input
+          ref={input}
+          value={text}
+          maxLength={140}
+          placeholder="Press Enter to chat"
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => e.key === 'Escape' && input.current.blur()}
+        />
+      </form>
+    </div>
+  )
+}
+
+/** "Now / Next" from the real HackGT schedule, using the viewer's clock. */
+function nowNext(event: EventInfo | null) {
+  if (!event?.days) return null
+  const now = Date.now()
+  const all = event.days.flatMap((d) =>
+    d.items.map((it) => {
+      const start = new Date(`${d.date}T${it.start}:00`).getTime()
+      let end = it.end ? new Date(`${d.date}T${it.end}:00`).getTime() : start + 30 * 60e3
+      if (end < start) end += 24 * 3600e3 // runs past midnight
+      return { ...it, startMs: start, endMs: end }
+    }),
+  )
+  const live = all.filter((it) => it.startMs <= now && now < it.endMs)
+  const next = all.filter((it) => it.startMs > now).sort((a, b) => a.startMs - b.startMs)[0]
+  return { live, next }
+}
+
+export function Hud({
+  campus, collider, net, info, eventOpen, setEventOpen, event, room, onEnterHall, onLeaveHall,
+}: {
+  campus: Campus
+  collider: Collider
+  net: Net
+  info: React.MutableRefObject<PlayerInfo>
+  eventOpen: boolean
+  setEventOpen: (v: boolean) => void
+  event: EventInfo | null
+  room: 'campus' | 'hackgt'
+  onEnterHall: () => void
+  onLeaveHall: () => void
+}) {
+  type Near = null | { kind: 'shell' } | { kind: 'exit' } | { kind: 'spot'; spot: Spot } | { kind: 'table'; table: Table }
+  const [near, setNear] = useState<Near>(null)
+  const [board, setBoard] = useState<null | 'about' | 'tracks' | 'schedule'>(null)
+  const [bike, setBike] = useState(false)
+  const [clock, setClock] = useState(0)
+  const [snap, setSnap] = useState(0) // photo-booth flash + toast
+  const [, rerender] = useReducer((n: number) => n + 1, 0)
+  useEffect(() => net.subscribe(rerender), [net])
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const { x, z } = info.current
+      setBike(info.current.bike)
+      if (room === 'campus') {
+        setNear(nearestShell(campus, x, z) ? { kind: 'shell' } : null)
+        return
+      }
+      const y = info.current.y ?? 0
+      const table = nearestTable(x, z, y)
+      const spot = nearestSpot(x, z, y)
+      const next: Near =
+        Math.hypot(HALL_EXIT[0] - x, HALL_EXIT[1] - z) < 3 ? { kind: 'exit' }
+          : spot ? { kind: 'spot', spot } // booths win over the hack table next to them
+          : table ? { kind: 'table', table }
+          : null
+      // only re-render when what you're next to actually changes
+      setNear((cur) => {
+        const key = (n: Near) => (!n ? '' : n.kind === 'table' ? `t${n.table.n}` : n.kind === 'spot' ? n.spot.id : n.kind)
+        return key(cur) === key(next) ? cur : next
+      })
+    }, 200)
+    const tick = setInterval(() => setClock((c) => c + 1), 30_000)
+    return () => {
+      clearInterval(id)
+      clearInterval(tick)
+    }
+  }, [campus, info, room])
+
+  const act = () => {
+    if (!near) return
+    if (near.kind === 'shell') setEventOpen(true)
+    else if (near.kind === 'exit') onLeaveHall()
+    else if (near.kind === 'table') setBoard('tracks')
+    else if (near.spot.action === 'photo') {
+      window.dispatchEvent(new Event(PHOTO_EVENT))
+      setSnap(Date.now())
+    } else if (near.spot.action) setBoard(near.spot.action)
+  }
+
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (document.activeElement instanceof HTMLInputElement || eventOpen || board) return
+      if (e.code === 'KeyE' || e.code === 'Space') act()
+    }
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  })
+
+  const title = event?.title ?? 'HackGT'
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const schedule = useMemo(() => nowNext(event), [event, clock])
+  const inHall = room === 'hackgt'
+
+  return (
+    <div className="hud">
+      <div className="topbar">
+        <div className={net.connected ? 'online' : 'online off'}>
+          ● {net.connected ? `${net.players.size + 1} ${inHall ? `at ${title}` : 'on campus'}` : 'Connecting…'}
+        </div>
+        {bike && !inHall && <div className="pill">🚲 Bike</div>}
+      </div>
+      {inHall ? (
+        <>
+          <div className="location show"><span>{title} · Klaus Atrium</span></div>
+          {schedule && (schedule.live.length > 0 || schedule.next) && (
+            <div className="now-next" onClick={() => setBoard('schedule')}>
+              {schedule.live.length > 0 && (
+                <div><b>Now</b> {schedule.live.map((l) => l.item).join(' · ')}</div>
+              )}
+              {schedule.next && (
+                <div><b>Next</b> {schedule.next.item} · {schedule.next.time.split(' – ')[0]}{schedule.next.where ? ` · ${schedule.next.where}` : ''}</div>
+              )}
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <LocationSign collider={collider} info={info} />
+          <Minimap campus={campus} net={net} info={info} />
+        </>
+      )}
+      <Chat net={net} />
+      <div className="help">
+        <kbd>WASD</kbd> move · <kbd>Shift</kbd> run · {inHall ? <>drag or <kbd>Q</kbd>/<kbd>R</kbd> look · </> : <><kbd>B</kbd> bike · <kbd>M</kbd> map · </>}<kbd>Enter</kbd> chat · <kbd>E</kbd> interact · scroll to zoom
+      </div>
+      {near && !eventOpen && !board && (
+        <div className="dialog" onClick={act}>
+          <p>
+            {near.kind === 'shell' && <>🐚 A shiny shell at the Klaus entrance! It's glowing with <b>{title}</b> energy…</>}
+            {near.kind === 'exit' && <>🐚 Head back out to campus?</>}
+            {near.kind === 'spot' && near.spot.text}
+            {near.kind === 'table' && <><b>Table {near.table.n}</b>: grab a seat and start hacking! Press E to see the tracks.</>}
+          </p>
+          {(near.kind !== 'spot' || near.spot.action) && <span className="dialog-hint">Press E ▼</span>}
+        </div>
+      )}
+      {snap > 0 && Date.now() - snap < 2500 && (
+        <>
+          <div key={`f${snap}`} className="photo-flash" />
+          <div key={`t${snap}`} className="photo-toast">📸 Snap! Say “HackGT”!</div>
+        </>
+      )}
+      {eventOpen && <HackGTWelcome event={event} onClose={() => setEventOpen(false)} onEnter={onEnterHall} />}
+      {board && event && <InfoBoard event={event} panel={board} onClose={() => setBoard(null)} />}
+    </div>
+  )
+}

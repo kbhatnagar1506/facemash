@@ -1,0 +1,6 @@
+node_modules/
+client/dist/
+server/server
+.DS_Store
+.claude/
+*.log

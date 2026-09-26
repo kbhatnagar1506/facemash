@@ -1,0 +1,296 @@
+{
+  "title": "HackGT 13",
+  "theme": "Seaside Market",
+  "season": "MLH Official · 2027 Season",
+  "tagline": "Georgia Tech's largest hackathon",
+  "about": "HackGT is Georgia Tech's largest hackathon, running September 25th to September 27th, 2026 at the Klaus Center for Advanced Computing. The 13th edition brings you to a seaside plaza with a fresh spirit of innovation for all creators, builders, and visionaries. 1500+ hackers, top-tier prizes, mini-events, and lots of swag!",
+  "where": "Klaus Advanced Computing Building",
+  "when": "September 25–27, 2026",
+  "notice": "Registration open until Sept 11!",
+  "url": "https://hack.gt",
+  "tracks": [
+    {
+      "id": "oracle",
+      "name": "Oracle of the Deep",
+      "track": "ML / AI / Data Visualization / Analytics",
+      "blurb": "Dive into the depths of data and surface something brilliant through innovative ML/AI and visualization that sees what no one else can.",
+      "img": "/hackgt/oracle.svg"
+    },
+    {
+      "id": "shipyard",
+      "name": "The Shipyard",
+      "track": "Hardware",
+      "blurb": "Show off your best builds and set sail with robots and smart devices to conquer the seven seas.",
+      "img": "/hackgt/shipyard.svg"
+    },
+    {
+      "id": "lighthouse",
+      "name": "The Lighthouse Laboratory",
+      "track": "Immersive (AR/VR/XR)",
+      "blurb": "Explore creating experiences that blur the lines of reality and pull people into another world.",
+      "img": "/hackgt/lighthouse.svg"
+    },
+    {
+      "id": "marina",
+      "name": "A Marina's Mission",
+      "track": "Social Good (Healthcare, Sustainability) · presented by Aramco",
+      "blurb": "Design technology that makes a real difference, whether it's health, climate, education, or a problem that hits close to home.",
+      "img": "/hackgt/marina.svg"
+    }
+  ],
+  "days": [
+    {
+      "label": "Day 1",
+      "date": "2026-09-25",
+      "title": "Friday, September 25",
+      "items": [
+        {
+          "item": "Check-in",
+          "time": "2:00 PM – 4:00 PM",
+          "start": "14:00",
+          "end": "16:00",
+          "where": "Outside Ferst Center"
+        },
+        {
+          "item": "Opening Ceremony",
+          "time": "4:00 PM – 5:00 PM",
+          "start": "16:00",
+          "end": "17:00",
+          "where": "Ferst Theatre"
+        },
+        {
+          "item": "Team Formation",
+          "time": "5:00 PM – 6:00 PM",
+          "start": "17:00",
+          "end": "18:00"
+        },
+        {
+          "item": "Sponsor Fair",
+          "time": "5:30 PM – 7:00 PM",
+          "start": "17:30",
+          "end": "19:00",
+          "where": "Klaus Atrium"
+        },
+        {
+          "item": "Dinner",
+          "time": "7:00 PM – 8:30 PM",
+          "start": "19:00",
+          "end": "20:30",
+          "where": "Klaus 1116 W"
+        },
+        {
+          "item": "Hacking Begins",
+          "time": "8:00 PM",
+          "start": "20:00"
+        },
+        {
+          "item": "NSA Tech Talk",
+          "time": "8:30 PM – 9:30 PM",
+          "start": "20:30",
+          "end": "21:30",
+          "where": "Klaus 1456"
+        },
+        {
+          "item": "Karaoke",
+          "time": "10:30 PM – 12:00 AM",
+          "start": "22:30",
+          "end": "00:00"
+        }
+      ]
+    },
+    {
+      "label": "Day 2",
+      "date": "2026-09-26",
+      "title": "Saturday, September 26",
+      "items": [
+        {
+          "item": "Midnight Snack",
+          "time": "12:00 AM – 1:30 AM",
+          "start": "00:00",
+          "end": "01:30",
+          "where": "Klaus 1116 W"
+        },
+        {
+          "item": "Breakfast",
+          "time": "8:00 AM – 9:30 AM",
+          "start": "08:00",
+          "end": "09:30",
+          "where": "Klaus 1116 W"
+        },
+        {
+          "item": "Aramco Networking Room",
+          "time": "9:00 AM – 9:00 PM",
+          "start": "09:00",
+          "end": "21:00",
+          "where": "Klaus 1447"
+        },
+        {
+          "item": "Supercomputing Club",
+          "time": "9:00 AM – 10:00 AM",
+          "start": "09:00",
+          "end": "10:00"
+        },
+        {
+          "item": "Visa Tech Talk",
+          "time": "10:00 AM – 11:00 AM",
+          "start": "10:00",
+          "end": "11:00"
+        },
+        {
+          "item": "VGDev",
+          "time": "10:30 AM – 11:30 AM",
+          "start": "10:30",
+          "end": "11:30"
+        },
+        {
+          "item": "Impiricus Tech Talk",
+          "time": "11:00 AM – 12:00 PM",
+          "start": "11:00",
+          "end": "12:00"
+        },
+        {
+          "item": "Lunch",
+          "time": "12:00 PM – 2:00 PM",
+          "start": "12:00",
+          "end": "14:00",
+          "where": "Klaus 1116 W"
+        },
+        {
+          "item": "GT Parents with Pups",
+          "time": "12:00 PM – 2:00 PM",
+          "start": "12:00",
+          "end": "14:00"
+        },
+        {
+          "item": "Aramco Tech Talk",
+          "time": "1:00 PM – 3:00 PM",
+          "start": "13:00",
+          "end": "15:00"
+        },
+        {
+          "item": "Product@GT",
+          "time": "1:00 PM – 2:00 PM",
+          "start": "13:00",
+          "end": "14:00"
+        },
+        {
+          "item": "MLH Workshop",
+          "time": "2:30 PM – 3:30 PM",
+          "start": "14:30",
+          "end": "15:30"
+        },
+        {
+          "item": "GT Seoulstice",
+          "time": "3:00 PM – 3:30 PM",
+          "start": "15:00",
+          "end": "15:30"
+        },
+        {
+          "item": "HIVE Open",
+          "time": "3:00 PM – 9:00 PM",
+          "start": "15:00",
+          "end": "21:00",
+          "where": "HIVE Makerspace"
+        },
+        {
+          "item": "Meta Tech Talk",
+          "time": "3:30 PM – 4:30 PM",
+          "start": "15:30",
+          "end": "16:30"
+        },
+        {
+          "item": "iOS Club",
+          "time": "4:00 PM – 5:00 PM",
+          "start": "16:00",
+          "end": "17:00"
+        },
+        {
+          "item": "Cursor Tech Talk",
+          "time": "4:30 PM – 5:00 PM",
+          "start": "16:30",
+          "end": "17:00"
+        },
+        {
+          "item": "BDBI",
+          "time": "5:00 PM – 6:00 PM",
+          "start": "17:00",
+          "end": "18:00"
+        },
+        {
+          "item": "Dinner",
+          "time": "7:00 PM – 8:30 PM",
+          "start": "19:00",
+          "end": "20:30",
+          "where": "Klaus 1116 W"
+        },
+        {
+          "item": "Seaside Market Event",
+          "time": "7:00 PM – 10:00 PM",
+          "start": "19:00",
+          "end": "22:00",
+          "where": "Klaus Atrium"
+        },
+        {
+          "item": "Club Showcase",
+          "time": "7:00 PM – 9:00 PM",
+          "start": "19:00",
+          "end": "21:00",
+          "where": "Klaus Atrium"
+        },
+        {
+          "item": "T-Shirt Distribution",
+          "time": "9:00 PM – 10:00 PM",
+          "start": "21:00",
+          "end": "22:00",
+          "where": "Klaus Atrium"
+        },
+        {
+          "item": "HackerHouse + Pop The Balloon",
+          "time": "10:00 PM – 11:00 PM",
+          "start": "22:00",
+          "end": "23:00"
+        }
+      ]
+    },
+    {
+      "label": "Day 3",
+      "date": "2026-09-27",
+      "title": "Sunday, September 27",
+      "items": [
+        {
+          "item": "Midnight Snack",
+          "time": "12:00 AM – 1:30 AM",
+          "start": "00:00",
+          "end": "01:30",
+          "where": "Klaus 1116 W"
+        },
+        {
+          "item": "Breakfast",
+          "time": "7:30 AM – 9:00 AM",
+          "start": "07:30",
+          "end": "09:00",
+          "where": "Klaus 1116 W"
+        },
+        {
+          "item": "Hacking Ends",
+          "time": "8:00 AM",
+          "start": "08:00"
+        },
+        {
+          "item": "Expo",
+          "time": "9:30 AM – 11:00 AM",
+          "start": "09:30",
+          "end": "11:00",
+          "where": "Klaus Atrium"
+        },
+        {
+          "item": "Closing Ceremony",
+          "time": "12:30 PM – 1:30 PM",
+          "start": "12:30",
+          "end": "13:30",
+          "where": "Ferst Theatre"
+        }
+      ]
+    }
+  ]
+}
