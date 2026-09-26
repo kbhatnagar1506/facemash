@@ -554,6 +554,18 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "send one JSON object"})
 			return
 		}
+		// guardrail: credentials and sensitive numbers never get stored or indexed, whatever
+		// the agent sent (redact.go); only the counts are logged
+		counts := map[string]int{}
+		obj = redactJSON(obj, counts).(map[string]any)
+		redacted := 0
+		for _, n := range counts {
+			redacted += n
+		}
+		if redacted > 0 {
+			body, _ = json.Marshal(obj)
+			log.Printf("muse: #%d memory upload: %d item(s) redacted %v", c.id, redacted, counts)
+		}
 		var exported *time.Time
 		if s, _ := obj["exported_at"].(string); s != "" {
 			if t, err := time.Parse(time.RFC3339, s); err == nil {
@@ -568,7 +580,7 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 			return
 		}
 		acc.fast.uploaded(c.tenant, c.id, obj) // and into their private memory index, in the background
-		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "kb": float64(len(body)*10/1024) / 10})
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "kb": float64(len(body)*10/1024) / 10, "redacted": redacted})
 	}
 	mux.HandleFunc("/api/memory", memoryHandler)
 	mux.HandleFunc(memKeyPath, memoryHandler)
@@ -891,6 +903,7 @@ func memorySteps(url string) string {
 	return "1. Write a script (python or bash) that reads these files and POSTs them as ONE JSON object to " + url + " :\n" +
 		"   ~/MEMORY.md, ~/USER.md, ~/memory/*.md, ~/memory/bank/experience.md, ~/memory/bank/opinions.md, ~/memory/bank/reflections.md, ~/memory/bank/world.md\n" +
 		"   Skip files that don't exist. Never include ~/memory/people/ or anything about other people. Don't paste file contents into chat: the script reads them straight off disk.\n" +
+		"   Never send credentials or anything sensitive: leave out any line with a password, API key, token, private key, card or bank number, government ID number, or health detail.\n" +
 		"2. JSON shape: {\"user_id\": \"<my name>\", \"exported_at\": \"<UTC ISO time>\", \"memory_md\": \"...\", \"user_md\": \"...\", " +
 		"\"daily_notes\": [{\"date\": \"...\", \"content\": \"...\"}], \"bank\": {\"experience\": \"...\", \"opinions\": \"...\", \"reflections\": \"...\", \"world\": \"...\"}}\n" +
 		"3. Run it. If any step takes over 30 seconds, skip it and tell me.\n"
