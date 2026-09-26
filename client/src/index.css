@@ -210,3 +210,21 @@ kbd {
 .calibrate textarea { width: 100%; font: 11px ui-monospace, monospace; }
 .cal-actions { display: flex; gap: 8px; align-items: center; font-size: 11px; }
 .live-raw { display: block; font: 600 11px ui-monospace, monospace; opacity: .7; }
+
+/* cinematic entrance */
+.cine { position: fixed; inset: 0; pointer-events: none; z-index: 60; }
+.cine-bar { position: absolute; left: 0; right: 0; height: 0; background: #07090c; transition: height .6s ease; }
+.cine-bar.top { top: 0; }
+.cine-bar.bottom { bottom: 0; }
+.cine.on .cine-bar { height: 11vh; }
+.cine-title {
+  position: absolute; left: 50%; top: 18vh; transform: translateX(-50%); text-align: center; color: #fff;
+  opacity: 0; transition: opacity 1.2s ease .8s; text-shadow: 0 3px 18px rgba(0,0,0,.55);
+}
+.cine.on .cine-title { opacity: 1; animation: cine-out 1.2s ease 5.5s forwards; }
+.cine-title small { display: block; font: 18px 'Sen', sans-serif; letter-spacing: 4px; text-transform: uppercase; opacity: .85; }
+.cine-title strong { display: block; font: clamp(40px, 7vw, 84px) 'Darumadrop One', 'Chewy', sans-serif; line-height: 1.05; }
+.cine-title span { display: block; font: 600 15px 'Sen', sans-serif; letter-spacing: 1px; opacity: .85; }
+.cine-skip { position: absolute; right: 24px; bottom: calc(11vh + 12px); color: #fff; font: 600 13px var(--round); opacity: 0; transition: opacity .6s; }
+.cine.on .cine-skip { opacity: .75; }
+@keyframes cine-out { to { opacity: 0; } }

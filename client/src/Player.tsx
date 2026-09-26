@@ -74,6 +74,11 @@ export function Player({
   const light = useRef<THREE.DirectionalLight>(null!)
   const yaw = useRef(0) // camera heading in 'inside' view; 0 = camera south of player looking north
   const pitch = useRef(0) // look up (+) / down (-) in the 'inside' view
+  const intro = useRef(-1) // cinematic fly-through progress 0..1 when entering the hall; -1 = off
+  const introPath = useRef<{ pos: THREE.CatmullRomCurve3; look: THREE.CatmullRomCurve3 } | null>(null)
+  const lean = useRef(0)
+  const puff = useRef<THREE.Mesh>(null!)
+  const puffT = useRef(1) // landing dust ring, 0..1
   const { camera, scene, gl } = useThree()
 
   // Switching views: reset heading, and let the inside camera get close without clipping.
@@ -85,12 +90,34 @@ export function Player({
       facing.current = view.yaw0 + Math.PI // face away from the camera, into the room
       cam.near = 0.1
       cam.fov = 60
+      // Cinematic sweep through the atrium on the way in (any key or click skips it).
+      const [sx, sz] = start
+      const q = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
+      introPath.current = {
+        pos: new THREE.CatmullRomCurve3([q(18, 3.2, 24), q(9, 8, 12), q(-3, 13, -6), q(-10, 9.5, -19), q(6, 7, -10), q(sx + 3.5, 2.6, sz + 0.5)], false, 'catmullrom', 0.4),
+        look: new THREE.CatmullRomCurve3([q(0, 3, 12), q(0, 2, -8), q(6, 3, -26), q(14, 3, -6), q(12, 1.5, 10), q(sx - 3, 1, sz)], false, 'catmullrom', 0.4),
+      }
+      intro.current = 0
+      window.dispatchEvent(new CustomEvent('cinematic', { detail: true }))
     } else {
       cam.near = 1
       cam.fov = 40
     }
     cam.updateProjectionMatrix()
   }, [view, camera])
+
+  // Skip the cinematic with any key or click.
+  useEffect(() => {
+    const skip = () => {
+      if (intro.current >= 0) intro.current = 1
+    }
+    window.addEventListener('keydown', skip)
+    window.addEventListener('pointerdown', skip)
+    return () => {
+      window.removeEventListener('keydown', skip)
+      window.removeEventListener('pointerdown', skip)
+    }
+  }, [])
 
   // Drag to look around (inside view only).
   useEffect(() => {
@@ -176,7 +203,9 @@ export function Player({
 
     let dx = 0
     let dz = 0
-    if (goal) {
+    if (intro.current >= 0) {
+      // no walking while the cinematic plays
+    } else if (goal) {
       if (gpsDist > 0.7) {
         dx = (goal.x - p.x) / gpsDist
         dz = (goal.z - p.y) / gpsDist
@@ -238,6 +267,8 @@ export function Player({
       let diff = target - facing.current
       diff = Math.atan2(Math.sin(diff), Math.cos(diff))
       facing.current += diff * Math.min(1, dt * 14)
+      // lean into turns (and a touch forward when sprinting)
+      lean.current += (THREE.MathUtils.clamp(-diff * 0.6, -0.35, 0.35) - lean.current) * Math.min(1, dt * 10)
     }
     state.current.moving = moving
 
@@ -260,6 +291,7 @@ export function Player({
       }
       if (hop.current >= 1) {
         hop.current = 0
+        puffT.current = 0 // landing: kick up a puff
         // came down on furniture: jump on only if there's somewhere to land; else walk out
         if (collider.furniture?.(p.x, p.y)) startHop(p.x, p.y)
       }
@@ -269,12 +301,45 @@ export function Player({
     group.current.position.set(p.x, height.current + lift, p.y)
     group.current.scale.setScalar(view.mode === 'inside' ? (view.scale ?? 1) : 1)
     group.current.rotation.y = facing.current
+    lean.current *= moving ? 1 : Math.max(0, 1 - dt * 8)
+    group.current.rotation.z = lean.current
+    // landing dust ring
+    if (puffT.current < 1) {
+      puffT.current = Math.min(1, puffT.current + dt * 2.2)
+      const k = puffT.current
+      puff.current.visible = true
+      puff.current.position.set(p.x, height.current + 0.03, p.y)
+      puff.current.scale.setScalar((0.4 + k * 1.6) * ps)
+      ;(puff.current.material as THREE.MeshBasicMaterial).opacity = 0.55 * (1 - k)
+    } else puff.current.visible = false
+    // sprint camera: widen the view a little when running
+    {
+      const cam = camera as THREE.PerspectiveCamera
+      const base = view.mode === 'inside' ? 60 : 40
+      const running = moving && (keys.has('ShiftLeft') || keys.has('ShiftRight') || hop.current > 0)
+      const want = base + (running ? (view.mode === 'inside' ? 8 : 4) : 0)
+      if (Math.abs(cam.fov - want) > 0.05) {
+        cam.fov += (want - cam.fov) * Math.min(1, dt * 5)
+        cam.updateProjectionMatrix()
+      }
+    }
     cutawayUniforms.uPlayer.value.set(p.x, 0, p.y)
     info.current.x = p.x
     info.current.z = p.y
     info.current.y = height.current
 
-    if (view.mode === 'inside') {
+    if (intro.current >= 0 && introPath.current) {
+      // Cinematic: glide along the path, easing in and out.
+      intro.current = Math.min(1, intro.current + dt / 10)
+      const t = intro.current
+      const e = t * t * (3 - 2 * t)
+      camera.position.copy(introPath.current.pos.getPoint(e))
+      camera.lookAt(introPath.current.look.getPoint(e))
+      if (t >= 1) {
+        intro.current = -1
+        window.dispatchEvent(new CustomEvent('cinematic', { detail: false }))
+      }
+    } else if (view.mode === 'inside') {
       // Third-person, down in the room: behind and a little above the player.
       const ps = view.scale ?? 1
       const dist = THREE.MathUtils.clamp(zoom.current / 5, 3, 12) * ps
@@ -325,6 +390,10 @@ export function Player({
         shadow-camera-far={400}
         shadow-bias={-0.0004}
       />
+      <mesh ref={puff} rotation-x={-Math.PI / 2} visible={false}>
+        <ringGeometry args={[0.35, 0.6, 32]} />
+        <meshBasicMaterial color="#f4ecdc" transparent opacity={0} depthWrite={false} />
+      </mesh>
       <Avatar ref={group} color={color} name={name} state={state} me hideTag={view.mode === 'inside'} />
     </>
   )

@@ -4,8 +4,8 @@ import * as THREE from 'three'
 export const cutawayUniforms = { uPlayer: { value: new THREE.Vector3() } }
 
 /**
- * Patch a material so geometry standing between the camera (to the south) and
- * the player is cut out, keeping the player visible behind tall buildings.
+ * Patch a building material with world-position info (used for the window grid).
+ * (It used to cut a see-through hole around the player; that's been removed.)
  */
 export function withCutaway<T extends THREE.Material>(mat: T, opts: { windows?: THREE.Color[] } = {}): T {
   const win = opts.windows
@@ -26,20 +26,6 @@ export function withCutaway<T extends THREE.Material>(mat: T, opts: { windows?: 
         '#include <common>',
         '#include <common>\nuniform vec3 uPlayer;\nvarying vec3 vCutWorld;\nvarying vec3 vCutN;' +
           (win ? '\nuniform vec3 uWallA;\nuniform vec3 uWallB;' : ''),
-      )
-      .replace(
-        'void main() {',
-        `void main() {
-  {
-    vec2 d = vCutWorld.xz - uPlayer.xz;
-    // Only cut above head height and on the camera side (south, +z) of the player.
-    if (vCutWorld.y > 2.2 && d.y > -3.0) {
-      float r = length(vec2(d.x, d.y * 0.55));
-      if (r < 9.0) discard;
-      // Dithered edge so the hole fades instead of popping.
-      if (r < 13.0 && mod(floor(gl_FragCoord.x) + floor(gl_FragCoord.y), 2.0) < 1.0) discard;
-    }
-  }`,
       )
   }
   if (win) {

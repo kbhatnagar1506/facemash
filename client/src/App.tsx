@@ -1,5 +1,6 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
+import { Bloom, EffectComposer, Vignette } from '@react-three/postprocessing'
 import { Collider, loadCampus, type Campus } from './map'
 import { Net } from './net'
 import { World } from './World'
@@ -214,7 +215,13 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
           gps={gps}
         />
         <Remotes net={net} scale={room === 'hackgt' ? PERSON_SCALE : 1} />
+        {/* glow on lights, screens and signs; soft vignette to frame the shot */}
+        <EffectComposer multisampling={4}>
+          <Bloom mipmapBlur intensity={room === 'hackgt' ? 0.7 : 0.35} luminanceThreshold={0.88} luminanceSmoothing={0.2} />
+          <Vignette offset={0.3} darkness={0.55} />
+        </EffectComposer>
       </Canvas>
+      <Cinematic />
       <Hud
         campus={campus}
         collider={collider}
@@ -280,4 +287,26 @@ function postSample(s: Record<string, unknown>) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...s, t: new Date().toISOString(), ua: navigator.userAgent.slice(0, 80) }),
   }).catch(() => {})
+}
+
+/** Letterbox bars + title card while the atrium fly-through plays. */
+function Cinematic() {
+  const [on, setOn] = useState(false)
+  useEffect(() => {
+    const h = (e: Event) => setOn((e as CustomEvent<boolean>).detail)
+    window.addEventListener('cinematic', h)
+    return () => window.removeEventListener('cinematic', h)
+  }, [])
+  return (
+    <div className={on ? 'cine on' : 'cine'} aria-hidden={!on}>
+      <div className="cine-bar top" />
+      <div className="cine-bar bottom" />
+      <div className="cine-title">
+        <small>Welcome to</small>
+        <strong>HackGT 13</strong>
+        <span>Klaus Advanced Computing Building · Seaside Market</span>
+      </div>
+      <div className="cine-skip">Press any key to skip</div>
+    </div>
+  )
 }
