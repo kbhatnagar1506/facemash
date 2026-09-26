@@ -460,7 +460,7 @@ func main() {
 	if sim.on() {
 		os.Exit(runTalkSim(sim, *talkConfig))
 	}
-	base := strings.TrimRight(envOr("PUBLIC_URL", "https://gt-campus-quest.vercel.app"), "/")
+	base := strings.TrimRight(envOr("PUBLIC_URL", "https://www.fasemash.tech"), "/")
 	if *mintFor != "" {
 		mintTestToken(*mintFor, *keyFile, base)
 		return

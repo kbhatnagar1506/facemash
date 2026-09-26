@@ -82,7 +82,7 @@ GOOGLE_CLIENT_ID=$(curl -sf -H 'Metadata-Flavor: Google' http://metadata.google.
 # the Go GC work harder well before that limit.
 docker run -d --restart=always --name game --network gt $GUARDMOUNT \
   --memory=1200m -e GOMEMLIMIT=900MiB \
-  -e DIRECT_URL="https://$HOST" -e ALLOWED_ORIGINS='https://gt-campus-quest*.vercel.app,https://fasemash.tech,https://www.fasemash.tech' \
+  -e PUBLIC_URL=https://www.fasemash.tech -e DIRECT_URL="https://$HOST" -e ALLOWED_ORIGINS='https://gt-campus-quest*.vercel.app,https://fasemash.tech,https://www.fasemash.tech' \
   -e GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \
   -e DB_INSTANCE='patchguard-reakon:us-central1:facemash-db' -e DB_NAME=facemash \
   -e DB_IAM_USER='751583582765-compute@developer' $DBENV $MAPIENV $JEVENV $TALKENV \
