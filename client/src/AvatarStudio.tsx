@@ -143,7 +143,7 @@ export function AvatarStudio() {
         </Canvas>
         {saved && <div className="studio-saved">Looking good! ✨</div>}
         <div className="studio-title">
-          <span>HackGT 13 · Seaside Market</span>
+          <span>{location.search.includes('onboard') ? 'Step 3 of 3 · Make your bean' : 'HackGT 13 · Seaside Market'}</span>
           <strong>Bean Studio</strong>
         </div>
         <div className="studio-poses">

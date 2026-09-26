@@ -10,6 +10,7 @@ import { clamp } from './landing/physics'
 import { frameFor, makeShared, type Frame } from './landing/shared'
 import { SignInSheet } from './landing/SignIn'
 import { fetchMe, signOut, type Me } from './account'
+import { nextForMember } from './onboarding'
 import './landing.css'
 
 // The landing page. The story is the problem statement, word for word, set in eight
@@ -90,6 +91,9 @@ function AccountChip({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
             <strong>{u.name}</strong>
             <span>{u.email}</span>
           </div>
+          <a role="menuitem" href="/muse">
+            Connect your Muse
+          </a>
           <button type="button" role="menuitem" onClick={() => signOut().then(onSignedOut)}>
             Sign out
           </button>
@@ -112,6 +116,10 @@ export function Landing() {
     if (me?.googleClientId && !me.user) {
       e.preventDefault()
       setSheet(true)
+    } else if (me?.user) {
+      // signed in: new accounts carry on with onboarding, everyone else goes straight in
+      e.preventDefault()
+      location.href = nextForMember(me)
     }
   }
   if (import.meta.env.DEV) (window as unknown as { __landing: unknown }).__landing = shared
@@ -413,7 +421,7 @@ export function Landing() {
           </div>
         </section>
       </main>
-      {sheet && me?.googleClientId && <SignInSheet clientId={me.googleClientId} next="/play" onClose={() => setSheet(false)} />}
+      {sheet && me?.googleClientId && <SignInSheet clientId={me.googleClientId} next={nextForMember} onClose={() => setSheet(false)} />}
     </div>
   )
 }

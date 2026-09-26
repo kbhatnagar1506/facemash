@@ -661,7 +661,8 @@ html.scroll-page #root {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.acct-menu button {
+.acct-menu button,
+.acct-menu a {
   width: 100%;
   padding: 9px 10px;
   border: 0;
@@ -672,7 +673,8 @@ html.scroll-page #root {
   text-align: left;
   cursor: pointer;
 }
-.acct-menu button:hover {
+.acct-menu button:hover,
+.acct-menu a:hover {
   background: rgba(27, 29, 36, 0.05);
 }
 
@@ -804,4 +806,180 @@ html.scroll-page #root {
   .acct-menu {
     animation-duration: 0.01s;
   }
+}
+
+/* ---------- /muse: connect your own agent ---------- */
+
+.muse-page {
+  min-height: 100vh;
+  min-height: 100svh;
+}
+.muse-nav {
+  display: flex;
+  align-items: center;
+  height: 72px;
+  padding: 0 var(--gutter);
+}
+.muse-main {
+  display: grid;
+  place-items: start center;
+  padding: 8px 16px calc(40px + env(safe-area-inset-bottom));
+}
+.muse-card {
+  width: min(460px, 100%);
+  box-sizing: border-box;
+  padding: 32px 28px 28px;
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 1px 0 rgba(27, 29, 36, 0.04), 0 18px 48px rgba(27, 29, 36, 0.08), 0 0 0 1px rgba(27, 29, 36, 0.06);
+  text-align: center;
+  animation: sheet-in 0.5s var(--spring) both;
+}
+.muse-card h1 {
+  margin: 0;
+  font: 700 30px/1.1 var(--display);
+  letter-spacing: -0.02em;
+}
+.landing .muse-sub {
+  margin: 12px auto 22px;
+  max-width: 34ch;
+  color: var(--ink-2);
+  font-size: 15px;
+  line-height: 1.5;
+}
+.muse-qr {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: min(280px, 100%);
+  aspect-ratio: 1;
+  margin: 0 auto;
+  padding: 12px;
+  box-sizing: border-box;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--line);
+}
+.muse-qr img,
+.muse-qr-ph {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  image-rendering: pixelated;
+  transition: opacity 0.3s, filter 0.3s;
+}
+.muse-qr-ph {
+  background: linear-gradient(100deg, #f1ede6 30%, #f8f5f0 50%, #f1ede6 70%) 0 0 / 200% 100%;
+  animation: muse-shimmer 1.2s linear infinite;
+}
+.muse-qr.expired img {
+  opacity: 0.12;
+  filter: blur(2px);
+}
+.muse-qr.expired .btn {
+  position: absolute;
+}
+.landing .muse-timer {
+  margin: 14px 0 20px;
+  color: var(--ink-3);
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+}
+.muse-actions {
+  display: grid;
+  gap: 10px;
+}
+.landing .muse-wide {
+  width: 100%;
+  justify-content: center;
+  box-sizing: border-box;
+}
+.landing .muse-waiting {
+  min-height: 1.4em;
+  margin: 16px 0 0;
+  color: var(--ink-3);
+  font-size: 13px;
+}
+.muse-waiting:not(:empty)::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--gold);
+  vertical-align: 1px;
+  animation: muse-pulse 1.4s ease-in-out infinite;
+}
+.muse-prompt {
+  margin: 0 0 20px;
+  padding: 16px;
+  max-height: 260px;
+  overflow: auto;
+  border-radius: 14px;
+  background: var(--paper);
+  color: var(--ink);
+  font: 13px/1.55 ui-monospace, 'SF Mono', Menlo, monospace;
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.muse-ok {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  background: #e5f4ea;
+  color: #1f8a4c;
+  animation: sheet-in 0.5s var(--spring) both;
+}
+.muse-ok svg {
+  width: 28px;
+  height: 28px;
+}
+.landing .muse-error {
+  margin: 12px 0 20px;
+  color: #b3261e;
+  font-size: 14px;
+}
+.muse-link {
+  padding: 8px;
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  font: 500 13.5px var(--text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+@keyframes muse-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+@keyframes muse-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .muse-card,
+  .muse-ok,
+  .muse-qr-ph,
+  .muse-waiting::before {
+    animation: none;
+  }
+}
+.landing .muse-step {
+  margin: 0 0 10px;
+  color: var(--blue);
+  font: 600 12.5px/1 var(--text);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.muse-card > .muse-link {
+  display: inline-block;
+  margin-top: 6px;
 }

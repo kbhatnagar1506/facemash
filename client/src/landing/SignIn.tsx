@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { loadGoogle, signInWithGoogle } from '../account'
+import { loadGoogle, signInWithGoogle, type Me } from '../account'
+import { nextForGuest } from '../onboarding'
 
 // The door into the game: sign in with Google (which also creates your account the first
 // time) or carry on as a guest. Signing in is what saves your bean and where you were.
 
-export function SignInSheet({ clientId, next, onClose }: { clientId: string; next: string; onClose: () => void }) {
+/** `next` is where to go once signed in (it can depend on the account). */
+export function SignInSheet({ clientId, next, onClose }: { clientId: string; next: string | ((me: Me) => string); onClose: () => void }) {
+  const guestTo = nextForGuest()
   const button = useRef<HTMLDivElement>(null)
   const panel = useRef<HTMLDivElement>(null)
   const [state, setState] = useState<'loading' | 'ready' | 'busy' | 'error'>('loading')
@@ -23,7 +26,7 @@ export function SignInSheet({ clientId, next, onClose }: { clientId: string; nex
           callback: ({ credential }) => {
             setState('busy')
             signInWithGoogle(credential).then(
-              () => (location.href = next),
+              (me) => (location.href = typeof next === 'string' ? next : next(me)),
               (e: Error) => {
                 setError(e.message)
                 setState('error')
@@ -76,7 +79,7 @@ export function SignInSheet({ clientId, next, onClose }: { clientId: string; nex
         <div className="sheet-or" aria-hidden="true">
           <span>or</span>
         </div>
-        <a className="btn btn-secondary sheet-guest" href={next}>
+        <a className="btn btn-secondary sheet-guest" href={guestTo}>
           Continue as guest
         </a>
       </div>

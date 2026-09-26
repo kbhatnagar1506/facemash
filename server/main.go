@@ -445,6 +445,7 @@ func main() {
 	samplesFile := flag.String("samples", "geo_samples.jsonl", "recorded location samples")
 	keyFile := flag.String("session-key", "session.key", "session signing key (created if missing)")
 	mintFor := flag.String("muse-token", "", "print a connector token for this email (a test account is made if needed) and exit")
+	devLogin := flag.Bool("dev-login", false, "local testing only: /api/dev/login?email= signs in a test account (localhost requests only)")
 	flag.Parse()
 	base := strings.TrimRight(envOr("PUBLIC_URL", "https://gt-campus-quest.vercel.app"), "/")
 	if *mintFor != "" {
@@ -505,6 +506,9 @@ func main() {
 	if acct != nil {
 		mountAuth(mux, clientIDs, acct, originOK)
 		mountMuse(mux, acct, hub, *eventFile, base, originOK)
+		if *devLogin {
+			mountDevLogin(mux, acct)
+		}
 	} else {
 		mountAuth(mux, nil, &accounts{store: newMemStore(), tenant: envOr("TENANT", "hackgt13"), sess: sessions{secret: loadSecret(*keyFile)}}, originOK)
 	}

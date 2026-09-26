@@ -384,3 +384,32 @@ func mountAuth(mux *http.ServeMux, clientIDs []string, acc *accounts, originOK f
 
 // googleKeysOverride lets tests sign their own tokens.
 var googleKeysOverride *googleKeys
+
+// mountDevLogin signs in a test account without Google, for trying the signed-in flows
+// locally. Off unless the server runs with -dev-login, and even then localhost only.
+func mountDevLogin(mux *http.ServeMux, acc *accounts) {
+	log.Printf("auth: DEV LOGIN ENABLED (localhost only)")
+	mux.HandleFunc("/api/dev/login", func(w http.ResponseWriter, r *http.Request) {
+		host, _, _ := strings.Cut(r.Host, ":")
+		if host != "localhost" && host != "127.0.0.1" || r.Header.Get("X-Forwarded-For") != "" {
+			http.NotFound(w, r)
+			return
+		}
+		email := r.URL.Query().Get("email")
+		if email == "" {
+			email = "dev@localhost"
+		}
+		a, _, err := acc.store.SignIn(r.Context(), acc.tenant, user{Sub: "dev:" + email, Email: email, Name: "Dev Tester", Given: "Dev"})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		val, exp := acc.sess.issue(kindSession, a.ID, sessionTTL)
+		setSession(w, r, val, exp)
+		next := r.URL.Query().Get("next")
+		if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") {
+			next = "/"
+		}
+		http.Redirect(w, r, next, http.StatusFound)
+	})
+}

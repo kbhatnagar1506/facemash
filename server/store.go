@@ -57,6 +57,8 @@ type Store interface {
 	CreateToken(ctx context.Context, tenant string, id int64, label string, hash []byte) error
 	TokenOwner(ctx context.Context, hash []byte) (tenant string, id int64, err error)
 	RevokeTokens(ctx context.Context, tenant string, id int64, label string) error
+	// TokenStatus: is there a live token with this label, and when was it made and last used
+	TokenStatus(ctx context.Context, tenant string, id int64, label string) (map[string]any, error)
 	Close()
 }
 
@@ -272,6 +274,24 @@ func (s *pgStore) RevokeTokens(ctx context.Context, tenant string, id int64, lab
 	return err
 }
 
+func (s *pgStore) TokenStatus(ctx context.Context, tenant string, id int64, label string) (map[string]any, error) {
+	var created time.Time
+	var used *time.Time
+	err := s.pool.QueryRow(ctx, `SELECT created_at, last_used FROM api_tokens
+		WHERE tenant_id = $1 AND user_id = $2 AND label = $3 AND revoked_at IS NULL ORDER BY created_at DESC LIMIT 1`, tenant, id, label).Scan(&created, &used)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return map[string]any{"connected": false}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]any{"connected": true, "since": created.UTC().Format(time.RFC3339), "last_used": nil}
+	if used != nil {
+		out["last_used"] = used.UTC().Format(time.RFC3339)
+	}
+	return out, nil
+}
+
 // ---------- memory (local dev, tests) ----------
 
 type memMember struct {
@@ -291,6 +311,8 @@ type memStore struct {
 type memToken struct {
 	tenant, label string
 	id            int64
+	created       time.Time
+	used          *time.Time
 }
 
 func newMemStore() *memStore {
@@ -370,7 +392,7 @@ func (m *memStore) CreateToken(_ context.Context, tenant string, id int64, label
 			delete(m.tokens, h)
 		}
 	}
-	m.tokens[string(hash)] = memToken{tenant: tenant, id: id, label: label}
+	m.tokens[string(hash)] = memToken{tenant: tenant, id: id, label: label, created: time.Now().UTC()}
 	return nil
 }
 
@@ -381,6 +403,9 @@ func (m *memStore) TokenOwner(_ context.Context, hash []byte) (string, int64, er
 	if !ok {
 		return "", 0, errBadToken
 	}
+	now := time.Now().UTC()
+	t.used = &now
+	m.tokens[string(hash)] = t
 	return t.tenant, t.id, nil
 }
 
@@ -393,4 +418,19 @@ func (m *memStore) RevokeTokens(_ context.Context, tenant string, id int64, labe
 		}
 	}
 	return nil
+}
+
+func (m *memStore) TokenStatus(_ context.Context, tenant string, id int64, label string) (map[string]any, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, t := range m.tokens {
+		if t.tenant == tenant && t.id == id && t.label == label {
+			out := map[string]any{"connected": true, "since": t.created.Format(time.RFC3339), "last_used": nil}
+			if t.used != nil {
+				out["last_used"] = t.used.Format(time.RFC3339)
+			}
+			return out, nil
+		}
+	}
+	return map[string]any{"connected": false}, nil
 }

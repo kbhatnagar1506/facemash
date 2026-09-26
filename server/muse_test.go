@@ -218,3 +218,87 @@ func TestSchedule(t *testing.T) {
 		t.Fatalf("describeLook: %q", d)
 	}
 }
+
+func TestMusePairing(t *testing.T) {
+	srv, acc, _, id, _ := museServer(t)
+	cookie := func() *http.Cookie {
+		v, exp := acc.sess.issue(kindSession, id, time.Hour)
+		return &http.Cookie{Name: sessionCookie, Value: v, Expires: exp}
+	}
+	do := func(method, path, origin, body string, c *http.Cookie) (int, map[string]any) {
+		req, _ := http.NewRequest(method, srv.URL+path, strings.NewReader(body))
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		if c != nil {
+			req.AddCookie(c)
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		var out map[string]any
+		json.NewDecoder(res.Body).Decode(&out)
+		return res.StatusCode, out
+	}
+	if code, _ := do("POST", "/api/muse/pair", "https://evil.test", "", cookie()); code != 403 {
+		t.Fatalf("cross-site pair: %d", code)
+	}
+	if code, _ := do("POST", "/api/muse/pair", "https://site.test", "", nil); code != 401 {
+		t.Fatalf("signed-out pair: %d", code)
+	}
+	code, p := do("POST", "/api/muse/pair", "https://site.test", "", cookie())
+	pc, _ := p["code"].(string)
+	if code != 200 || !strings.HasPrefix(pc, pairPrefix) || p["url"] != "https://site.test/muse#"+pc || !strings.Contains(p["prompt"].(string), pc) || !strings.Contains(p["prompt"].(string), "/api/muse/claim") {
+		t.Fatalf("pair: %d %v", code, p)
+	}
+	if _, st := do("GET", "/api/muse/status", "", "", cookie()); st["pairing"] != true {
+		t.Fatalf("status while pairing: %v", st)
+	}
+	// a link preview GETting the page can't spend the code
+	if code, _ := do("GET", "/api/muse/claim?code="+pc, "", "", nil); code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET claim: %d", code)
+	}
+	code, got := do("POST", "/api/muse/claim", "", `{"code":"`+pc+`"}`, nil)
+	tok, _ := got["token"].(string)
+	if code != 200 || !strings.HasPrefix(tok, tokenPrefix) || got["mcp"] != "https://site.test/api/mcp" {
+		t.Fatalf("claim: %d %v", code, got)
+	}
+	if code, _ := rpc(t, srv.URL, tok, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_my_profile"}}`); code != 200 {
+		t.Fatalf("claimed token doesn't work: %d", code)
+	}
+	if code, _ := do("POST", "/api/muse/claim", "", `{"code":"`+pc+`"}`, nil); code != http.StatusGone {
+		t.Fatalf("second claim: %d", code)
+	}
+	if _, st := do("GET", "/api/muse/status", "", "", cookie()); st["connected"] != true || st["pairing"] != false || st["last_used"] == nil {
+		t.Fatalf("status after claim: %v", st)
+	}
+	// a new code replaces the old one; expired codes don't work
+	_, p1 := do("POST", "/api/muse/pair", "https://site.test", "", cookie())
+	_, p2 := do("POST", "/api/muse/pair", "https://site.test", "", cookie())
+	if code, _ := do("POST", "/api/muse/claim", "", `{"code":"`+p1["code"].(string)+`"}`, nil); code != http.StatusGone {
+		t.Fatalf("replaced code still works: %d", code)
+	}
+	pp := newPairings()
+	c, _ := pp.create("hackgt13", id)
+	for h, q := range pp.codes {
+		q.exp = time.Now().Add(-time.Second)
+		pp.codes[h] = q
+	}
+	if _, ok := pp.take(c); ok {
+		t.Fatal("expired code redeemed")
+	}
+	if code, _ := do("POST", "/api/muse/claim", "", `{"code":"nope"}`, nil); code != 400 {
+		t.Fatalf("junk code: %d", code)
+	}
+	_ = p2
+	// hammering the claim endpoint gets throttled
+	last := 0
+	for i := 0; i < 25; i++ {
+		last, _ = do("POST", "/api/muse/claim", "", `{"code":"gtqp_guess"}`, nil)
+	}
+	if last != http.StatusTooManyRequests {
+		t.Fatalf("no rate limit: %d", last)
+	}
+}

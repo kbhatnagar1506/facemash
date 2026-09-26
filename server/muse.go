@@ -18,10 +18,12 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 	_ "time/tzdata" // the image has no zoneinfo; the event runs on Atlanta time
 )
@@ -29,6 +31,8 @@ import (
 const (
 	museLabel    = "muse"
 	tokenPrefix  = "gtq_"
+	pairPrefix   = "gtqp_"
+	pairTTL      = 10 * time.Minute
 	mcpVersion   = "2025-06-18"
 	eventTZ      = "America/New_York"
 	maxMCPBody   = 64 * 1024
@@ -451,6 +455,185 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})
+
+	// --- pairing (personal QR) ---
+	pairs := newPairings()
+	mux.HandleFunc("/api/muse/pair", func(w http.ResponseWriter, r *http.Request) {
+		if !sameSite(r) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "bad origin"})
+			return
+		}
+		id, ok := acc.sess.read(r)
+		if !ok {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "sign in first"})
+			return
+		}
+		code, exp := pairs.create(acc.tenant, id)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"code":    code,
+			"expires": exp.UTC().Format(time.RFC3339),
+			// the code rides in the fragment: it never reaches a server log or a Referer
+			"url":    base + "/muse#" + code,
+			"prompt": pairPrompt(base, code, exp),
+		})
+	})
+	// the agent redeems the code (no session: it's the agent calling, from anywhere)
+	mux.HandleFunc("/api/muse/claim", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			// link previews and crawlers GET things; only a deliberate POST redeems a code
+			w.Header().Set("Allow", "POST")
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": `POST {"code": "gtqp_..."} to redeem a pairing code`})
+			return
+		}
+		if !pairs.allow(clientIP(r)) {
+			writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many attempts, wait a minute"})
+			return
+		}
+		var in struct{ Code string }
+		b, _ := io.ReadAll(io.LimitReader(r.Body, 1024))
+		if json.Unmarshal(b, &in) != nil || !strings.HasPrefix(strings.TrimSpace(in.Code), pairPrefix) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": `send JSON {"code": "gtqp_..."}`})
+			return
+		}
+		p, ok := pairs.take(strings.TrimSpace(in.Code))
+		if !ok {
+			writeJSON(w, http.StatusGone, map[string]string{"error": "this pairing code was already used or has expired; make a new one in the HackGT 13 app (Connect your Muse)"})
+			return
+		}
+		tok := newToken()
+		ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+		defer cancel()
+		if err := acc.store.CreateToken(ctx, p.tenant, p.id, museLabel, hashToken(tok)); err != nil {
+			log.Printf("muse: claim for #%d: %v", p.id, err)
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "accounts unavailable, try again"})
+			return
+		}
+		log.Printf("muse: #%d paired an agent", p.id)
+		info := connectInfo(base, tok)
+		delete(info, "prompt")
+		info["token_type"] = "Bearer"
+		info["next"] = "Save token as a secret credential (never show it in chat). Use it as \"Authorization: Bearer <token>\" for the MCP server at " + base + "/api/mcp or the REST API described at " + base + "/api/openapi.json."
+		writeJSON(w, http.StatusOK, info)
+	})
+	// for the app: is an agent connected yet (so the QR screen can say so)?
+	mux.HandleFunc("/api/muse/status", func(w http.ResponseWriter, r *http.Request) {
+		id, ok := acc.sess.read(r)
+		if !ok {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "sign in first"})
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		st, err := acc.store.TokenStatus(ctx, acc.tenant, id, museLabel)
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "accounts unavailable"})
+			return
+		}
+		st["pairing"] = pairs.pending(acc.tenant, id)
+		writeJSON(w, http.StatusOK, st)
+	})
+}
+
+// ---------- pairing: the personal QR ----------
+
+// A pairing code is a one-time, 10-minute ticket that the attendee hands their agent
+// (through a QR or a copy button); the agent trades it for a real token at /api/muse/claim.
+// Codes live in memory (they're short-lived) and only their hashes are kept.
+type pairings struct {
+	mu    sync.Mutex
+	codes map[string]pairing // sha256(code) → owner
+	hits  map[string][]time.Time
+}
+
+type pairing struct {
+	tenant string
+	id     int64
+	exp    time.Time
+}
+
+func newPairings() *pairings {
+	return &pairings{codes: map[string]pairing{}, hits: map[string][]time.Time{}}
+}
+
+func (p *pairings) create(tenant string, id int64) (string, time.Time) {
+	b := make([]byte, 24)
+	rand.Read(b)
+	code := pairPrefix + base64.RawURLEncoding.EncodeToString(b)
+	exp := time.Now().Add(pairTTL)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for h, q := range p.codes { // one live code per person; drop expired ones
+		if (q.tenant == tenant && q.id == id) || time.Now().After(q.exp) {
+			delete(p.codes, h)
+		}
+	}
+	p.codes[string(hashToken(code))] = pairing{tenant, id, exp}
+	return code, exp
+}
+
+// take redeems a code once.
+func (p *pairings) take(code string) (pairing, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	h := string(hashToken(code))
+	q, ok := p.codes[h]
+	delete(p.codes, h)
+	if !ok || time.Now().After(q.exp) {
+		return pairing{}, false
+	}
+	return q, true
+}
+
+func (p *pairings) pending(tenant string, id int64) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, q := range p.codes {
+		if q.tenant == tenant && q.id == id && time.Now().Before(q.exp) {
+			return true
+		}
+	}
+	return false
+}
+
+// allow rate-limits claims per client IP (codes are unguessable; this just keeps noise down).
+func (p *pairings) allow(ip string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	now := time.Now()
+	recent := p.hits[ip][:0]
+	for _, t := range p.hits[ip] {
+		if now.Sub(t) < time.Minute {
+			recent = append(recent, t)
+		}
+	}
+	if len(recent) >= 20 {
+		p.hits[ip] = recent
+		return false
+	}
+	p.hits[ip] = append(recent, now)
+	if len(p.hits) > 10000 { // don't grow without bound
+		p.hits = map[string][]time.Time{}
+	}
+	return true
+}
+
+func clientIP(r *http.Request) string {
+	// behind Vercel and Caddy: the first hop in X-Forwarded-For is the caller
+	if f := r.Header.Get("X-Forwarded-For"); f != "" {
+		return strings.TrimSpace(strings.Split(f, ",")[0])
+	}
+	host, _, _ := net.SplitHostPort(r.RemoteAddr)
+	return host
+}
+
+// pairPrompt is what the attendee pastes into their agent.
+func pairPrompt(base, code string, exp time.Time) string {
+	loc, _ := time.LoadLocation(eventTZ)
+	return "Connect to my HackGT 13 account.\n" +
+		"1. Send an HTTP POST to " + base + "/api/muse/claim with the JSON body {\"code\": \"" + code + "\"}. It works once and expires at " + exp.In(loc).Format("3:04 PM MST") + ".\n" +
+		"2. The response contains a token. Save it as a secret credential for HackGT 13 (a bearer token). Don't show it to me or repeat it in chat.\n" +
+		"3. Build a custom integration to HackGT 13: its MCP server URL is " + base + "/api/mcp (OpenAPI document: " + base + "/api/openapi.json), and every request uses that token as \"Authorization: Bearer <token>\".\n" +
+		"4. Then tell me what's happening at HackGT right now."
 }
 
 // connectInfo is what the app shows (and what you'd paste into Muse).
