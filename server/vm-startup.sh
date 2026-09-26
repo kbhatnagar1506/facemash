@@ -1,6 +1,6 @@
 #!/bin/bash
 # GT Campus Quest game server: the Go WebSocket server behind Caddy (automatic HTTPS).
-IMAGE="us-central1-docker.pkg.dev/patchguard-reakon/cloud-run-source-deploy/gt-campus-quest@sha256:e8a03b31ee0a13e81de544d765a8b16898e23c301956da2899fa63ec42e20be4"
+IMAGE="us-central1-docker.pkg.dev/patchguard-reakon/cloud-run-source-deploy/gt-campus-quest@sha256:a814f049d33a30e5f2ee6f4f864c0030e433a3450eb4cbdb36d2bf04ed45aa0b"
 HOST="35-188-1-8.sslip.io"
 export HOME=/home/chronos
 docker-credential-gcr configure-docker --registries us-central1-docker.pkg.dev
@@ -10,14 +10,18 @@ docker network create gt 2>/dev/null || true
 docker rm -f game caddy 2>/dev/null || true
 # Sign in with Google: the OAuth web client ID lives in instance metadata (google-client-id),
 # so it can change without editing this script. Accounts and progress: Cloud SQL facemash-db,
-# which only accepts this VM's IP and only over TLS; the app user's password is in
-# /mnt/stateful_partition/gt/db.env (root-only; also in Secret Manager: facemash-db-app).
+# reached through the Cloud SQL connector as the VM's own service account (IAM database
+# auth: no password, no allow-listed IPs).
+# Until the VM's account can log in to Cloud SQL itself, db.env (root-only) can hold a direct
+# connection instead (DB_HOST/DB_USER/DB_PASSWORD, TLS); the server prefers it when present.
+DBENV=""
+[ -f /mnt/stateful_partition/gt/db.env ] && DBENV="--env-file /mnt/stateful_partition/gt/db.env"
 GOOGLE_CLIENT_ID=$(curl -sf -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/attributes/google-client-id || true)
 docker run -d --restart=always --name game --network gt \
   -e ALLOWED_ORIGINS='https://gt-campus-quest*.vercel.app' \
   -e GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \
-  -e DB_HOST=136.65.18.145 -e DB_USER=facemash_app -e DB_NAME=facemash \
-  --env-file /mnt/stateful_partition/gt/db.env \
+  -e DB_INSTANCE='patchguard-reakon:us-central1:facemash-db' -e DB_NAME=facemash \
+  -e DB_IAM_USER='751583582765-compute@developer' $DBENV \
   -e TENANT=hackgt13 -e TENANT_NAME='HackGT 13' \
   -v /mnt/stateful_partition/gt/geo.json:/app/geo.json:ro \
   -v /mnt/stateful_partition/gt/data:/data \

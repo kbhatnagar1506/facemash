@@ -444,7 +444,13 @@ func main() {
 	geoFile := flag.String("geo", "geo.json", "GPS to Klaus atrium alignment")
 	samplesFile := flag.String("samples", "geo_samples.jsonl", "recorded location samples")
 	keyFile := flag.String("session-key", "session.key", "session signing key (created if missing)")
+	mintFor := flag.String("muse-token", "", "print a connector token for this email (a test account is made if needed) and exit")
 	flag.Parse()
+	base := strings.TrimRight(envOr("PUBLIC_URL", "https://gt-campus-quest.vercel.app"), "/")
+	if *mintFor != "" {
+		mintTestToken(*mintFor, *keyFile, base)
+		return
+	}
 
 	// ALLOWED_ORIGINS=https://gt.example.com,https://gt-campus-quest*.vercel.app
 	// (a * matches anything, e.g. Vercel preview deploys). Unset: same-host requests
@@ -498,6 +504,7 @@ func main() {
 	}
 	if acct != nil {
 		mountAuth(mux, clientIDs, acct, originOK)
+		mountMuse(mux, acct, hub, *eventFile, base, originOK)
 	} else {
 		mountAuth(mux, nil, &accounts{store: newMemStore(), tenant: envOr("TENANT", "hackgt13"), sess: sessions{secret: loadSecret(*keyFile)}}, originOK)
 	}
@@ -569,17 +576,8 @@ func main() {
 		w.Write(b)
 	})
 	mux.HandleFunc("/api/online", func(w http.ResponseWriter, r *http.Request) {
-		counts := map[string]int{"online": 0}
-		hub.mu.Lock()
-		for _, c := range hub.clients {
-			if c.joined {
-				counts["online"]++
-				counts[c.p.Room]++
-			}
-		}
-		hub.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(counts)
+		json.NewEncoder(w).Encode(hub.counts())
 	})
 	// Serve the client; unknown extension-less paths (like /avatar) get the app itself.
 	// Hashed build assets are cached for a year; JS/CSS/JSON are gzipped (≈3× smaller).
