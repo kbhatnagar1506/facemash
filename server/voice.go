@@ -36,15 +36,23 @@ const (
 	voiceAgentName = "facemash-hackgt13-voice"
 	voiceAPI       = "https://api.elevenlabs.io"
 	voiceMaxCall   = 180 * time.Second // the agent hangs up by then
+	voiceSilentFor = 30 * time.Second  // and hangs up this long after the person last spoke, so a dead mic can't run the clock
 	// a started call counts against the cap until it's finished or this old
 	voiceLiveFor = voiceMaxCall + time.Minute
-	// pending calls are forgotten after this (finish then says "start again")
-	voicePendingFor = 30 * time.Minute
+	// pending calls are forgotten after this (finish then says "start again"); by then the
+	// transcript sweep may have deleted the call at ElevenLabs anyway
+	voicePendingFor = voiceSweepAge
 	voiceStarts     = 3                      // calls per person...
 	voiceStartEvery = 20 * time.Minute       // ...one back every 20 minutes: 3 an hour
 	voiceMaxAnswer  = 2000                   // bytes of one answer
 	voiceMaxDone    = 5000                   // finished calls remembered (for idempotent finish)
 	voiceVoiceID    = "cgSgspJ2msm6clMCkdW9" // "Jessica": bright, warm, conversational American English
+	// transcripts don't stay at ElevenLabs: each is deleted once its answers are saved, and a sweep
+	// deletes any this old (calls nobody finished) every voiceSweepEvery
+	voiceSweepAge   = 15 * time.Minute
+	voiceSweepEvery = 10 * time.Minute
+	// the agent's own retention, the backstop (0 would delete a transcript before we can read it)
+	voiceRetentionDays = 1
 )
 
 // the five questions, in order; the agent asks exactly these
@@ -116,6 +124,9 @@ type voiceGuide struct {
 	pollWait time.Duration          // between transcript polls
 	pollFor  time.Duration          // how long finish waits for ElevenLabs to wrap up
 	now      func() time.Time       // read under mu
+
+	forgetWaits []time.Duration // before each retry of deleting a transcript at ElevenLabs
+	bg          sync.WaitGroup  // those deletions (tests wait on it)
 }
 
 type voiceAnswer struct {
@@ -179,7 +190,9 @@ func openVoice() *voiceGuide {
 		names = append(names, k.name)
 	}
 	log.Printf("voice: on (%s key%s), at most %d calls at once", strings.Join(names, " + "), map[bool]string{true: "s"}[len(ks) > 1], cp)
-	return newVoiceGuide(ks, voiceAPI, cp)
+	v := newVoiceGuide(ks, voiceAPI, cp)
+	go v.sweepEvery(voiceSweepEvery)
+	return v
 }
 
 func newVoiceGuide(keys []*voiceKey, api string, cap int) *voiceGuide {
@@ -189,6 +202,7 @@ func newVoiceGuide(keys []*voiceKey, api string, cap int) *voiceGuide {
 		finishes: newKeyLimiter(10, 30*time.Second, 1),
 		finished: map[string]voiceResult{}, saving: map[string]bool{},
 		pollWait: 1500 * time.Millisecond, pollFor: 15 * time.Second, now: time.Now,
+		forgetWaits: []time.Duration{2 * time.Second, 10 * time.Second, 30 * time.Second, 2 * time.Minute},
 	}
 }
 
@@ -202,6 +216,12 @@ func (e *upstreamError) Error() string { return fmt.Sprintf("elevenlabs %d: %s",
 
 // call makes one request with one key. Error bodies are kept short and never carry the key.
 func (v *voiceGuide) call(ctx context.Context, k *voiceKey, method, path string, body, out any) error {
+	_, err := v.do(ctx, k, method, path, body, out)
+	return err
+}
+
+// do is call, also giving the HTTP status (0 when there was no answer).
+func (v *voiceGuide) do(ctx context.Context, k *voiceKey, method, path string, body, out any) (int, error) {
 	var rd io.Reader
 	if body != nil {
 		b, _ := json.Marshal(body)
@@ -209,7 +229,7 @@ func (v *voiceGuide) call(ctx context.Context, k *voiceKey, method, path string,
 	}
 	req, err := http.NewRequestWithContext(ctx, method, v.api+path, rd)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	req.Header.Set("xi-api-key", k.key)
 	if body != nil {
@@ -217,7 +237,7 @@ func (v *voiceGuide) call(ctx context.Context, k *voiceKey, method, path string,
 	}
 	res, err := v.http.Do(req)
 	if err != nil {
-		return &upstreamError{0, "unreachable"}
+		return 0, &upstreamError{0, "unreachable"}
 	}
 	defer res.Body.Close()
 	b, _ := io.ReadAll(io.LimitReader(res.Body, 4<<20))
@@ -227,12 +247,123 @@ func (v *voiceGuide) call(ctx context.Context, k *voiceKey, method, path string,
 			msg = msg[:200]
 		}
 		msg = strings.ReplaceAll(msg, k.key, "[key]")
-		return &upstreamError{res.StatusCode, msg}
+		return res.StatusCode, &upstreamError{res.StatusCode, msg}
 	}
 	if out != nil {
-		return json.Unmarshal(b, out)
+		return res.StatusCode, json.Unmarshal(b, out)
 	}
-	return nil
+	return res.StatusCode, nil
+}
+
+// deleteConv deletes one conversation (its transcript) in k's account. Gone already counts as
+// done. It gives the status only: the body could quote the conversation.
+func (v *voiceGuide) deleteConv(ctx context.Context, k *voiceKey, convID string) (int, bool) {
+	code, _ := v.do(ctx, k, http.MethodDelete, "/v1/convai/conversations/"+url.PathEscape(convID), nil, nil)
+	return code, code/100 == 2 || code == http.StatusNotFound
+}
+
+// forget deletes a saved call's transcript at ElevenLabs, in the background, retrying on
+// failure (the sweep and the agent's retention setting catch anything still left).
+func (v *voiceGuide) forget(k *voiceKey, convID string, id int64) {
+	v.bg.Add(1)
+	go func() {
+		defer v.bg.Done()
+		for try := 0; ; try++ {
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			code, ok := v.deleteConv(ctx, k, convID)
+			cancel()
+			if ok {
+				log.Printf("voice: #%d transcript deleted at ElevenLabs: %d", id, code)
+				return
+			}
+			if try >= len(v.forgetWaits) {
+				log.Printf("voice: #%d transcript not deleted at ElevenLabs: %d (the sweep will retry)", id, code)
+				return
+			}
+			time.Sleep(v.forgetWaits[try])
+		}
+	}()
+}
+
+// sweepTranscripts deletes this agent's conversations that started over voiceSweepAge ago: calls that
+// were never finished (a closed tab, a dropped connection), so never forgotten by finish.
+// It returns how many it deleted.
+func (v *voiceGuide) sweepTranscripts(ctx context.Context) int {
+	v.mu.Lock()
+	now := v.now()
+	v.mu.Unlock()
+	cutoff := now.Add(-voiceSweepAge)
+	deleted, failed := 0, map[int]int{}
+	seen := map[string]bool{} // agents already swept (both keys can share one)
+	for _, k := range v.keys {
+		if k.agent == "" || seen[k.agent] {
+			continue
+		}
+		var old []string
+		cursor, listed := "", false
+		for page := 0; page < 20; page++ {
+			q := url.Values{"agent_id": {k.agent}, "page_size": {"100"}, "call_start_before_unix": {strconv.FormatInt(cutoff.Unix(), 10)}}
+			if cursor != "" {
+				q.Set("cursor", cursor)
+			}
+			var list struct {
+				Conversations []struct {
+					ConversationID string `json:"conversation_id"`
+					AgentID        string `json:"agent_id"`
+					StartTime      int64  `json:"start_time_unix_secs"`
+					Status         string `json:"status"`
+				} `json:"conversations"`
+				HasMore    bool   `json:"has_more"`
+				NextCursor string `json:"next_cursor"`
+			}
+			code, err := v.do(ctx, k, http.MethodGet, "/v1/convai/conversations?"+q.Encode(), nil, &list)
+			if err != nil {
+				log.Printf("voice: sweep: listing on the %s key: %d", k.name, code)
+				break
+			}
+			listed = true
+			for _, c := range list.Conversations {
+				// only ours, only old, and never one being saved right now
+				if c.AgentID != k.agent || c.StartTime == 0 || !time.Unix(c.StartTime, 0).Before(cutoff) || c.Status == "in-progress" || c.Status == "initiated" {
+					continue
+				}
+				v.mu.Lock()
+				busy := v.saving[c.ConversationID]
+				v.mu.Unlock()
+				if !busy {
+					old = append(old, c.ConversationID)
+				}
+			}
+			if !list.HasMore || list.NextCursor == "" {
+				break
+			}
+			cursor = list.NextCursor
+		}
+		if listed {
+			seen[k.agent] = true
+		}
+		for _, id := range old {
+			if code, ok := v.deleteConv(ctx, k, id); ok {
+				deleted++
+			} else {
+				failed[code]++
+			}
+		}
+	}
+	if deleted > 0 || len(failed) > 0 {
+		log.Printf("voice: sweep deleted %d old transcript(s) at ElevenLabs; failed: %v", deleted, failed)
+	}
+	return deleted
+}
+
+// sweepEvery runs sweepTranscripts now and then every d, for as long as the server runs.
+func (v *voiceGuide) sweepEvery(d time.Duration) {
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		v.sweepTranscripts(ctx)
+		cancel()
+		time.Sleep(d)
+	}
 }
 
 // failover says whether an error from one key means "try the other one", and for how long
@@ -593,6 +724,8 @@ func (v *voiceGuide) finish(ctx context.Context, acc *accounts, tenant string, i
 		}
 	}
 	log.Printf("voice: #%d saved %d answer(s), %.1f KB, %d redacted", id, len(res.Answers), res.KB, res.Redacted)
+	// saved: ElevenLabs doesn't need its copy any more
+	v.forget(owner.key, convID, id)
 
 	v.mu.Lock()
 	owner.done = true
@@ -735,8 +868,9 @@ How to run the call:
 - Your first message already asked question 1. Ask the rest one at a time, in this order, word for word, each only once the person has answered the one before.
 - Be warm, natural and brief: at most a few words of acknowledgement between questions ("Love that." / "Nice."), then the next question. Don't give advice, don't summarize, don't answer your own questions.
 - If an answer is very short (a word or two), ask one short, friendly follow-up, then move on. Never more than one follow-up per question. If they'd rather skip a question, that's fine: move on.
-- After the fifth answer, thank them and say, in one sentence ending with "your bean is getting dressed": for example "Thanks {{first_name}}, that's everything, your bean is getting dressed." Then end the call.
+- After the fifth answer, thank them and say, in one sentence ending with "your bean is getting dressed": for example "Thanks {{first_name}}, that's everything, your bean is getting dressed." Then call end_call right away, in that same turn: don't wait for a reply and don't say anything else.
 - Never ask for contact details, phone numbers, emails, addresses, passwords, codes, or anything sensitive. If they say a password, key, code or number like that, don't repeat it back; just move on.
+- Before the fifth answer, if they go quiet, check in once, briefly ("Still there?"). If there's still no answer, say "No worries, you can come back to this any time on the Muse page." and end the call. Don't keep asking.
 - If they ask what this is: their answers become the memory facemash uses to dress their bean and help them find people at HackGT; they can delete it on the Muse page.
 - Keep the whole call under three minutes. Speak English.`
 	return map[string]any{
@@ -762,10 +896,15 @@ How to run the call:
 			"conversation": map[string]any{
 				"max_duration_seconds": int(voiceMaxCall / time.Second),
 			},
+			"turn": map[string]any{
+				"silence_end_call_timeout": int(voiceSilentFor / time.Second),
+			},
 		},
 		"platform_settings": map[string]any{
-			"auth":    map[string]any{"enable_auth": true},   // signed URLs only: our server decides who talks
-			"privacy": map[string]any{"record_voice": false}, // we keep no audio, and ask them not to record it
+			"auth": map[string]any{"enable_auth": true}, // signed URLs only: our server decides who talks
+			// we keep no audio, and ask them not to record it; transcripts are deleted by us once
+			// saved (forget, sweep), and this is the backstop: anything left goes after a day
+			"privacy": map[string]any{"record_voice": false, "retention_days": voiceRetentionDays, "delete_transcript_and_pii": true, "delete_audio": true},
 		},
 	}
 }
@@ -819,6 +958,41 @@ func provisionVoice(which string) {
 	})
 	if err != nil {
 		log.Fatalf("voice: provisioning failed: %v", err)
+	}
+	// read it back: ElevenLabs drops fields it doesn't know without saying so
+	var got struct {
+		ConversationConfig struct {
+			Conversation struct {
+				MaxDurationSeconds float64 `json:"max_duration_seconds"`
+			} `json:"conversation"`
+			Turn struct {
+				SilenceEndCallTimeout float64 `json:"silence_end_call_timeout"`
+			} `json:"turn"`
+		} `json:"conversation_config"`
+		PlatformSettings struct {
+			Privacy struct {
+				RecordVoice            bool `json:"record_voice"`
+				RetentionDays          int  `json:"retention_days"`
+				DeleteTranscriptAndPII bool `json:"delete_transcript_and_pii"`
+			} `json:"privacy"`
+		} `json:"platform_settings"`
+	}
+	readErr := v.call(ctx, k, http.MethodGet, "/v1/convai/agents/"+url.PathEscape(agentID), nil, &got)
+	if readErr != nil {
+		log.Printf("voice: couldn't read the agent back: %v", readErr)
+	} else if cc := got.ConversationConfig; cc.Conversation.MaxDurationSeconds != voiceMaxCall.Seconds() || cc.Turn.SilenceEndCallTimeout != voiceSilentFor.Seconds() {
+		log.Printf("voice: WARNING the agent didn't keep its limits: max_duration_seconds %v (want %v), silence_end_call_timeout %v (want %v)",
+			cc.Conversation.MaxDurationSeconds, voiceMaxCall.Seconds(), cc.Turn.SilenceEndCallTimeout, voiceSilentFor.Seconds())
+	} else {
+		log.Printf("voice: agent limits confirmed: %v s per call, hangs up after %v s of silence", cc.Conversation.MaxDurationSeconds, cc.Turn.SilenceEndCallTimeout)
+	}
+	if readErr == nil {
+		if p := got.PlatformSettings.Privacy; p.RecordVoice || p.RetentionDays != voiceRetentionDays || !p.DeleteTranscriptAndPII {
+			log.Printf("voice: WARNING the agent didn't keep its privacy settings: record_voice %v, retention_days %d (want %d), delete_transcript_and_pii %v",
+				p.RecordVoice, p.RetentionDays, voiceRetentionDays, p.DeleteTranscriptAndPII)
+		} else {
+			log.Printf("voice: agent privacy confirmed: no audio recorded, transcripts kept at most %d day(s)", p.RetentionDays)
+		}
 	}
 	fmt.Fprintf(os.Stderr, "voice agent on the %s key (set ELEVENLABS_AGENT_ID%s):\n", k.name, map[bool]string{true: "_BACKUP"}[k.name == "backup"])
 	fmt.Println(agentID)

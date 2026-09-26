@@ -110,8 +110,10 @@ export function Privacy() {
           pick an outfit for your bean.
         </li>
         <li>
-          <b>ElevenLabs</b> runs the voice guide call if you use it: it hears your voice and turns it into text, and keeps
-          the call's transcript under its own privacy policy. We set it not to record the audio.
+          <b>ElevenLabs</b> runs the voice guide call if you use it: it hears your voice and turns it into text. We set it
+          not to record the audio, and we delete the call's transcript from ElevenLabs right after we save your answers.
+          If a call ends without being saved (say you close the tab), we delete its transcript within about half an hour,
+          and ElevenLabs is set to keep none for more than a day.
         </li>
         <li>
           <b>Google</b> handles sign-in.
