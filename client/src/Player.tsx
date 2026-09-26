@@ -79,6 +79,7 @@ export function Player({
   const intro = useRef(-1) // cinematic fly-through progress 0..1 when entering the hall; -1 = off
   const introPath = useRef<{ pos: THREE.CatmullRomCurve3; look: THREE.CatmullRomCurve3; T: Float32Array } | null>(null)
   const introLook = useRef(new THREE.Vector3())
+  const snap = useRef(false)
   const lean = useRef(0)
   const puff = useRef<THREE.Mesh>(null!)
   const puffT = useRef(1) // landing dust ring, 0..1
@@ -94,23 +95,22 @@ export function Player({
       cam.near = 0.1
       cam.fov = 60
       // Cinematic sweep through the atrium on the way in (any key or click skips it).
-      const [sx, sz] = view.spawn ?? start
       const q = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
       const path = {
-        // in low under the mezzanine, up to a top shot of the whole atrium (held ~1.3 s),
-        // a swoop past the back wall and sponsor row, then down behind you
+        // in low under the mezzanine and up to a top shot of the whole atrium, held at
+        // the end; then a straight cut to the camera behind you
         pos: new THREE.CatmullRomCurve3(
-          [q(17, 3.2, 23), q(9, 3.3, 9), q(5, 3.8, 0), q(3, 11, -1), q(2, 17, 1.5), q(-0.5, 17.3, 1), q(-6, 11, -15), q(7, 7, -10), q(13, 3.3, 0), q(sx + 3.5, 2.6, sz + 0.5)],
+          [q(17, 3.2, 23), q(9, 3.3, 9), q(5, 3.8, 0), q(3, 11, -1), q(2, 17, 1.5), q(-0.5, 17.3, 1)],
           false,
           'centripetal',
         ),
         look: new THREE.CatmullRomCurve3(
-          [q(0, 3, 12), q(0, 3, -8), q(1, 4, -14), q(1, 1, -12), q(1, 0, -13), q(0, 0, -13.5), q(4, 3, -26), q(14, 4, -8), q(12, 2, 8), q(sx - 3, 1, sz)],
+          [q(0, 3, 12), q(0, 3, -8), q(1, 4, -14), q(1, 1, -12), q(1, 0, -13), q(0, 0, -13.5)],
           false,
           'centripetal',
         ),
       }
-      introPath.current = { ...path, T: glideTiming(path.pos, 4.5 / 9) }
+      introPath.current = { ...path, T: glideTiming(path.pos, 1) }
       introLook.current.copy(path.look.getPoint(0))
       intro.current = 0
       window.dispatchEvent(new CustomEvent('cinematic', { detail: true }))
@@ -358,6 +358,7 @@ export function Player({
       camera.lookAt(introLook.current)
       if (intro.current >= 1) {
         intro.current = -1
+        snap.current = true // hard cut to the player camera
         window.dispatchEvent(new CustomEvent('cinematic', { detail: false }))
       }
     } else if (view.mode === 'inside') {
@@ -373,7 +374,10 @@ export function Player({
         THREE.MathUtils.clamp(p.y + c * dist, z0, z1),
       )
       if (view.ceiling) want.y = Math.min(want.y, view.ceiling(want.x, want.z, height.current))
-      camera.position.lerp(want, 1 - Math.exp(-dt * 8))
+      if (snap.current) {
+        camera.position.copy(want)
+        snap.current = false
+      } else camera.position.lerp(want, 1 - Math.exp(-dt * 8))
       // pitch tilts the view: up toward the balconies and ceiling, down to the floor
       camera.lookAt(p.x - sn * 3 * ps, height.current + 1.5 * ps + pitch.current * 6, p.y - c * 3 * ps)
     } else {
