@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { Bloom, EffectComposer, N8AO, Vignette } from '@react-three/postprocessing'
+import { Bloom, EffectComposer, N8AO, SMAA, Vignette } from '@react-three/postprocessing'
 import { Collider, loadCampus, type Campus } from './map'
 import { Net } from './net'
 import { World } from './World'
@@ -219,12 +219,22 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
         />
         <Remotes net={net} scale={room === 'hackgt' ? PERSON_SCALE : 1} />
         {/* glow on lights, screens and signs; soft vignette to frame the shot */}
-        <EffectComposer multisampling={4}>
-          {/* ambient occlusion indoors: contact darkening under tables, chairs, bags and along every corner */}
-          {room === 'hackgt' ? <N8AO halfRes aoRadius={1.4} distanceFalloff={0.6} intensity={2.6} color="#2a2420" /> : <></>}
-          <Bloom mipmapBlur intensity={room === 'hackgt' ? 0.35 : 0.25} luminanceThreshold={0.99} luminanceSmoothing={0.03} />
-          <Vignette offset={0.3} darkness={0.55} />
-        </EffectComposer>
+        {/* A fresh composer per room: indoors adds ambient occlusion, which reads the depth
+            buffer and can't share it with a multisampled target (that blit fails and freezes
+            the frame), so the hall uses SMAA for edges instead of MSAA. */}
+        {room === 'hackgt' ? (
+          <EffectComposer key="hall" multisampling={0}>
+            <N8AO halfRes aoRadius={1.4} distanceFalloff={0.6} intensity={2.6} color="#2a2420" />
+            <Bloom mipmapBlur intensity={0.35} luminanceThreshold={0.99} luminanceSmoothing={0.03} />
+            <Vignette offset={0.3} darkness={0.55} />
+            <SMAA />
+          </EffectComposer>
+        ) : (
+          <EffectComposer key="campus" multisampling={4}>
+            <Bloom mipmapBlur intensity={0.25} luminanceThreshold={0.99} luminanceSmoothing={0.03} />
+            <Vignette offset={0.3} darkness={0.55} />
+          </EffectComposer>
+        )}
       </Canvas>
       <Cinematic />
       <Hud

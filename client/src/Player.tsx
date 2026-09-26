@@ -117,6 +117,7 @@ export function Player({
     } else {
       cam.near = 1
       cam.fov = 40
+      yaw.current = 0 // campus: camera south of you, north up, until you turn it
       // left the hall mid-cinematic: stop it and drop the letterbox
       intro.current = -1
       window.dispatchEvent(new CustomEvent('cinematic', { detail: false }))
@@ -137,9 +138,9 @@ export function Player({
     }
   }, [])
 
-  // Drag to look around (inside view only).
+  // Drag to look around (inside: turn + tilt; campus: turn the overhead camera).
   useEffect(() => {
-    if (view.mode !== 'inside') return
+    const inside = view.mode === 'inside'
     const el = gl.domElement
     // Only drags that start on the 3D view turn the camera, and only while a
     // button is actually held (checked per event, so it can never get stuck).
@@ -149,7 +150,7 @@ export function Player({
       if (!(e.buttons & 1)) armed = false
       else if (armed) {
         yaw.current -= e.movementX * 0.006
-        pitch.current = Math.max(-0.6, Math.min(1.3, pitch.current - e.movementY * 0.006)) // drag up = look up
+        if (inside) pitch.current = Math.max(-0.6, Math.min(1.3, pitch.current - e.movementY * 0.006)) // drag up = look up
       }
     }
     el.addEventListener('pointerdown', downH)
@@ -235,13 +236,15 @@ export function Player({
       if (keys.has('KeyD') || keys.has('ArrowRight')) dx += 1
     }
     const inside = view.mode === 'inside'
-    if (inside && !typing()) {
+    if (!typing()) {
       if (keys.has('KeyQ')) yaw.current += dt * 2.2
       if (keys.has('KeyR')) yaw.current -= dt * 2.2
+    }
+    if (inside && !typing()) {
       if (keys.has('KeyT')) pitch.current = Math.min(1.3, pitch.current + dt * 1.2)
       if (keys.has('KeyG')) pitch.current = Math.max(-0.6, pitch.current - dt * 1.2)
     }
-    if (inside && !goal && (dx || dz)) {
+    if (!goal && (dx || dz)) {
       // Rotate input into camera space so W always walks away from the camera.
       const c = Math.cos(yaw.current)
       const sn = Math.sin(yaw.current)
@@ -381,11 +384,13 @@ export function Player({
       // pitch tilts the view: up toward the balconies and ceiling, down to the floor
       camera.lookAt(p.x - sn * 3 * ps, height.current + 1.5 * ps + pitch.current * 6, p.y - c * 3 * ps)
     } else {
-      // Classic overhead camera: fixed pitch, follows smoothly, no rotation.
+      // Overhead camera: fixed pitch, follows smoothly, turns with Q/R or a drag.
       const d = zoom.current
-      const want = new THREE.Vector3(p.x, d, p.y + d * 0.6)
+      const sn = Math.sin(yaw.current)
+      const c = Math.cos(yaw.current)
+      const want = new THREE.Vector3(p.x + sn * d * 0.6, d, p.y + c * d * 0.6)
       camera.position.lerp(want, 1 - Math.exp(-dt * 6))
-      camera.lookAt(camera.position.x, 0, camera.position.z - d * 0.6)
+      camera.lookAt(camera.position.x - sn * d * 0.6, 0, camera.position.z - c * d * 0.6)
     }
 
     // Keep the shadow-casting sun centered on the player.
