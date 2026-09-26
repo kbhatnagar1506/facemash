@@ -1,6 +1,6 @@
 #!/bin/bash
 # GT Campus Quest game server: the Go WebSocket server behind Caddy (automatic HTTPS).
-IMAGE="us-central1-docker.pkg.dev/patchguard-reakon/cloud-run-source-deploy/gt-campus-quest@sha256:1ffdc5f4a4709cf318e0429bb7b935f1fe5b51cadb77939af0ee35c727dc4691"
+IMAGE="us-central1-docker.pkg.dev/patchguard-reakon/cloud-run-source-deploy/gt-campus-quest@sha256:7bab371fe139d3255f7efba4432aecd3e041ba82225843426fc0c21fbc45054a"
 HOST="35-188-1-8.sslip.io"
 export HOME=/home/chronos
 docker-credential-gcr configure-docker --registries us-central1-docker.pkg.dev
@@ -17,7 +17,7 @@ DBENV=""
 [ -f /mnt/stateful_partition/gt/db.env ] && DBENV="--env-file /mnt/stateful_partition/gt/db.env"
 GOOGLE_CLIENT_ID=$(curl -sf -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/attributes/google-client-id || true)
 docker run -d --restart=always --name game --network gt \
-  -e ALLOWED_ORIGINS='https://gt-campus-quest*.vercel.app' \
+  -e ALLOWED_ORIGINS='https://gt-campus-quest*.vercel.app,https://fasemash.tech,https://www.fasemash.tech' \
   -e GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \
   -e DB_INSTANCE='patchguard-reakon:us-central1:facemash-db' -e DB_NAME=facemash \
   -e DB_IAM_USER='751583582765-compute@developer' $DBENV \

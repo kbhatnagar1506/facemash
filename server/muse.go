@@ -807,3 +807,21 @@ func mintTestToken(email, keyFile, base string) {
 	}
 	json.NewEncoder(os.Stdout).Encode(connectInfo(base, tok))
 }
+
+// mintTestSession prints a session cookie value for a test account (made if needed).
+// Run on the VM: docker exec game /app/server -session-for you@example.com -session-key /data/session.key
+func mintTestSession(email, keyFile string) {
+	a := openAccounts(keyFile)
+	if a == nil {
+		log.Fatal("no database")
+	}
+	defer a.store.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	acc, _, err := a.store.SignIn(ctx, a.tenant, user{Sub: "test:" + email, Email: email, Name: "Test attendee", Given: "Test"})
+	if err != nil {
+		log.Fatal(err)
+	}
+	v, _ := a.sess.issue(kindSession, acc.ID, time.Hour)
+	fmt.Println(v)
+}
