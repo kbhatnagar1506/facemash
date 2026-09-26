@@ -161,7 +161,10 @@ func verifyGoogle(tok string, audiences []string, keys *googleKeys) (user, error
 
 // Tokens are "<account id>.<expiry unix>.<hmac>", stateless so they survive restarts.
 // The kind is mixed into the MAC, so a game ticket can't be replayed as a session cookie.
-type sessions struct{ secret []byte }
+type sessions struct {
+	secret []byte
+	rev    *revocations // sign-outs (sessions_after.go); nil: none checked
+}
 
 const (
 	kindSession = "session"
@@ -204,6 +207,9 @@ func (s sessions) check(kind, tok string) (int64, bool) {
 	id, err2 := strconv.ParseInt(ids, 10, 64)
 	if !ok || err1 != nil || err2 != nil || time.Now().Unix() > e {
 		return 0, false
+	}
+	if !s.rev.valid(id, e-int64(ttlFor(kind)/time.Second)) {
+		return 0, false // issued before this person signed out
 	}
 	return id, true
 }
@@ -381,6 +387,14 @@ func mountAuth(mux *http.ServeMux, clientIDs []string, acc *accounts, originOK f
 		if !sameSite(r) {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "bad origin"})
 			return
+		}
+		// every session and game ticket issued until now stops working, not just this cookie
+		if id, ok := acc.sess.read(r); ok {
+			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+			if err := acc.sess.rev.revoke(ctx, id); err != nil {
+				log.Printf("auth: sign-out for #%d not saved (applies on this server until restart): %v", id, err)
+			}
+			cancel()
 		}
 		setSession(w, r, "", time.Unix(0, 0))
 		w.WriteHeader(http.StatusNoContent)

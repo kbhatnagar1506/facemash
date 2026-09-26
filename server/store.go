@@ -118,6 +118,8 @@ CREATE INDEX IF NOT EXISTS memberships_user ON memberships(user_id);
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_google_sub_key;
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_key ON users (lower(email));
 CREATE INDEX IF NOT EXISTS users_google_sub ON users (google_sub);
+-- signing out ends sessions and game tickets issued before this (sessions_after.go)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS sessions_after timestamptz;
 CREATE TABLE IF NOT EXISTS api_tokens (
   id         bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   tenant_id  text   NOT NULL,
@@ -370,6 +372,7 @@ type memStore struct {
 	memory  map[string]memMemory  // "<tenant>/<id>"
 	fast    *memFastTables        // the mapi_* tables (memfast_store.go), made on first use
 	talk    *memTalkTables        // agent talk's tables (agenttalk_store.go), made on first use
+	after   map[int64]time.Time   // users.sessions_after (sessions_after.go)
 }
 
 type memMemory struct {

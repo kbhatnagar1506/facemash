@@ -40,6 +40,7 @@ func openAccounts(keyFile string) *accounts {
 	if where == "" {
 		log.Printf("accounts: in memory (set DB_INSTANCE for Cloud SQL), tenant %s", tenant)
 		a.store = newMemStore()
+		a.sess.rev = newRevocations(a.store)
 		return a
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -51,6 +52,7 @@ func openAccounts(keyFile string) *accounts {
 	}
 	log.Printf("accounts: Postgres at %s, tenant %s", where, tenant)
 	a.store = s
+	a.sess.rev = newRevocations(s)
 	return a
 }
 
