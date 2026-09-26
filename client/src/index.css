@@ -209,3 +209,4 @@ kbd {
 }
 .calibrate textarea { width: 100%; font: 11px ui-monospace, monospace; }
 .cal-actions { display: flex; gap: 8px; align-items: center; font-size: 11px; }
+.live-raw { display: block; font: 600 11px ui-monospace, monospace; opacity: .7; }

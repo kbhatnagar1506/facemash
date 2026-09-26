@@ -141,6 +141,17 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
   useEffect(() => {
     gps.current = null // re-place on the next fix after changing rooms
   }, [room])
+  // Send what the device reports to the server so the atrium can be mapped from
+  // real coordinates (and so we can see why live location isn't moving someone).
+  const lastSample = useRef(0)
+  useEffect(() => {
+    if (room !== 'hackgt' || !live) return
+    const now = Date.now()
+    if (now - lastSample.current < 2000 && status === 'live') return
+    lastSample.current = now
+    const hall = fix && geoCfg ? toHall(geoCfg, fix.lat, fix.lon) : null
+    postSample({ name, status, lat: fix?.lat, lon: fix?.lon, acc: fix?.acc, hall })
+  }, [fix, status, live, room, geoCfg, name])
   const calibrating = useMemo(() => new URLSearchParams(location.search).has('calibrate'), [])
 
   // Where to put the player back on campus when they leave the hall.
@@ -232,6 +243,7 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
           <Calibrate
             fix={fix}
             spots={CALIBRATION_SPOTS}
+            onMark={(label) => fix && postSample({ name, label, status, lat: fix.lat, lon: fix.lon, acc: fix.acc })}
             onApply={(c) => {
               save('gt.geo', c)
               setGeoCfg(c)
@@ -260,4 +272,12 @@ export default function App() {
       <Game campus={campus} name={who.name} color={who.color} />
     </Suspense>
   )
+}
+
+function postSample(s: Record<string, unknown>) {
+  fetch('/api/geo/samples', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...s, t: new Date().toISOString(), ua: navigator.userAgent.slice(0, 80) }),
+  }).catch(() => {})
 }

@@ -4,3 +4,4 @@ server/server
 .DS_Store
 .claude/
 *.log
+server/geo_samples.jsonl

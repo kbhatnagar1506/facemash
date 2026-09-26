@@ -6,8 +6,10 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
+	"io"
 	"log"
 	"math"
 	"net/http"
@@ -299,6 +301,7 @@ func main() {
 	static := flag.String("static", "../client/dist", "built client to serve")
 	eventFile := flag.String("event", "event.json", "HackGT event card")
 	geoFile := flag.String("geo", "geo.json", "GPS to Klaus atrium alignment")
+	samplesFile := flag.String("samples", "geo_samples.jsonl", "recorded location samples")
 	flag.Parse()
 
 	// ALLOWED_ORIGINS=https://gt.example.com,https://other.example.com
@@ -361,6 +364,32 @@ func main() {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
+		w.Write(b)
+	})
+	// Location samples from players in the atrium (for mapping GPS onto the model).
+	// POST appends one JSON object per line; GET returns the file.
+	var samplesMu sync.Mutex
+	mux.HandleFunc("/api/geo/samples", func(w http.ResponseWriter, r *http.Request) {
+		samplesMu.Lock()
+		defer samplesMu.Unlock()
+		if r.Method == http.MethodPost {
+			b, err := io.ReadAll(io.LimitReader(r.Body, 2048))
+			if err != nil || !json.Valid(b) {
+				http.Error(w, "bad sample", http.StatusBadRequest)
+				return
+			}
+			f, err := os.OpenFile(*samplesFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			if err != nil {
+				http.Error(w, "cannot write", http.StatusInternalServerError)
+				return
+			}
+			defer f.Close()
+			f.Write(append(bytes.TrimSpace(b), '\n'))
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		b, _ := os.ReadFile(*samplesFile)
+		w.Header().Set("Content-Type", "application/x-ndjson")
 		w.Write(b)
 	})
 	mux.HandleFunc("/api/online", func(w http.ResponseWriter, r *http.Request) {

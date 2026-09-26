@@ -30,6 +30,7 @@ export function LivePill({
   return (
     <button className={on ? 'live-pill on' : 'live-pill'} onClick={onToggle} title="Beta mode on = keys; off = live GPS">
       {live ? '📍' : '🧪'} {text}{live ? ' · tap for beta mode' : ''}
+      {live && fix && <span className="live-raw">{fix.lat.toFixed(6)}, {fix.lon.toFixed(6)}</span>}
     </button>
   )
 }
@@ -39,11 +40,12 @@ export function LivePill({
  * known spots in the atrium, tap each, and paste the result into server/geo.json.
  */
 export function Calibrate({
-  fix, spots, onApply,
+  fix, spots, onApply, onMark,
 }: {
   fix: Fix | null
   spots: { name: string; h: Pt2 }[]
   onApply: (cfg: GeoCfg) => void
+  onMark?: (label: string) => void
 }) {
   const [pairs, setPairs] = useState<{ name: string; c: Pt2; h: Pt2 }[]>([])
   const cfg = solve(pairs)
@@ -57,7 +59,11 @@ export function Calibrate({
           <button
             key={s.name}
             disabled={!fix}
-            onClick={() => fix && setPairs((p) => [...p.filter((q) => q.name !== s.name), { name: s.name, c: toCampus(fix.lat, fix.lon), h: s.h }])}
+            onClick={() => {
+              if (!fix) return
+              onMark?.(s.name)
+              setPairs((p) => [...p.filter((q) => q.name !== s.name), { name: s.name, c: toCampus(fix.lat, fix.lon), h: s.h }])
+            }}
           >
             {pairs.some((p) => p.name === s.name) ? '✓ ' : ''}
             {s.name}
