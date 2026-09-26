@@ -691,6 +691,20 @@ html.scroll-page #root {
 .acct-menu a:hover {
   background: rgba(27, 29, 36, 0.05);
 }
+.acct-menu a {
+  display: block;
+  box-sizing: border-box;
+  text-decoration: none;
+}
+/* thumbs: full 44px rows (the look stays the same) */
+@media (pointer: coarse) {
+  .acct-menu button,
+  .acct-menu a {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}
 
 .sheet-backdrop {
   position: fixed;
@@ -786,6 +800,13 @@ html.scroll-page #root {
 .sheet-close svg {
   width: 14px;
   height: 14px;
+}
+/* 32px to look at, 44px to hit */
+.sheet-close::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
 }
 @keyframes fade-in {
   from {
