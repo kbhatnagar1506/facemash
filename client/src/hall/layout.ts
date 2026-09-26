@@ -129,8 +129,6 @@ export const GROUND_BLOCKS: Box[] = [
   [-3.7, -11.8, -1.9, -5.8], // HackGT Help Desk + the bear (beside Tables 1 & 3)
   // entrance lobby (photos: doors, Seminar Room West, Research Wing)
   [X1 - 0.9, 16.1, X1 - 0.1, 16.9], // trash can by the doors
-  [-3.2, 21.8, 0, 23.2], // folding tables outside Seminar Room West
-  [1.6, 23.4, 4.8, 24.8],
   [westX(21) + 0.1, 19.7, westX(21) + 0.9, 21.7], // 3-bin recycling station at the stair base
   [westX(19.2) + 0.2, 18.9, westX(19.2) + 0.8, 19.5], // black chair
   [westX(-15.6) + 0.1, -17.5, westX(-15.6) + 1.1, -13.4], // bins, boxes, wet-floor sign

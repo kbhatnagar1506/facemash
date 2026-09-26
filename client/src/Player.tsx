@@ -390,9 +390,27 @@ export function Player({
 
     // Keep the shadow-casting sun centered on the player.
     // Morning: the sun is low in the east, so it rakes in through Klaus's east windows.
-    light.current.position.set(p.x + 110, 55, p.y + 25)
-    light.current.intensity = view.mode === 'inside' ? 1.1 : 2 // softer indoors
+    const indoor = view.mode === 'inside'
+    if (indoor) {
+      // Indoors: a higher sun with a tight, sharp shadow map around the player so
+      // tables, chairs, people and railings all throw crisp shadows on the terrazzo.
+      light.current.position.set(p.x + 34, 52, p.y + 14)
+      light.current.intensity = 1.9
+    } else {
+      light.current.position.set(p.x + 110, 55, p.y + 25)
+      light.current.intensity = 2
+    }
     light.current.target.position.set(p.x, 0, p.y)
+    const sc = light.current.shadow.camera
+    const half = indoor ? 34 : 90
+    if (sc.right !== half) {
+      sc.left = sc.bottom = -half
+      sc.right = sc.top = half
+      sc.far = indoor ? 160 : 400
+      sc.updateProjectionMatrix()
+      light.current.shadow.bias = indoor ? -0.0002 : -0.0004
+      light.current.shadow.normalBias = indoor ? 0.03 : 0
+    }
 
     sendAcc.current += dt
     if (sendAcc.current >= 1 / SEND_HZ) {
@@ -408,7 +426,8 @@ export function Player({
         intensity={2}
         color="#ffe1b3"
         castShadow
-        shadow-mapSize={[2048, 2048]}
+        shadow-mapSize={[4096, 4096]}
+        shadow-radius={3}
         shadow-camera-left={-90}
         shadow-camera-right={90}
         shadow-camera-top={90}

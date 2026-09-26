@@ -148,7 +148,7 @@ function Gull({ at, i }: { at: THREE.Vector3Tuple; i: number }) {
         <cylinderGeometry args={[0.006, 0.006, CEIL - at[1], 3]} />
         <meshBasicMaterial color="#e8e6e0" transparent opacity={0.5} />
       </mesh>
-      <mesh scale={[0.22, 0.2, 0.62]}>
+      <mesh scale={[0.22, 0.2, 0.62]} castShadow>
         <sphereGeometry args={[1, 12, 10]} />
         <meshLambertMaterial color="#ffffff" />
       </mesh>
@@ -161,12 +161,12 @@ function Gull({ at, i }: { at: THREE.Vector3Tuple; i: number }) {
         <meshBasicMaterial color="#d6423a" />
       </mesh>
       <group ref={wl} position={[0.12, 0.05, 0.05]}>
-        <mesh geometry={wing} rotation-x={-Math.PI / 2}>
+        <mesh geometry={wing} rotation-x={-Math.PI / 2} castShadow>
           <meshLambertMaterial color="#fbfbf9" side={THREE.DoubleSide} />
         </mesh>
       </group>
       <group ref={wr} position={[-0.12, 0.05, 0.05]} scale={[-1, 1, 1]}>
-        <mesh geometry={wing} rotation-x={-Math.PI / 2}>
+        <mesh geometry={wing} rotation-x={-Math.PI / 2} castShadow>
           <meshLambertMaterial color="#fbfbf9" side={THREE.DoubleSide} />
         </mesh>
       </group>

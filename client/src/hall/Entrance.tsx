@@ -8,7 +8,7 @@ import { FoldingChair } from './Sponsors'
 //  - the main doors: two pairs of white-framed glass doors, EXIT signs, a white
 //    pillar with a sanitizer dispenser, glass sidelights and a trash can;
 //  - to the west: Seminar Room West (wooden double doors, one open), a side
-//    corridor, recycling bin, and folding tables where people hack;
+//    corridor and recycling bin;
 //  - to the east: the Klaus Research Wing glass vestibule with its EXIT sign,
 //    info kiosk, AED, green plaque, the lobby screen and a folding table.
 
@@ -279,20 +279,6 @@ function SeminarRoom() {
       </group>
       {/* side corridor off the lobby */}
       <Plane p={[westX(Z1) + 2.4, 1.6, Z - 0.02]} w={4.2} h={3.2} map={corridor} basic />
-      {/* folding tables where people hack in the lobby */}
-      {[[-1.6, 22.5], [3.2, 24.1]].map(([x, z]) => (
-        <group key={x} position={[x, 0, z]}>
-          <Box p={[0, 0.74, 0]} s={[3, 0.05, 1.2]} color="#e2c79c" />
-          {[[-1.35, -0.5], [1.35, -0.5], [-1.35, 0.5], [1.35, 0.5]].map(([lx, lz], i) => (
-            <Box key={i} p={[lx, 0.37, lz]} s={[0.04, 0.74, 0.04]} color="#bfc3c7" />
-          ))}
-          <Box p={[0.8, 0.8, 0.1]} s={[0.45, 0.03, 0.32]} color="#2b2d33" />
-          <mesh position={[-0.9, 0.86, -0.2]}>
-            <cylinderGeometry args={[0.04, 0.04, 0.24, 10]} />
-            <meshLambertMaterial color="#1a1b1f" />
-          </mesh>
-        </group>
-      ))}
     </group>
   )
 }

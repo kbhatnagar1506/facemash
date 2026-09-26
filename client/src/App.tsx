@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { Bloom, EffectComposer, Vignette } from '@react-three/postprocessing'
+import { Bloom, EffectComposer, N8AO, Vignette } from '@react-three/postprocessing'
 import { Collider, loadCampus, type Campus } from './map'
 import { Net } from './net'
 import { World } from './World'
@@ -185,7 +185,7 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
   return (
     <>
       <Canvas
-        shadows
+        shadows="soft"
         dpr={[1, 1.5]}
         camera={{ fov: 40, near: 1, far: 1800, position: [start[0], 25, start[1] + 20] }}
       >
@@ -193,7 +193,7 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
         <fog attach="fog" args={['#bfe6ff', 180, 700]} />
         {/* campus: sky + grass bounce; inside Klaus: warm neutral bounce off the terrazzo */}
         <hemisphereLight
-          args={room === 'hackgt' ? ['#fff6ea', '#cfc8ba', 1.6] : ['#e8f2ff', '#7faf65', 1.1]}
+          args={room === 'hackgt' ? ['#fff6ea', '#bdb5a6', 1.15] : ['#e8f2ff', '#7faf65', 1.1]}
           key={room}
         />
         <group visible={room === 'campus'}>
@@ -217,6 +217,8 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
         <Remotes net={net} scale={room === 'hackgt' ? PERSON_SCALE : 1} />
         {/* glow on lights, screens and signs; soft vignette to frame the shot */}
         <EffectComposer multisampling={4}>
+          {/* ambient occlusion indoors: contact darkening under tables, chairs, bags and along every corner */}
+          {room === 'hackgt' ? <N8AO halfRes aoRadius={1.4} distanceFalloff={0.6} intensity={2.6} color="#2a2420" /> : <></>}
           <Bloom mipmapBlur intensity={room === 'hackgt' ? 0.35 : 0.25} luminanceThreshold={0.99} luminanceSmoothing={0.03} />
           <Vignette offset={0.3} darkness={0.55} />
         </EffectComposer>

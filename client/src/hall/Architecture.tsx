@@ -1,7 +1,6 @@
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { BALCONY, CEIL, COLUMNS, CX, CXB, SAG, SLANT, WEST_ZS, XB, ceilY, eastX, wallZ, westX, DOORS_Z, HALL, L1, MEZZ_WEST_Z, MEZZ_X0, MEZZ_Z, STAIR, X0, X1, Z0, Z1 } from './layout'
 import { Entrance } from './Entrance'
 import { addTerrazzo } from './detail'
@@ -321,38 +320,12 @@ function Ceiling() {
     g.setAttribute('position', new THREE.Float32BufferAttribute(hi, 3))
     return g
   }, [lights])
-  // Polished terrazzo: every downlight shows up as a soft glint on the floor (floor photo).
-  const glint = useMemo(() => {
-    const c = document.createElement('canvas')
-    c.width = c.height = 64
-    const g = c.getContext('2d')!
-    const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32)
-    grd.addColorStop(0, 'rgba(255,253,245,1)')
-    grd.addColorStop(0.18, 'rgba(255,250,235,.45)')
-    grd.addColorStop(1, 'rgba(255,250,235,0)')
-    g.fillStyle = grd
-    g.fillRect(0, 0, 64, 64)
-    return new THREE.CanvasTexture(c)
-  }, [])
-  const glintGeo = useMemo(() => {
-    const parts = lights.map(([x, y, z]) => {
-      const s = y > L1 + 2 ? 0.7 : 0.45
-      const q = new THREE.PlaneGeometry(s, s)
-      q.rotateX(-Math.PI / 2)
-      q.translate(x, 0.012, z)
-      return q
-    })
-    return mergeGeometries(parts)!
-  }, [lights])
   const starMat = useRef<THREE.PointsMaterial>(null!)
   useFrame(({ clock }) => {
     if (starMat.current) starMat.current.size = 2.2 + Math.sin(clock.elapsedTime * 1.3) * 0.15 // gentle shimmer
   })
   return (
     <group>
-      <mesh geometry={glintGeo}>
-        <meshBasicMaterial map={glint} transparent opacity={0.55} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
-      </mesh>
       <points geometry={starGeo}>
         <pointsMaterial ref={starMat} map={star} size={2.2} sizeAttenuation transparent depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
       </points>
@@ -637,12 +610,13 @@ function Stair() {
       for (let i = 0; i <= N; i++) {
         const t = i / N
         const z = zBottom - t * (zBottom - zTop)
-        const y = t * L1 + 1.12 - sag * Math.abs(Math.sin(Math.PI * 7 * t + phase))
+        const y = t * L1 + 1.05 - sag * Math.abs(Math.sin(Math.PI * 7 * t + phase))
         pts.push(new THREE.Vector3(x, y, z))
       }
-      return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 400, 0.13, 8, false)
+      return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 400, 0.11, 8, false)
     }
-    return [make(x1 + 0.05, 0.55, 0), make(x1 + 0.12, 0.4, 0.8), make(x0 - 0.05, 0.5, 0.4)]
+    // hung clear of the glass, the net and each other so nothing interpenetrates
+    return [make(x1 + 0.34, 0.55, 0), make(x1 + 0.62, 0.4, 0.8), make(x0 - 0.3, 0.5, 0.4)]
   }, [x0, x1, zBottom, zTop])
   return (
     <group>
@@ -661,7 +635,7 @@ function Stair() {
       {/* glass balustrades + steel handrails */}
       {[x0, x1].map((x) => (
         <group key={`r${x}`}>
-          <mesh geometry={netGeo} position={[x, 0, 0]}>
+          <mesh geometry={netGeo} position={[x, 0, 0]} renderOrder={1}>
             <meshLambertMaterial color="#cfe8e2" transparent opacity={0.25} side={THREE.DoubleSide} depthWrite={false} />
           </mesh>
           <mesh
@@ -674,8 +648,8 @@ function Stair() {
         </group>
       ))}
       {/* the fishing net draped over the room side */}
-      <mesh geometry={netGeo} position={[x1 + 0.08, 0, 0]}>
-        <meshBasicMaterial map={net} transparent side={THREE.DoubleSide} depthWrite={false} />
+      <mesh geometry={netGeo} position={[x1 + 0.14, 0, 0]}>
+        <meshBasicMaterial map={net} alphaTest={0.35} side={THREE.DoubleSide} />
       </mesh>
       {garlands.map((g, i) => (
         <mesh key={i} geometry={g}>

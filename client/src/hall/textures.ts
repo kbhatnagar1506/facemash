@@ -254,14 +254,15 @@ export function netTexture() {
   const c = document.createElement('canvas')
   c.width = c.height = 256
   const g = c.getContext('2d')!
-  g.strokeStyle = 'rgba(70,70,60,.85)'
-  g.lineWidth = 3
-  for (let i = -256; i < 512; i += 24) {
+  g.strokeStyle = 'rgba(70,70,60,1)'
+  g.lineWidth = 5
+  for (let i = -256; i < 512; i += 32) {
     g.beginPath(); g.moveTo(i, 0); g.lineTo(i + 256, 256); g.stroke()
     g.beginPath(); g.moveTo(i + 256, 0); g.lineTo(i, 256); g.stroke()
   }
   const t = tex(c)
   t.wrapS = t.wrapT = THREE.RepeatWrapping
+  t.anisotropy = 16
   return t
 }
 
