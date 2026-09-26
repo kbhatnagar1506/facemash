@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { hms, spinner, stamp } from '../ui/time'
+import { Avatar } from './Avatar'
 import { RADIUS_M, USER, type Chat, type User } from './data'
 import { chatStart, type Phase } from './timing'
 
@@ -95,23 +96,29 @@ export function ChatFocus({ c, p, now, origin, onClose }: Props) {
               const who = (m.from === 'a' ? A : B).name.split(' ')[0]
               return (
                 <div key={i} className={`fm ${m.from}${m.src ? '' : ' struck'}`}>
-                  <div className="fm-meta">
-                    <time title={stamp(at)}>{hms(at)}</time> · muse·{who}
+                  <Avatar id={m.from === 'a' ? c.a : c.b} size={40} />
+                  <div className="fm-body">
+                    <div className="fm-meta">
+                      <time title={stamp(at)}>{hms(at)}</time> · muse·{who}
+                    </div>
+                    <div className="fm-bubble">{m.text}</div>
+                    <div className="fm-src">{m.src ? `↳ from ${m.src}` : `⊘ OpenClaw: no source in ${who}'s history, withheld from scoring`}</div>
                   </div>
-                  <div className="fm-bubble">{m.text}</div>
-                  <div className="fm-src">{m.src ? `↳ from ${m.src}` : `⊘ OpenClaw: no source in ${who}'s history, withheld from scoring`}</div>
                 </div>
               )
             })}
             {typing && (
               <div className={`fm ${typing.from} typing`}>
-                <div className="fm-meta">muse·{(typing.from === 'a' ? A : B).name.split(' ')[0]} is replying</div>
-                <div className="fm-bubble">
-                  <span className="bounce">
-                    <i />
-                    <i />
-                    <i />
-                  </span>
+                <Avatar id={typing.from === 'a' ? c.a : c.b} size={40} />
+                <div className="fm-body">
+                  <div className="fm-meta">muse·{(typing.from === 'a' ? A : B).name.split(' ')[0]} is replying</div>
+                  <div className="fm-bubble">
+                    <span className="bounce">
+                      <i />
+                      <i />
+                      <i />
+                    </span>
+                  </div>
                 </div>
               </div>
             )}
@@ -159,7 +166,10 @@ function Person({ u, side, cited }: { u: User; side: 'a' | 'b'; cited: string[] 
   return (
     <section className={`f-person ${u.active ? 'on' : 'off'} ${side}`}>
       <div className="u-state">{u.active ? '● ACTIVE' : `○ INACTIVE · ${u.lastSeen}`}</div>
-      <div className="fp-name">{u.name}</div>
+      <div className="fp-name">
+        <Avatar id={u.id} size={44} />
+        {u.name}
+      </div>
       <div className="fp-role">{u.role}</div>
       <div className="fp-row">▸ building {u.building}</div>
       <div className="fp-row">

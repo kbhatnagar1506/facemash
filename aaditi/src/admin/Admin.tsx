@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState, type MouseEvent, type PointerEvent as RPointerEvent, type ReactNode } from 'react'
 import { hms, spinner, stamp, useNow } from '../ui/time'
+import { Avatar } from './Avatar'
 import { ChatFocus } from './ChatFocus'
 import { CHATS, RADIUS_M, RING, USER, USERS, type Chat } from './data'
 import { LOAD, chatPhase, type Phase } from './timing'
@@ -282,7 +283,10 @@ export function Admin() {
               <div className="u-top">
                 <span className={`u-state ${u.active ? 'on' : 'off'}`}>{u.active ? (busy.has(u.id) ? '● IN AGENT CHAT' : '● ACTIVE') : `○ INACTIVE · ${u.lastSeen}`}</span>
               </div>
-              <div className="u-name">{u.name}</div>
+              <div className="u-name">
+                <Avatar id={u.id} size={26} />
+                {u.name}
+              </div>
               <div className="u-role">{u.role}</div>
               <div className="u-row">▸ building {u.building}</div>
               <div className="u-row">
@@ -411,17 +415,23 @@ function ChatCard({ c, b, now, p, cls, onPick, onFocus }: ChatProps) {
           const who = m.from === 'a' ? A : B
           return (
             <div key={i} className={`m ${m.from}${m.src ? '' : ' struck'}`}>
-              <div className="m-meta">
-                <time title={stamp(at)}>[{hms(at)}]</time> muse·{who}
+              <Avatar id={m.from === 'a' ? c.a : c.b} size={26} />
+              <div className="m-body">
+                <div className="m-meta">
+                  <time title={stamp(at)}>[{hms(at)}]</time> muse·{who}
+                </div>
+                <div className="m-text">{m.text}</div>
+                <div className="m-src">{m.src ? `↳ from ${m.src}` : `⊘ OpenClaw: no source in ${who}'s history, withheld from scoring`}</div>
               </div>
-              <div className="m-text">{m.text}</div>
-              <div className="m-src">{m.src ? `↳ from ${m.src}` : `⊘ OpenClaw: no source in ${who}'s history, withheld from scoring`}</div>
             </div>
           )
         })}
         {typing && (
           <div className="m typing">
-            {spinner(now)} muse·{typing.from === 'a' ? A : B} is replying…
+            <Avatar id={typing.from === 'a' ? c.a : c.b} size={26} />
+            <div className="m-body">
+              {spinner(now)} muse·{typing.from === 'a' ? A : B} is replying…
+            </div>
           </div>
         )}
       </div>
