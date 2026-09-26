@@ -20,6 +20,8 @@ export interface Campus {
     h: number
     /** Klaus doors from OSM: [x, z, facing radians], placed just outside the wall. */
     entrances: [number, number, number][]
+    /** Index into `entrances` of the HackGT main entrance. */
+    main?: number
   } | null
   buildings: Building[]
   roads: { pts: Pt[]; w: number; foot: boolean }[]

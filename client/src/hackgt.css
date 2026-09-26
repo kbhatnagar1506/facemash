@@ -143,3 +143,5 @@
   font: 13px var(--hg-display, 'Chewy'), 'Chewy', system-ui; color: #fff; white-space: nowrap;
   padding: 2px 10px; background: #003057; border: 2px solid #b3a369; border-radius: 8px;
 }
+
+.shell-tag.main { font-size: 19px; padding: 6px 16px; background: linear-gradient(#ffd966, #f5b700); border-color: #9a6a00; box-shadow: 0 4px 0 #9a6a00; }

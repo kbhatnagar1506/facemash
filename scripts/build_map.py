@@ -21,6 +21,8 @@ M_PER_LON = 111_320.0 * math.cos(math.radians(LAT0))
 EVENT_BUILDING = "Christopher W. Klaus Advanced Computing Building"
 # Entrance nodes of the event building (Overpass: way(42706123);node(w)["entrance"];out;)
 ENTRANCES = ROOT / "data" / "klaus_entrances.json"
+# The HackGT main entrance (OSM entrance=main on the courtyard side), confirmed on site.
+MAIN_ENTRANCE = (33.7768401, -84.396261)
 
 ROAD_WIDTH = {
     "motorway": 16, "trunk": 14, "primary": 12, "secondary": 11, "tertiary": 9,
@@ -193,12 +195,16 @@ def main():
 
     if event:
         event["entrances"] = entrances(event["pts"])
+        mx, mz = proj(*MAIN_ENTRANCE)
+        event["main"] = min(range(len(event["entrances"])),
+                            key=lambda i: math.hypot(event["entrances"][i][0] - mx, event["entrances"][i][1] - mz))
 
     allx = [x for b in buildings for x, _ in b["pts"]]
     allz = [z for b in buildings for _, z in b["pts"]]
     out = {
         "bounds": [min(allx) - 60, min(allz) - 60, max(allx) + 60, max(allz) + 60],
-        "spawn": [event["center"][0], event["center"][1] + 45] if event else [0, 0],
+        # start in front of the HackGT main entrance
+        "spawn": event["entrances"][event["main"]][:2] if event else [0, 0],
         "event": event,
         "buildings": buildings,
         "roads": roads,

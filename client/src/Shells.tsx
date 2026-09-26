@@ -34,9 +34,10 @@ function useShellGeometry() {
 }
 
 function Shell({
-  x, z, facing, onOpen, info, active,
+  x, z, facing, onOpen, info, active, main,
 }: {
   active: boolean
+  main: boolean
   x: number
   z: number
   facing: number
@@ -123,8 +124,8 @@ function Shell({
       </group>
       {/* Always mounted (unmounting drei <Html> mid-render throws); toggled with CSS. */}
       <Html position={[0, 5, 0]} center zIndexRange={[15, 0]} style={{ display: active && near ? undefined : 'none' }}>
-        <button className="shell-tag" onClick={onOpen}>
-          HackGT
+        <button className={main ? 'shell-tag main' : 'shell-tag'} onClick={onOpen}>
+          {main ? '⭐ HackGT · Main entrance' : 'HackGT'}
         </button>
       </Html>
     </group>
@@ -142,7 +143,7 @@ export function Shells({
   return (
     <>
       {campus.event?.entrances.map(([x, z, f], i) => (
-        <Shell key={i} x={x} z={z} facing={f} onOpen={onOpen} info={info} active={active} />
+        <Shell key={i} x={x} z={z} facing={f} onOpen={onOpen} info={info} active={active} main={i === campus.event?.main} />
       ))}
     </>
   )

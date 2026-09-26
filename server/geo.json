@@ -1,7 +1,7 @@
 {
   "a": 0,
-  "b": 1,
-  "tx": -102.5,
-  "tz": -158,
-  "note": "Best guess from OpenStreetMap: the atrium centred near the Klaus exit wall, the hall's east windows facing real north. Recalibrate on site: open the game with ?calibrate, stand at two far-apart spots, tap them, paste the result here."
+  "b": -1,
+  "tx": 114,
+  "tz": 182.9,
+  "note": "Aligned from the on-site annotation: the hall's east doors sit just inside the HackGT main entrance (OSM entrance=main, campus 160.9,-95.5); walking in (hall west) is real north, the back wall of the hall is real east. Refine on site with ?calibrate."
 }
