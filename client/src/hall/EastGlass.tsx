@@ -6,7 +6,7 @@ import { DOORS_Z, MEZZ_Z, X1, Z0, eastX } from './layout'
 // The east window wall from the on-site photos: chunky cream aluminium framing
 // standing proud of the glass (mullions every bay, a low sill band, two transoms),
 // glass doors with push bars and closers, black slot air diffusers in the white
-// band above, and the everyday clutter along it: an e-scooter, orange extension cords.
+// band above, and orange extension cords along the floor.
 
 const CREAM = '#e7e1d2'
 const H = 4.6 // glass height
@@ -127,36 +127,6 @@ function Diffusers() {
   )
 }
 
-/** A folded-out e-scooter parked against the glass. */
-function Scooter({ x, z, rot }: { x: number; z: number; rot: number }) {
-  return (
-    <group position={[x, 0, z]} rotation-y={rot}>
-      <mesh position={[0, 0.1, 0]} castShadow>
-        <boxGeometry args={[0.16, 0.05, 0.8]} />
-        <meshLambertMaterial color="#1d1e22" />
-      </mesh>
-      {[-0.42, 0.42].map((z) => (
-        <mesh key={z} position={[0, 0.11, z]} rotation-z={Math.PI / 2}>
-          <cylinderGeometry args={[0.11, 0.11, 0.06, 16]} />
-          <meshLambertMaterial color="#141417" />
-        </mesh>
-      ))}
-      <mesh position={[0, 0.62, 0.44]} rotation-x={-0.12} castShadow>
-        <cylinderGeometry args={[0.025, 0.025, 1.05, 8]} />
-        <meshLambertMaterial color="#1d1e22" />
-      </mesh>
-      <mesh position={[0, 1.13, 0.5]} rotation-z={Math.PI / 2}>
-        <cylinderGeometry args={[0.018, 0.018, 0.5, 8]} />
-        <meshLambertMaterial color="#1d1e22" />
-      </mesh>
-      <mesh position={[0, 0.7, 0.47]}>
-        <boxGeometry args={[0.03, 0.12, 0.012]} />
-        <meshBasicMaterial color="#d9412b" />
-      </mesh>
-    </group>
-  )
-}
-
 /** Orange extension cord snaking along the floor. */
 function Cord({ pts }: { pts: [number, number][] }) {
   const geo = useMemo(() => {
@@ -181,7 +151,6 @@ export function EastGlass() {
         <Door key={i} m={d.m} w={d.w} />
       ))}
       <Diffusers />
-      <Scooter x={X1 - 0.5} z={13.5} rot={0.2} />
       <Cord pts={[[X1 - 0.3, 12.8], [X1 - 0.6, 11.5], [X1 - 0.45, 10], [X1 - 0.8, 8.2], [X1 - 0.5, 6.8], [X1 - 0.35, 5.2]]} />
       <Cord pts={[[X1 - 0.3, 1.2], [X1 - 0.9, 0.6], [X1 - 1.4, 0.9], [X1 - 1.2, 0.2]]} />
     </group>

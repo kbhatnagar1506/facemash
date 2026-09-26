@@ -193,9 +193,12 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
         <fog attach="fog" args={['#bfe6ff', 180, 700]} />
         {/* campus: sky + grass bounce; inside Klaus: warm neutral bounce off the terrazzo */}
         <hemisphereLight
-          args={room === 'hackgt' ? ['#fff6ea', '#bdb5a6', 1.15] : ['#e8f2ff', '#7faf65', 1.1]}
+          args={room === 'hackgt' ? ['#fff6ea', '#cfc8ba', 1.45] : ['#e8f2ff', '#7faf65', 1.1]}
           key={room}
         />
+        {/* inside Klaus: the mezzanine's downlights, as a soft shadowless top light so the
+            lobby under the low ceiling isn't left dim when the sun can't reach it */}
+        {room === 'hackgt' && <directionalLight position={[-6, 30, 30]} intensity={0.55} color="#fff3e2" />}
         <group visible={room === 'campus'}>
           <World campus={campus} onOpenEvent={() => setEventOpen(true)} />
           <Shells campus={campus} info={info} onOpen={() => setEventOpen(true)} active={room === 'campus'} />

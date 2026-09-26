@@ -4,7 +4,7 @@ import * as THREE from 'three'
 import { BALCONY, CEIL, COLUMNS, CX, CXB, SAG, SLANT, WEST_ZS, XB, ceilY, eastX, wallZ, westX, DOORS_Z, HALL, L1, MEZZ_WEST_Z, MEZZ_X0, MEZZ_Z, STAIR, X0, X1, Z0, Z1 } from './layout'
 import { Entrance } from './Entrance'
 import { addTerrazzo } from './detail'
-import { ceilingTiles, checkerWall, glassPanes, netTexture, terrazzo } from './textures'
+import { ceilingTiles, checkerWall, glassPanes, terrazzo } from './textures'
 
 const WHITE = '#f4f2ee'
 
@@ -579,81 +579,119 @@ function UpperStair() {
 }
 
 function Stair() {
+  // From the on-site photo: a straight flight along the checkerboard wall, frameless
+  // clear glass both sides in slim panes, round stainless handrails, a deep white
+  // stringer and soffit, and a green paper garland spiralling round the atrium-side rail.
   const { x0, x1, zBottom, zTop, steps } = STAIR
   const run = (zBottom - zTop) / steps
   const rise = L1 / steps
   const w = x1 - x0
-  const net = useMemo(() => {
-    const t = netTexture()
-    t.repeat.set(6, 1.2)
-    return t
-  }, [])
-  // Parallelogram following the stair slope, for the net/stringer panels.
-  const slopePanel = (lo: number, hi: number) => {
+  const len = Math.hypot(L1, zBottom - zTop)
+  const slope = Math.atan2(L1, zBottom - zTop)
+  // Parallelogram following the stair slope between heights lo..hi above the nosing line.
+  const slopePanel = (lo: number, hi: number, t0 = 0, t1 = 1) => {
+    const za = zBottom - t0 * (zBottom - zTop)
+    const zb = zBottom - t1 * (zBottom - zTop)
+    const ya = t0 * L1
+    const yb = t1 * L1
     const g = new THREE.BufferGeometry()
-    const v = new Float32Array([
-      0, lo, zBottom, 0, hi, zBottom, 0, L1 + hi, zTop,
-      0, lo, zBottom, 0, L1 + hi, zTop, 0, L1 + lo, zTop,
-    ])
+    const v = new Float32Array([0, ya + lo, za, 0, ya + hi, za, 0, yb + hi, zb, 0, ya + lo, za, 0, yb + hi, zb, 0, yb + lo, zb])
     g.setAttribute('position', new THREE.BufferAttribute(v, 3))
-    g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array([0, 0, 0, 1, 1, 1, 0, 0, 1, 1, 1, 0]), 2))
     g.computeVertexNormals()
     return g
   }
-  const stringer = useMemo(() => slopePanel(-0.7, 0.05), [])
-  const netGeo = useMemo(() => slopePanel(-0.6, 1.05), [])
-  // Scalloped paper garlands swagging between the rail posts.
-  const garlands = useMemo(() => {
-    const make = (x: number, sag: number, phase: number) => {
-      const pts: THREE.Vector3[] = []
-      const N = 160
-      for (let i = 0; i <= N; i++) {
-        const t = i / N
-        const z = zBottom - t * (zBottom - zTop)
-        const y = t * L1 + 1.05 - sag * Math.abs(Math.sin(Math.PI * 7 * t + phase))
-        pts.push(new THREE.Vector3(x, y, z))
-      }
-      return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 400, 0.11, 8, false)
+  const stringer = useMemo(() => slopePanel(-0.85, 0.06), []) // eslint-disable-line react-hooks/exhaustive-deps
+  const soffit = useMemo(() => {
+    // the white underside of the flight
+    const g = new THREE.PlaneGeometry(w + 0.1, len)
+    g.rotateX(-Math.PI / 2 + slope)
+    g.translate((x0 + x1) / 2, L1 / 2 - 0.8, (zBottom + zTop) / 2)
+    return g
+  }, [w, len, slope, x0, x1, zBottom, zTop])
+  // slim glass panes with small gaps, like the photo
+  const panes = useMemo(() => {
+    const n = 8
+    return Array.from({ length: n }, (_, i) => slopePanel(0.1, 1.02, i / n + 0.004, (i + 1) / n - 0.004))
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const garland = useMemo(() => {
+    // paper garland wound round the rail: a helix around the handrail line
+    const d = new THREE.Vector3(0, L1, zTop - zBottom).normalize()
+    const u = new THREE.Vector3(1, 0, 0)
+    const v = new THREE.Vector3().crossVectors(d, u)
+    const pts: THREE.Vector3[] = []
+    const N = 520
+    for (let i = 0; i <= N; i++) {
+      const t = i / N
+      const th = t * Math.PI * 2 * 22
+      const c = new THREE.Vector3(x1 + 0.02, t * L1 + 1.08, zBottom - t * (zBottom - zTop))
+      pts.push(c.addScaledVector(u, Math.cos(th) * 0.13).addScaledVector(v, Math.sin(th) * 0.13))
     }
-    // hung clear of the glass, the net and each other so nothing interpenetrates
-    return [make(x1 + 0.34, 0.55, 0), make(x1 + 0.62, 0.4, 0.8), make(x0 - 0.3, 0.5, 0.4)]
-  }, [x0, x1, zBottom, zTop])
+    return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 1400, 0.055, 6, false)
+  }, [x1, zBottom, zTop])
+  const leaves = useMemo(() => {
+    // puffs of paper leaves along the garland
+    const out: [number, number, number][] = []
+    for (let i = 0; i < 46; i++) {
+      const t = (i + 0.5) / 46
+      out.push([x1 + 0.02 + Math.cos(i * 2.4) * 0.14, t * L1 + 1.08 + Math.sin(i * 2.4) * 0.12, zBottom - t * (zBottom - zTop)])
+    }
+    return out
+  }, [x1, zBottom, zTop])
   return (
     <group>
       {Array.from({ length: steps }, (_, i) => (
-        <mesh key={i} position={[(x0 + x1) / 2, rise * (i + 0.5), zBottom - run * (i + 0.5)]} castShadow receiveShadow>
-          <boxGeometry args={[w, rise, run]} />
-          <meshLambertMaterial color={i % 2 ? '#dfe7e4' : '#d4dedb'} />
-        </mesh>
-      ))}
-      {/* white stringers under both sides */}
-      {[x0, x1].map((x) => (
-        <mesh key={x} geometry={stringer} position={[x, 0, 0]}>
-          <meshLambertMaterial color={WHITE} side={THREE.DoubleSide} />
-        </mesh>
-      ))}
-      {/* glass balustrades + steel handrails */}
-      {[x0, x1].map((x) => (
-        <group key={`r${x}`}>
-          <mesh geometry={netGeo} position={[x, 0, 0]} renderOrder={1}>
-            <meshLambertMaterial color="#cfe8e2" transparent opacity={0.25} side={THREE.DoubleSide} depthWrite={false} />
+        <group key={i}>
+          <mesh position={[(x0 + x1) / 2, rise * (i + 0.5), zBottom - run * (i + 0.5)]} castShadow receiveShadow>
+            <boxGeometry args={[w, rise, run]} />
+            <meshLambertMaterial color="#dcdad4" />
           </mesh>
-          <mesh
-            position={[x, L1 / 2 + 1.1, (zBottom + zTop) / 2]}
-            rotation-x={Math.atan2(L1, zBottom - zTop)}
-          >
-            <boxGeometry args={[0.06, 0.06, Math.hypot(L1, zBottom - zTop)]} />
-            <meshLambertMaterial color="#b9bec4" />
+          {/* darker anti-slip nosing strip */}
+          <mesh position={[(x0 + x1) / 2, rise * (i + 1) + 0.002, zBottom - run * i - 0.04]}>
+            <boxGeometry args={[w - 0.06, 0.004, 0.05]} />
+            <meshLambertMaterial color="#7d7f82" />
           </mesh>
         </group>
       ))}
-      {/* the fishing net draped over the room side */}
-      <mesh geometry={netGeo} position={[x1 + 0.14, 0, 0]}>
-        <meshBasicMaterial map={net} alphaTest={0.35} side={THREE.DoubleSide} />
+      {/* deep white stringers and the soffit underneath */}
+      {[x0 - 0.02, x1 + 0.02].map((x) => (
+        <mesh key={x} geometry={stringer} position={[x, 0, 0]} castShadow>
+          <meshLambertMaterial color={WHITE} side={THREE.DoubleSide} />
+        </mesh>
+      ))}
+      <mesh geometry={soffit}>
+        <meshLambertMaterial color={WHITE} side={THREE.DoubleSide} />
       </mesh>
-      {garlands.map((g, i) => (
-        <mesh key={i} geometry={g}>
-          <meshToonMaterial color={['#5fd07a', '#2e9e57', '#8ee29a'][i]} />
+      {/* frameless glass: slim panes, steel shoe clamps, round stainless rails */}
+      {[x0, x1].map((x) => (
+        <group key={`r${x}`}>
+          {panes.map((g, i) => (
+            <mesh key={i} geometry={g} position={[x, 0, 0]} renderOrder={1}>
+              <meshStandardMaterial color="#d6ece8" roughness={0.05} metalness={0.2} transparent opacity={0.2} side={THREE.DoubleSide} depthWrite={false} />
+            </mesh>
+          ))}
+          {Array.from({ length: 9 }, (_, i) => {
+            const t = i / 8
+            return (
+              <mesh key={i} position={[x, t * L1 + 0.1, zBottom - t * (zBottom - zTop)]}>
+                <boxGeometry args={[0.06, 0.08, 0.12]} />
+                <meshStandardMaterial color="#c8ccd1" metalness={0.8} roughness={0.3} />
+              </mesh>
+            )
+          })}
+          <mesh position={[x, L1 / 2 + 1.08, (zBottom + zTop) / 2]} rotation-x={Math.PI / 2 - slope} castShadow>
+            <cylinderGeometry args={[0.028, 0.028, len + 0.3, 12]} />
+            <meshStandardMaterial color="#d7dade" metalness={0.85} roughness={0.25} />
+          </mesh>
+        </group>
+      ))}
+      {/* the green garland wound round the atrium-side rail */}
+      <mesh geometry={garland} castShadow>
+        <meshToonMaterial color="#3fb865" />
+      </mesh>
+      {leaves.map((p, i) => (
+        <mesh key={i} position={p} rotation={[i, i * 0.7, 0]} scale={[1, 0.55, 1]}>
+          <icosahedronGeometry args={[0.1, 0]} />
+          <meshToonMaterial color={i % 3 ? '#5fd07a' : '#8ee29a'} />
         </mesh>
       ))}
     </group>
