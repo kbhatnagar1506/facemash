@@ -88,33 +88,70 @@ export function terrazzo() {
  * recessed windows, a few lit from offices inside.
  */
 export function checkerWall(cols: number, rows: number, windowCols: number[], seed = 3) {
+  // Klaus atrium wall, from the photos: bays split by slim pilasters; each bay is a
+  // stack of square panels in beige / taupe / warm grey / sage, with frosted glass
+  // panels on standoff bolts, dark window openings, and a few brightly lit windows.
   const P = 96
   const c = document.createElement('canvas')
   c.width = cols * P
   c.height = rows * P
   const g = c.getContext('2d')!
-  const shades = ['#c9c3b6', '#9d978a', '#dcd8cf', '#aeb0a2', '#bdb6a6', '#8a877d', '#c5cabd', '#e3e0d8']
   const r = rng(seed)
+  const tones = ['#d8d1c2', '#bdb4a2', '#a39b8a', '#8e8778', '#c7c6b6', '#aeb3a2', '#e4dfd4', '#958e7f']
+  const win = new Set(windowCols)
   for (let i = 0; i < cols; i++)
     for (let j = 0; j < rows; j++) {
-      g.fillStyle = shades[Math.floor(r() * shades.length)]
-      g.fillRect(i * P, j * P, P, P)
-      g.strokeStyle = 'rgba(60,55,45,.25)'
+      const x = i * P
+      const y = j * P
+      const t = tones[Math.floor(r() * tones.length)]
+      g.fillStyle = t
+      g.fillRect(x, y, P, P)
+      // subtle vertical sheen on each panel
+      const sh = g.createLinearGradient(x, 0, x + P, 0)
+      sh.addColorStop(0, 'rgba(255,255,255,.06)')
+      sh.addColorStop(1, 'rgba(0,0,0,.06)')
+      g.fillStyle = sh
+      g.fillRect(x, y, P, P)
+      const roll = r()
+      const top = j < 2
+      if (win.has(i) && j < rows - 1 && roll < 0.55) {
+        // window opening: deep dark recess with a light frame; a few are lit
+        const lit = top && r() < 0.45
+        g.fillStyle = '#6f6a60'
+        g.fillRect(x + 12, y + 14, P - 24, P - 26)
+        g.fillStyle = lit ? '#fff4d2' : '#2a2f33'
+        g.fillRect(x + 16, y + 18, P - 32, P - 34)
+        if (!lit) {
+          g.fillStyle = 'rgba(160,190,205,.25)'
+          g.fillRect(x + 16, y + 18, P - 32, 10)
+        }
+      } else if (roll > 0.72) {
+        // frosted glass panel on four standoff bolts, casting a slight shadow
+        g.fillStyle = 'rgba(0,0,0,.12)'
+        g.fillRect(x + 12, y + 12, P - 20, P - 20)
+        g.fillStyle = 'rgba(205,224,214,.85)'
+        g.fillRect(x + 8, y + 8, P - 20, P - 20)
+        g.fillStyle = 'rgba(255,255,255,.35)'
+        g.fillRect(x + 8, y + 8, P - 20, 5)
+        g.fillStyle = '#8f9496'
+        for (const [bx, by] of [[14, 14], [P - 18, 14], [14, P - 18], [P - 18, P - 18]]) {
+          g.beginPath()
+          g.arc(x + bx, y + by, 3, 0, Math.PI * 2)
+          g.fill()
+        }
+      }
+      // panel joints
+      g.strokeStyle = 'rgba(55,50,42,.3)'
       g.lineWidth = 2
-      g.strokeRect(i * P + 1, j * P + 1, P - 2, P - 2)
+      g.strokeRect(x + 1, y + 1, P - 2, P - 2)
     }
-  for (const i of windowCols)
-    for (let j = 0; j < rows - 1; j++) {
-      const lit = r() < 0.18
-      const x = i * P + P * 0.18
-      const y = j * P + P * 0.22
-      g.fillStyle = '#7d7a72'
-      g.fillRect(x - 5, y - 5, P * 0.64 + 10, P * 0.62 + 10)
-      g.fillStyle = lit ? '#f6ecc4' : '#9fbccb' // glass catching the daylight, not black
-      g.fillRect(x, y, P * 0.64, P * 0.62)
-      g.fillStyle = 'rgba(255,255,255,.18)'
-      g.fillRect(x, y, P * 0.64, 4)
-    }
+  // slim pilasters every two panels
+  for (let i = 0; i <= cols; i += 2) {
+    g.fillStyle = 'rgba(245,242,235,.9)'
+    g.fillRect(i * P - 4, 0, 8, c.height)
+    g.fillStyle = 'rgba(0,0,0,.12)'
+    g.fillRect(i * P + 4, 0, 3, c.height)
+  }
   return tex(c)
 }
 

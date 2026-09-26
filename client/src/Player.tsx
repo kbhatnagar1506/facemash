@@ -37,6 +37,8 @@ export type View =
       ceiling?: (x: number, z: number, y: number) => number
       /** Draw people smaller so the building reads at true size; speed and camera follow. */
       scale?: number
+      /** Where you appear in this room (the cinematic lands behind you here). */
+      spawn?: [number, number]
     }
 
 export function Player({
@@ -91,17 +93,20 @@ export function Player({
       cam.near = 0.1
       cam.fov = 60
       // Cinematic sweep through the atrium on the way in (any key or click skips it).
-      const [sx, sz] = start
+      const [sx, sz] = view.spawn ?? start
       const q = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
       introPath.current = {
-        pos: new THREE.CatmullRomCurve3([q(18, 3.2, 24), q(9, 8, 12), q(-3, 13, -6), q(-10, 9.5, -19), q(6, 7, -10), q(sx + 3.5, 2.6, sz + 0.5)], false, 'catmullrom', 0.4),
-        look: new THREE.CatmullRomCurve3([q(0, 3, 12), q(0, 2, -8), q(6, 3, -26), q(14, 3, -6), q(12, 1.5, 10), q(sx - 3, 1, sz)], false, 'catmullrom', 0.4),
+        pos: new THREE.CatmullRomCurve3([q(17, 3.2, 23), q(9, 3.3, 9), q(5, 3.8, 0), q(1, 9.5, -7), q(-5, 9.5, -17), q(7, 7, -10), q(13, 3.3, 0), q(sx + 3.5, 2.6, sz + 0.5)], false, 'centripetal'),
+        look: new THREE.CatmullRomCurve3([q(0, 3, 12), q(0, 4, -12), q(2, 8, -30), q(14, 4, -8), q(12, 2, 8), q(10, 1.5, 14), q(sx - 3, 1, sz)], false, 'centripetal'),
       }
       intro.current = 0
       window.dispatchEvent(new CustomEvent('cinematic', { detail: true }))
     } else {
       cam.near = 1
       cam.fov = 40
+      // left the hall mid-cinematic: stop it and drop the letterbox
+      intro.current = -1
+      window.dispatchEvent(new CustomEvent('cinematic', { detail: false }))
     }
     cam.updateProjectionMatrix()
   }, [view, camera])

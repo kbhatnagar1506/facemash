@@ -268,3 +268,8 @@ export function wallZ(x: number) {
   const u = (x - CX) / ((X1 - X0) / 2)
   return Z0 - SAG * (1 - Math.min(1, u * u))
 }
+
+/** The atrium ceiling slopes: highest (CEIL) at the curved back wall, 5 m lower at the entrance side. */
+export function ceilY(z: number) {
+  return CEIL - 5 * Math.min(1, Math.max(0, (z - Z0) / (Z1 - Z0)))
+}

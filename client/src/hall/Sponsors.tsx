@@ -575,7 +575,7 @@ function useArt() {
         g.fillRect(105, 118, 110, 20)
         center(g, 'Start ▸', '700 11px Arial', '#fff', 160, 128)
       }),
-      metaLong: print('#1a2748', (g, w, h) => center(g, '∞ Meta', '600 150px Arial', '#e9eef8', w / 2, h * 0.45)),
+      metaLong: print('#2d434d', (g, w, h) => center(g, '∞ Meta', '600 150px Arial', '#e9eef8', w / 2, h * 0.45)),
       meta: paint(400, 1000, (g) => {
         g.fillStyle = '#f6f8fb'
         g.fillRect(0, 0, 400, 1000)
@@ -740,7 +740,7 @@ function EastRow({ art }: { art: Art }) {
       {/* Meta: roll-up and the round navy table, full of people */}
       {/* Meta's long table along the windows, in a Meta cloth */}
       <group position={[20.7, 0, -12.5]} rotation-y={west}>
-        <Cloth w={2.4} d={0.9} color="#1a2748" front={art.metaLong} seed={15} />
+        <Cloth w={2.4} d={0.9} color="#2d434d" front={art.metaLong} seed={15} />
         {/* "Get your free Meta Model API credits" acrylic QR stands on wooden bases */}
         {[-0.95, -0.45].map((x, i) => (
           <group key={x} position={[x, 0.76, -0.15]} rotation-y={0.25 - i * 0.2}>

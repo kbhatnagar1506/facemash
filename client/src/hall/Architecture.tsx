@@ -1,7 +1,7 @@
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { BALCONY, CEIL, COLUMNS, CX, SAG, wallZ, DOORS_Z, HALL, L1, MEZZ_WEST_Z, MEZZ_X0, MEZZ_Z, STAIR, X0, X1, Z0, Z1 } from './layout'
+import { BALCONY, CEIL, COLUMNS, CX, SAG, ceilY, wallZ, DOORS_Z, HALL, L1, MEZZ_WEST_Z, MEZZ_X0, MEZZ_Z, STAIR, X0, X1, Z0, Z1 } from './layout'
 import { Entrance } from './Entrance'
 import { ceilingTiles, checkerWall, glassPanes, netTexture, terrazzo, textCard } from './textures'
 
@@ -102,8 +102,8 @@ function Slab({ x0, x1, z0, z1, top, thick = 0.5 }: { x0: number; x1: number; z0
 }
 
 function Walls() {
-  const back = useMemo(() => checkerWall(12, 8, [1, 3, 4, 6, 8, 9, 11]), [])
-  const leftUpper = useMemo(() => checkerWall(14, 5, [2, 5, 8, 11], 9), [])
+  const back = useMemo(() => checkerWall(18, 11, [2, 3, 6, 7, 10, 11, 14, 15]), [])
+  const leftUpper = useMemo(() => checkerWall(24, 7, [3, 4, 9, 10, 15, 16, 21], 9), [])
   const glassLen = DOORS_Z - 4.7 - Z0
   const glassR = useMemo(() => glassPanes(15), [])
   const h = CEIL
@@ -179,10 +179,64 @@ function Ceiling() {
   // Grid of recessed downlights (the atrium photos show dozens).
   const lights = useMemo(() => {
     const out: [number, number, number][] = []
-    for (let x = X0 + 3; x < X1; x += 4.2) for (let z = Z0 + 3; z < MEZZ_Z; z += 4.4) out.push([x, CEIL - 0.02, z])
+    for (let x = X0 + 3; x < X1; x += 4.2) for (let z = Z0 + 3; z < MEZZ_Z; z += 4.4) out.push([x, ceilY(z) - 0.05, z])
     for (const [x, z] of MEZZ_LIGHTS) out.push([x, L1 - 0.52, z])
     for (let x = X0 + 2.5; x < BALCONY.left.x1 + 1; x += 3.5) for (let z = Z0 + 2.5; z < STAIR.zTop; z += 4) out.push([x, L1 - 0.52, z])
     return out
+  }, [])
+  const slopedCeiling = useMemo(() => {
+    const g = new THREE.PlaneGeometry(HALL.w, HALL.d, 1, 8)
+    g.rotateX(Math.PI / 2)
+    const p = g.getAttribute('position')
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i) + CX
+      const z = p.getZ(i)
+      p.setXYZ(i, x, ceilY(z), z)
+    }
+    g.computeVertexNormals()
+    return g
+  }, [])
+  const crease = useMemo(() => {
+    // a slim soffit strip running diagonally across the ceiling (as in the photos)
+    const A = [X0 + 2, Z0 + 26] as const
+    const B = [X1 - 2, Z0 + 6] as const
+    const pos: number[] = []
+    const N = 20
+    const w = 0.35
+    for (let i = 0; i < N; i++) {
+      const t0 = i / N
+      const t1 = (i + 1) / N
+      const pt = (t: number, side: number) => {
+        const x = A[0] + (B[0] - A[0]) * t
+        const z = A[1] + (B[1] - A[1]) * t + side * w
+        return [x, ceilY(z) - 0.06, z]
+      }
+      pos.push(...pt(t0, -1), ...pt(t1, -1), ...pt(t1, 1), ...pt(t0, -1), ...pt(t1, 1), ...pt(t0, 1))
+    }
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+    g.computeVertexNormals()
+    return g
+  }, [])
+  const cove = useMemo(() => {
+    // quarter-round cove where the ceiling curves down into the top of the back wall
+    const pos: number[] = []
+    const R = 1.8
+    const segX = 40
+    const segA = 6
+    for (let i = 0; i < segX; i++)
+      for (let j = 0; j < segA; j++) {
+        const pt = (ii: number, jj: number) => {
+          const x = X0 + ((X1 - X0) * ii) / segX
+          const a = (jj / segA) * (Math.PI / 2)
+          return [x, CEIL - R + Math.sin(a) * R, wallZ(x) + (1 - Math.cos(a)) * R]
+        }
+        pos.push(...pt(i, j), ...pt(i + 1, j), ...pt(i + 1, j + 1), ...pt(i, j), ...pt(i + 1, j + 1), ...pt(i, j + 1))
+      }
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+    g.computeVertexNormals()
+    return g
   }, [])
   // Camera-style starbursts on the high atrium downlights (like the photos).
   const star = useMemo(() => {
@@ -211,7 +265,7 @@ function Ceiling() {
     return new THREE.CanvasTexture(c)
   }, [])
   const starGeo = useMemo(() => {
-    const hi = lights.filter((l) => l[1] > CEIL - 1).map((l) => [l[0], l[1] - 0.1, l[2]]).flat()
+    const hi = lights.filter((l) => l[1] > L1 + 2).map((l) => [l[0], l[1] - 0.1, l[2]]).flat()
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', new THREE.Float32BufferAttribute(hi, 3))
     return g
@@ -225,9 +279,15 @@ function Ceiling() {
       <points geometry={starGeo}>
         <pointsMaterial ref={starMat} map={star} size={2.2} sizeAttenuation transparent depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
       </points>
-      <mesh position={[CX, CEIL, 0]} rotation-x={Math.PI / 2}>
-        <planeGeometry args={[HALL.w, HALL.d]} />
+      {/* sloped ceiling, a diagonal crease across it, and a curved cove into the back wall */}
+      <mesh geometry={slopedCeiling}>
         <meshLambertMaterial map={tiles} side={THREE.DoubleSide} />
+      </mesh>
+      <mesh geometry={crease}>
+        <meshLambertMaterial color="#d9d4ca" side={THREE.DoubleSide} />
+      </mesh>
+      <mesh geometry={cove}>
+        <meshLambertMaterial color="#f0ede7" side={THREE.DoubleSide} />
       </mesh>
       {/* low ceiling under the entrance mezzanine, with linear air diffusers */}
       <mesh position={[(MEZZ_X0 + X1) / 2, L1 - 0.51, (MEZZ_Z + Z1) / 2]} rotation-x={Math.PI / 2}>
@@ -331,7 +391,15 @@ function UpperFloors() {
       {levels.map((y) => (
         <group key={y}>
           {/* left upper walkways */}
-          <Slab x0={X0} x1={-14} z0={Z0} z1={Z1} top={y} thick={0.6} />
+          {y === levels[0] ? (
+            <>
+              {/* opening where the upper stair comes up */}
+              <Slab x0={X0} x1={-14} z0={Z0} z1={-9} top={y} thick={0.6} />
+              <Slab x0={X0} x1={-14} z0={2.5} z1={Z1} top={y} thick={0.6} />
+            </>
+          ) : (
+            <Slab x0={X0} x1={-14} z0={Z0} z1={Z1} top={y} thick={0.6} />
+          )}
           <Railing from={[-14, Z0 + 0.3]} to={[-14, Z1 - 0.3]} y={y} />
           {/* right stacked balconies */}
           <Slab x0={(X1 - 3.4)} x1={X1} z0={Z0} z1={Z1} top={y} thick={0.6} />
@@ -340,6 +408,7 @@ function UpperFloors() {
           <Railing from={[-14, Z1 - 3]} to={[(X1 - 3.4), Z1 - 3]} y={y} />
         </group>
       ))}
+      <UpperStair />
       {/* right 2nd floor too (over the sponsor booths) */}
       <Slab x0={(X1 - 3.4)} x1={X1} z0={Z0} z1={MEZZ_Z} top={L1} thick={0.55} />
       <Railing from={[(X1 - 3.4), Z0 + 0.3]} to={[(X1 - 3.4), MEZZ_Z - 0.3]} y={L1} />
@@ -373,6 +442,42 @@ function Columns() {
 }
 
 /** The glass-railed staircase on the left as you walk in, with garlands and a net. */
+/** The second glass stair: from the 2nd-floor balcony up to the 3rd floor (top left in the photos). */
+function UpperStair() {
+  const x0 = -16.6
+  const x1 = -14.4
+  const zB = 2.5
+  const zT = -9
+  const steps = 22
+  const rise = (9.6 - L1) / steps
+  const run = (zB - zT) / steps
+  const len = Math.hypot(zB - zT, 9.6 - L1)
+  const ang = Math.atan2(9.6 - L1, zB - zT)
+  return (
+    <group>
+      {Array.from({ length: steps }, (_, i) => (
+        <mesh key={i} position={[(x0 + x1) / 2, L1 + rise * (i + 0.5), zB - run * (i + 0.5)]} castShadow>
+          <boxGeometry args={[x1 - x0, 0.06, run * 0.92]} />
+          <meshLambertMaterial color="#dce6e3" transparent opacity={0.9} />
+        </mesh>
+      ))}
+      {/* white stringer under the open side and glass balustrade with a steel rail */}
+      <mesh position={[x1, L1 + (9.6 - L1) / 2 - 0.3, (zB + zT) / 2]} rotation-x={ang}>
+        <boxGeometry args={[0.12, 0.45, len]} />
+        <meshLambertMaterial color={WHITE} />
+      </mesh>
+      <mesh position={[x1 + 0.05, L1 + (9.6 - L1) / 2 + 0.55, (zB + zT) / 2]} rotation-x={ang}>
+        <boxGeometry args={[0.02, 1.0, len]} />
+        <meshLambertMaterial color="#cfe8e2" transparent opacity={0.3} depthWrite={false} />
+      </mesh>
+      <mesh position={[x1 + 0.05, L1 + (9.6 - L1) / 2 + 1.08, (zB + zT) / 2]} rotation-x={ang}>
+        <boxGeometry args={[0.06, 0.06, len]} />
+        <meshLambertMaterial color="#b9bec4" />
+      </mesh>
+    </group>
+  )
+}
+
 function Stair() {
   const { x0, x1, zBottom, zTop, steps } = STAIR
   const run = (zBottom - zTop) / steps

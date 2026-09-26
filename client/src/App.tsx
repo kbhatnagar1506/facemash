@@ -95,7 +95,7 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
   const view = useMemo<View>(
     () =>
       room === 'hackgt'
-        ? { mode: 'inside', yaw0: HALL_YAW, scale: PERSON_SCALE, ceiling: cameraCeiling, bounds: [HALL_BOUNDS[0] + 0.8, HALL_BOUNDS[1] + 0.8, HALL_BOUNDS[2] - 0.8, HALL_BOUNDS[3] - 0.2] }
+        ? { mode: 'inside', yaw0: HALL_YAW, spawn: HALL_SPAWN, scale: PERSON_SCALE, ceiling: cameraCeiling, bounds: [HALL_BOUNDS[0] + 0.8, HALL_BOUNDS[1] + 0.8, HALL_BOUNDS[2] - 0.8, HALL_BOUNDS[3] - 0.2] }
         : { mode: 'overhead' },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [room === 'hackgt'],
