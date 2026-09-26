@@ -986,7 +986,7 @@ func TestFastOffWithoutEnv(t *testing.T) {
 		t.Fatalf("POST /api/now while off: %d", res.StatusCode)
 	}
 	var nilFast *memFast
-	nilFast.uploaded(context.Background(), "hackgt13", 1)
+	nilFast.uploaded(context.Background(), "hackgt13", 1, nil, time.Now())
 	if err := nilFast.forget(context.Background(), "hackgt13", 1); err != nil {
 		t.Fatal(err)
 	}

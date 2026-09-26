@@ -87,22 +87,16 @@ func redactText(s string, counts map[string]int) string {
 func redactTextN(s string, counts map[string]int) (string, int) {
 	t := normalizeForMatch(s)
 	hits := 0
-	lower, lowerOK := "", false
 	for i := range redactions {
 		r := &redactions[i]
-		hay := t
+		lits := containsAny
 		if r.fold {
-			if !lowerOK {
-				lower, lowerOK = asciiLower(t), true
-			}
-			hay = lower
+			lits = containsAnyFold // no lower-cased copy of the text (it can be 25 MB)
 		}
-		if (r.lits != nil && !containsAny(hay, r.lits)) || (r.pre != nil && !r.pre(t)) {
+		if (r.lits != nil && !lits(t, r.lits)) || (r.pre != nil && !r.pre(t)) {
 			continue
 		}
-		if out := r.apply(t, counts, &hits); out != t {
-			t, lowerOK = out, false
-		}
+		t = r.apply(t, counts, &hits)
 	}
 	if hits == 0 {
 		return s, 0
@@ -185,6 +179,52 @@ func containsAny(s string, lits []string) bool {
 		if strings.Contains(s, l) {
 			return true
 		}
+	}
+	return false
+}
+
+// containsAnyFold is containsAny ignoring ASCII case (lits are lower-case), without copying s.
+func containsAnyFold(s string, lits []string) bool {
+	for _, l := range lits {
+		if containsFold(s, l) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsFold(s, lit string) bool {
+	if lit == "" {
+		return true
+	}
+	lo, up := lit[0], lit[0]
+	if lo >= 'a' && lo <= 'z' {
+		up = lo - 'a' + 'A'
+	}
+	nextLo, nextUp := -1, -1 // the next index of each form of lit's first byte, from i on
+	for i := 0; i+len(lit) <= len(s); {
+		if nextLo < i && nextLo != len(s) {
+			if j := strings.IndexByte(s[i:], lo); j >= 0 {
+				nextLo = i + j
+			} else {
+				nextLo = len(s)
+			}
+		}
+		if nextUp < i && nextUp != len(s) {
+			if j := strings.IndexByte(s[i:], up); j >= 0 {
+				nextUp = i + j
+			} else {
+				nextUp = len(s)
+			}
+		}
+		i = min(nextLo, nextUp)
+		if i+len(lit) > len(s) {
+			return false
+		}
+		if strings.EqualFold(s[i:i+len(lit)], lit) {
+			return true
+		}
+		i++
 	}
 	return false
 }

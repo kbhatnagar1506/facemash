@@ -507,9 +507,11 @@ func main() {
 			clientIDs = append(clientIDs, id)
 		}
 	}
+	// The routes are always mounted: with the database down at boot, connect keeps trying in
+	// the background and gate answers 503 on the routes that need it until it's up.
 	acct = openAccounts(*keyFile)
 	if acct == nil {
-		clientIDs = nil // no database: sign-in off, everyone plays as a guest
+		clientIDs = nil // unusable database settings: sign-in off, everyone plays as a guest
 	} else {
 		defer acct.store.Close()
 		go hub.saveLoop()
@@ -518,6 +520,7 @@ func main() {
 		acct.fast = openMemFast(acct) // MAPI_READ_URL/MAPI_WRITE_URL + a tenant key; nil (off) otherwise
 		acct.jev = openJev(acct)      // JEV_API_KEY(_FILE); nil (off) otherwise
 		acct.voice = openVoice()      // ELEVENLABS_API_KEY(_FILE) + ELEVENLABS_AGENT_ID; nil (off) otherwise
+		acct.connect()
 		mountAuth(mux, clientIDs, acct, originOK)
 		mountMuse(mux, acct, hub, *eventFile, base, originOK)
 		mountJev(mux, acct, acct.jev)
@@ -618,8 +621,16 @@ func main() {
 		files.ServeHTTP(w, r)
 	})
 
+	var handler http.Handler = mux
+	if acct != nil {
+		handler = acct.gate(mux)
+	}
 	log.Printf("GT campus server on %s (static: %s)", *addr, *static)
-	log.Fatal(http.ListenAndServe(*addr, mux))
+	// Headers must arrive promptly (a connection trickling them in holds a goroutine and a
+	// socket). No whole-request ReadTimeout: it would cut off the game's websockets; request
+	// bodies that matter (memory uploads) set their own deadline and minimum rate.
+	srv := &http.Server{Addr: *addr, Handler: handler, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute, MaxHeaderBytes: 64 << 10}
+	log.Fatal(srv.ListenAndServe())
 }
 
 // gzipFiles compresses text assets on the fly (compressed once per file, then cached).
