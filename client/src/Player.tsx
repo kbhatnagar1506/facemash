@@ -2,6 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'rea
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { Avatar, type AvatarState } from './Avatar'
+import type { Look } from './look'
 import type { Net } from './net'
 import { cutawayUniforms } from './cutaway'
 
@@ -42,13 +43,14 @@ export type View =
     }
 
 export function Player({
-  name, color, start, collider, net, info, zoom, view, gps,
+  name, color, look, start, collider, net, info, zoom, view, gps,
 }: {
   view: View
   /** Where the player really is (from GPS), in this room's coordinates; drives movement when set. */
   gps?: React.MutableRefObject<{ x: number; z: number } | null>
   name: string
   color: string
+  look?: Look
   start: [number, number]
   /**
    * `surface`, when present, makes the world multi-level: it returns the floor height
@@ -125,6 +127,13 @@ export function Player({
     }
     cam.updateProjectionMatrix()
   }, [view, camera])
+
+  // Arriving fresh from the Bean Studio (or just starting): a happy smile-wink-jump.
+  useEffect(() => {
+    const t = setTimeout(() => (state.current.cheer = performance.now()), 700)
+    if (location.search.includes('cheer')) history.replaceState(null, '', location.pathname)
+    return () => clearTimeout(t)
+  }, [])
 
   // Skip the cinematic deliberately (Esc / Space / Enter or a click), never by a held
   // movement key or the E you pressed to walk in, and not in its first half second.
@@ -374,6 +383,7 @@ export function Player({
         intro.current = -1
         snap.current = true // hard cut to the player camera
         // and a celebratory confetti pop around you as you arrive
+        state.current.cheer = performance.now() // and your bean smiles, winks and jumps
         confetti.current?.burst(p.x, height.current, p.y, view.mode === 'inside' ? (view.scale ?? 1) : 1)
         window.dispatchEvent(new CustomEvent('cinematic', { detail: false }))
       }
@@ -462,7 +472,7 @@ export function Player({
         <ringGeometry args={[0.35, 0.6, 32]} />
         <meshBasicMaterial color="#f4ecdc" transparent opacity={0} depthWrite={false} />
       </mesh>
-      <Avatar ref={group} color={color} name={name} state={state} me hideTag={view.mode === 'inside'} />
+      <Avatar ref={group} color={color} name={name} state={state} me hideTag={view.mode === 'inside'} look={look} />
     </>
   )
 }

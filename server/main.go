@@ -14,6 +14,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -53,6 +54,7 @@ type Player struct {
 	R     float64 `json:"r"` // facing, radians
 	M     bool    `json:"m"` // moving (drives the walk animation)
 	Room  string  `json:"room"`
+	Look  string  `json:"look,omitempty"` // bean avatar from /avatar (see cleanLook)
 }
 
 // Rooms: the outdoor campus, and the HackGT hall you enter by registering at Klaus.
@@ -79,6 +81,7 @@ type inbound struct {
 	M     bool    `json:"m"`
 	Text  string  `json:"text"`
 	Room  string  `json:"room"`
+	Look  string  `json:"look"`
 }
 
 type Hub struct {
@@ -136,6 +139,21 @@ func (h *Hub) run() {
 	}
 }
 
+// cleanLook keeps an avatar description like "b=#ff8a3d;a=#ffffff;p=split;e=dots;h=crown"
+// to a short string of safe characters (it is only ever parsed by clients).
+func cleanLook(s string) string {
+	if len(s) > 160 {
+		return ""
+	}
+	for _, r := range s {
+		ok := r == '#' || r == '=' || r == ';' || r == '-' || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || (r >= 'A' && r <= 'F')
+		if !ok {
+			return ""
+		}
+	}
+	return s
+}
+
 func cleanText(s string, max int) string {
 	s = strings.Map(func(r rune) rune {
 		if r < 32 || r == 127 {
@@ -181,6 +199,7 @@ func (c *client) handle(m inbound) {
 		if !palette[c.p.Color] {
 			c.p.Color = "#e0564f"
 		}
+		c.p.Look = cleanLook(m.Look)
 		c.p.X = clamp(m.X, bounds[0], bounds[2])
 		c.p.Z = clamp(m.Z, bounds[1], bounds[3])
 		c.p.Room = m.Room
@@ -405,7 +424,18 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(counts)
 	})
-	mux.Handle("/", http.FileServer(http.Dir(*static)))
+	// Serve the client; unknown extension-less paths (like /avatar) get the app itself.
+	files := http.FileServer(http.Dir(*static))
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		p := filepath.Clean(r.URL.Path)
+		if p != "/" && filepath.Ext(p) == "" {
+			if _, err := os.Stat(filepath.Join(*static, p)); err != nil {
+				http.ServeFile(w, r, filepath.Join(*static, "index.html"))
+				return
+			}
+		}
+		files.ServeHTTP(w, r)
+	})
 
 	log.Printf("GT campus server on %s (static: %s)", *addr, *static)
 	log.Fatal(http.ListenAndServe(*addr, mux))

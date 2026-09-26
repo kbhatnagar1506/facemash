@@ -13,6 +13,8 @@ export interface NetPlayer {
   y?: number
   r: number
   m: boolean
+  /** bean look from /avatar (see look.ts) */
+  look?: string
 }
 
 export interface ChatLine {
@@ -37,13 +39,13 @@ export class Net {
 
   private ws: WebSocket | null = null
   private listeners = new Set<Listener>()
-  private hello: { name: string; color: string; x: number; z: number; room: Room }
+  private hello: { name: string; color: string; x: number; z: number; room: Room; look?: string }
   private lastSent = ''
   private chatKey = 0
   private closed = false
 
-  constructor(name: string, color: string, x: number, z: number) {
-    this.hello = { name, color, x, z, room: 'campus' }
+  constructor(name: string, color: string, x: number, z: number, look?: string) {
+    this.hello = { name, color, x, z, room: 'campus', look }
     this.open()
   }
 

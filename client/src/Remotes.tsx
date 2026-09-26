@@ -1,8 +1,9 @@
-import { useEffect, useReducer, useRef } from 'react'
+import { useEffect, useMemo, useReducer, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { Avatar, type AvatarState } from './Avatar'
 import type { Net } from './net'
+import { decodeLook } from './look'
 
 function Remote({ id, net, scale }: { id: number; net: Net; scale: number }) {
   const group = useRef<THREE.Group>(null!)
@@ -34,7 +35,8 @@ function Remote({ id, net, scale }: { id: number; net: Net; scale: number }) {
     state.current.bubble = b && performance.now() - b.at < 6000 ? b.text : undefined
   })
 
-  return <Avatar ref={group} color={p.color} name={p.name} state={state} />
+  const look = useMemo(() => decodeLook(p.look, p.color), [p.look, p.color])
+  return <Avatar ref={group} color={p.color} name={p.name} state={state} look={look} />
 }
 
 export function Remotes({ net, scale = 1 }: { net: Net; scale?: number }) {

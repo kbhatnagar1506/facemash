@@ -2,6 +2,8 @@ import { forwardRef, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import * as THREE from 'three'
+import { BeanBody } from './Bean'
+import { decodeLook, type Look } from './look'
 
 export interface AvatarState {
   moving: boolean
@@ -10,6 +12,8 @@ export interface AvatarState {
   sit?: boolean
   /** Arm wave for NPCs chatting / greeting. */
   wave?: boolean
+  /** performance.now() when a cheer (smile + wink + happy jump) started. */
+  cheer?: number
 }
 
 /**
@@ -27,8 +31,11 @@ export const Avatar = forwardRef<
     npc?: { shirt: string; skin: string; hair: string; pants?: string; backpack?: string }
     /** Hide the floating name tag (your own avatar in the third-person view). */
     hideTag?: boolean
+    /** The player's bean from /avatar (defaults to a bean in their colour). */
+    look?: Look
   }
->(function Avatar({ color, name, state, me, npc, hideTag }, ref) {
+>(function Avatar({ color, name, state, me, npc, hideTag, look }, ref) {
+  if (!npc) return <BeanAvatar ref={ref} color={color} name={name} state={state} me={me} hideTag={hideTag} look={look} />
   const body = useRef<THREE.Group>(null!)
   const legL = useRef<THREE.Mesh>(null!)
   const legR = useRef<THREE.Mesh>(null!)
@@ -151,3 +158,34 @@ function limb(len: number) {
   }
   return g
 }
+
+/** Players are jellybeans: the bean from /avatar, a soft shadow and the name tag. */
+const BeanAvatar = forwardRef<
+  THREE.Group,
+  { color: string; name: string; state: React.MutableRefObject<AvatarState>; me?: boolean; hideTag?: boolean; look?: Look }
+>(function BeanAvatar({ color, name, state, me, hideTag, look }, ref) {
+  const bubble = useRef<HTMLDivElement>(null!)
+  const l = look ?? decodeLook(undefined, color)
+  useFrame(() => {
+    if (bubble.current) {
+      const text = state.current.bubble ?? ''
+      if (bubble.current.textContent !== text) bubble.current.textContent = text
+      bubble.current.style.display = text ? 'block' : 'none'
+    }
+  })
+  return (
+    <group ref={ref}>
+      <mesh rotation-x={-Math.PI / 2} position={[0, 0.03, 0]}>
+        <circleGeometry args={[0.72, 20]} />
+        <meshBasicMaterial color="#000" transparent opacity={0.22} depthWrite={false} />
+      </mesh>
+      <BeanBody look={l} state={state} />
+      <Html position={[0, 3.15, 0]} center zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }}>
+        <div className="avatar-tag">
+          <div ref={bubble} className="bubble" style={{ display: 'none' }} />
+          <div className={me ? 'nametag me' : 'nametag'} style={{ visibility: hideTag ? 'hidden' : undefined }}>{name}</div>
+        </div>
+      </Html>
+    </group>
+  )
+})

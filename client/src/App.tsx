@@ -6,6 +6,7 @@ import { Net } from './net'
 import { World } from './World'
 import { Player, type PlayerInfo, type View } from './Player'
 import { Remotes } from './Remotes'
+import { defaultLook, encodeLook, loadLook } from './look'
 import { Hud } from './Hud'
 import { Shells } from './Shells'
 import { CALIBRATION_SPOTS, HackGTHall, HallCollider, HALL_BOUNDS, HALL_SPAWN, HALL_YAW, PERSON_SCALE, cameraCeiling } from './HackGTHall'
@@ -67,6 +68,7 @@ function Title({ onStart }: { onStart: (name: string, color: string) => void }) 
           ))}
         </div>
         <button className="start" type="submit">Start ▸</button>
+        <a className="bean-link" href="/avatar">✨ Make your bean</a>
         <p className="title-hint">Head to the golden beacon at Klaus for HackGT.</p>
       </form>
     </div>
@@ -74,15 +76,17 @@ function Title({ onStart }: { onStart: (name: string, color: string) => void }) 
 }
 
 function Game({ campus, name, color }: { campus: Campus; name: string; color: string }) {
+  // your bean from /avatar (or a default bean in your colour)
+  const myLook = useMemo(() => loadLook() ?? defaultLook(color), [color])
   const collider = useMemo(() => new Collider(campus), [campus])
   const start = useMemo(() => collider.freeSpot(...campus.spawn), [collider, campus])
   // Created in an effect (not useMemo) so StrictMode's double mount doesn't leave a closed socket.
   const [net, setNet] = useState<Net | null>(null)
   useEffect(() => {
-    const n = new Net(name, color, start[0], start[1])
+    const n = new Net(name, color, start[0], start[1], encodeLook(myLook))
     setNet(n)
     return () => n.close()
-  }, [name, color, start])
+  }, [name, color, start, myLook])
   const info = useRef<PlayerInfo>({ x: start[0], z: start[1], bike: false })
   const zoom = useRef(34)
   const [eventOpen, setEventOpen] = useState(false)
@@ -209,6 +213,7 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
         <Player
           name={name}
           color={color}
+          look={myLook}
           start={start}
           collider={room === 'hackgt' ? hallCollider : collider}
           net={net}
