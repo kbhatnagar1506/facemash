@@ -15,7 +15,7 @@ export function LivePill({
 }) {
   const place = room === 'hackgt' ? 'Klaus' : 'campus'
   const text = !live
-    ? 'Beta mode: moving with keys · tap for live GPS'
+    ? 'Live location is off · tap to turn it on'
     : status === 'unavailable'
       ? 'Location needs HTTPS'
       : status === 'denied'
@@ -25,14 +25,14 @@ export function LivePill({
           : fix.acc > 60
             ? `GPS too rough (±${Math.round(fix.acc)} m). Turn on Precise Location + Wi-Fi`
             : where === 'stuck'
-              ? 'GPS paused, using keys until it updates'
+              ? 'GPS paused, you steer until it updates'
               : where === 'out'
-              ? `Not in ${place}, using keys`
+              ? `Not in ${place}, so you steer`
               : `Live ±${Math.round(fix.acc)} m`
   const on = live && status === 'live' && where === 'in' && !!fix && fix.acc <= 60
   return (
-    <button className={on ? 'live-pill on' : 'live-pill'} onClick={onToggle} title="Beta mode on = keys; off = live GPS">
-      {live ? '📍' : '🧪'} {text}{live ? ' · tap for beta mode' : ''}
+    <button className={on ? 'live-pill on' : 'live-pill'} onClick={onToggle} title={live ? 'Turn live location off and steer yourself' : 'Move your bean with your phone\'s location'}>
+      {live ? '📍' : '🧭'} {text}{live ? ' · tap to turn off' : ''}
       {live && fix && <span className="live-raw">{fix.lat.toFixed(6)}, {fix.lon.toFixed(6)}</span>}
     </button>
   )
