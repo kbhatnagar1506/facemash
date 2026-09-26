@@ -266,7 +266,7 @@ kbd {
 .sw.on { outline: 4px solid #ffd23f; outline-offset: 2px; transform: scale(1.08); }
 .studio-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip .ico { font-size: 16px; }
-.studio-actions { display: grid; grid-template-columns: 1fr 1.3fr; gap: 10px; position: sticky; bottom: 0; z-index: 2; background: var(--paper); padding-top: 8px; box-shadow: 0 -10px 10px -10px rgba(27, 29, 36, .35); }
+.studio-actions { display: grid; grid-template-columns: 1fr 1.3fr; gap: 10px; position: sticky; bottom: 0; z-index: 2; background: var(--paper); padding-top: 8px; margin: 0 -22px; padding-inline: 22px; box-shadow: 0 -10px 10px -10px rgba(27, 29, 36, .35); }
 /* the bar sits over the pickers as they scroll: nothing (a selected swatch's ring, the Accent label) shows through or below it */
 .studio-random { background: #e6f7ff; }
 .studio-play { background: #ff5d6c; color: #fff; font-size: 16px; }
@@ -278,7 +278,7 @@ kbd {
   .studio-title strong { font-size: 18px; }
   .studio-panel h3 { font-size: 12px; }
   .studio-poses { bottom: 12px; }
-  .studio-actions { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .studio-actions { padding-bottom: calc(12px + env(safe-area-inset-bottom)); margin: 0 calc(-16px - env(safe-area-inset-right)) 0 calc(-16px - env(safe-area-inset-left)); padding-inline: calc(16px + env(safe-area-inset-left)) calc(16px + env(safe-area-inset-right)); }
   .chip { min-height: 44px; }
 }
 .studio-saved { position: absolute; top: 38%; left: 50%; transform: translate(-50%, -50%); font: 900 34px var(--round); color: #fff; background: #ff5d6c; border: 4px solid var(--ink); border-radius: 20px; padding: 10px 22px; box-shadow: 0 5px 0 var(--ink); animation: savedPop .5s cubic-bezier(.2,1.6,.4,1) both; pointer-events: none; }
