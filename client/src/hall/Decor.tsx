@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { CEIL, HALL_EXIT, TABLE, TABLES, type Table } from './layout'
-import { curtain, textCard } from './textures'
+import { curtain, metaScreen, textCard } from './textures'
 import { Bear, FoldingChair, Sponsors } from './Sponsors'
 
 
@@ -294,7 +294,7 @@ function HackTable({ t }: { t: Table }) {
   // screens flicker gently as code scrolls
   useFrame(({ clock }) => {
     screens.current.forEach((m, i) => {
-      if (m) m.color.setScalar(1).lerp(new THREE.Color(seats[i].screen), 0.75 + 0.25 * Math.sin(clock.elapsedTime * 3 + i * 1.7 + t.n))
+      if (m) m.color.setScalar(0.92 + 0.08 * Math.sin(clock.elapsedTime * 3 + i * 1.7 + t.n)) // gentle screen flicker
     })
   })
   return (
@@ -331,7 +331,7 @@ function HackTable({ t }: { t: Table }) {
                 </mesh>
                 <mesh position={[0, 0.14, 0.012]}>
                   <planeGeometry args={[0.37, 0.23]} />
-                  <meshBasicMaterial ref={(m) => { if (m) screens.current[i] = m }} color={s.screen} />
+                  <meshBasicMaterial ref={(m) => { if (m) screens.current[i] = m }} map={metaScreen()} toneMapped={false} />
                 </mesh>
               </group>
             </group>

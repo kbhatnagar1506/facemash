@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { X0, Z0, wallZ } from './layout'
+import { metaScreen } from './textures'
 
 // Every sponsor and organizer table in the Klaus atrium, from the on-site photos.
 // Tablecloths are real drapes: vertical folds that deepen towards the floor, a
@@ -765,7 +766,7 @@ function EastRow({ art }: { art: Art }) {
             <Box p={[0, 0.11, 0]} s={[0.34, 0.22, 0.012]} color="#c9ccd2" />
             <mesh position={[0, 0.11, 0.007]}>
               <planeGeometry args={[0.31, 0.2]} />
-              <meshBasicMaterial map={art.gameScreen} toneMapped={false} />
+              <meshBasicMaterial map={metaScreen()} toneMapped={false} />
             </mesh>
           </group>
         </group>

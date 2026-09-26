@@ -77,7 +77,8 @@ export function Player({
   const yaw = useRef(0) // camera heading in 'inside' view; 0 = camera south of player looking north
   const pitch = useRef(0) // look up (+) / down (-) in the 'inside' view
   const intro = useRef(-1) // cinematic fly-through progress 0..1 when entering the hall; -1 = off
-  const introPath = useRef<{ pos: THREE.CatmullRomCurve3; look: THREE.CatmullRomCurve3 } | null>(null)
+  const introPath = useRef<{ pos: THREE.CatmullRomCurve3; look: THREE.CatmullRomCurve3; T: Float32Array } | null>(null)
+  const introLook = useRef(new THREE.Vector3())
   const lean = useRef(0)
   const puff = useRef<THREE.Mesh>(null!)
   const puffT = useRef(1) // landing dust ring, 0..1
@@ -95,10 +96,22 @@ export function Player({
       // Cinematic sweep through the atrium on the way in (any key or click skips it).
       const [sx, sz] = view.spawn ?? start
       const q = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
-      introPath.current = {
-        pos: new THREE.CatmullRomCurve3([q(17, 3.2, 23), q(9, 3.3, 9), q(5, 3.8, 0), q(1, 9.5, -7), q(-5, 9.5, -17), q(7, 7, -10), q(13, 3.3, 0), q(sx + 3.5, 2.6, sz + 0.5)], false, 'centripetal'),
-        look: new THREE.CatmullRomCurve3([q(0, 3, 12), q(0, 4, -12), q(2, 8, -30), q(14, 4, -8), q(12, 2, 8), q(10, 1.5, 14), q(sx - 3, 1, sz)], false, 'centripetal'),
+      const path = {
+        // in low under the mezzanine, up to a top shot of the whole atrium (held ~1.3 s),
+        // a swoop past the back wall and sponsor row, then down behind you
+        pos: new THREE.CatmullRomCurve3(
+          [q(17, 3.2, 23), q(9, 3.3, 9), q(5, 3.8, 0), q(3, 11, -1), q(2, 17, 1.5), q(-0.5, 17.3, 1), q(-6, 11, -15), q(7, 7, -10), q(13, 3.3, 0), q(sx + 3.5, 2.6, sz + 0.5)],
+          false,
+          'centripetal',
+        ),
+        look: new THREE.CatmullRomCurve3(
+          [q(0, 3, 12), q(0, 3, -8), q(1, 4, -14), q(1, 1, -12), q(1, 0, -13), q(0, 0, -13.5), q(4, 3, -26), q(14, 4, -8), q(12, 2, 8), q(sx - 3, 1, sz)],
+          false,
+          'centripetal',
+        ),
       }
+      introPath.current = { ...path, T: glideTiming(path.pos, 4.5 / 9) }
+      introLook.current.copy(path.look.getPoint(0))
       intro.current = 0
       window.dispatchEvent(new CustomEvent('cinematic', { detail: true }))
     } else {
@@ -334,13 +347,16 @@ export function Player({
     info.current.y = height.current
 
     if (intro.current >= 0 && introPath.current) {
-      // Cinematic: glide along the path, easing in and out.
-      intro.current = Math.min(1, intro.current + dt / 10)
-      const t = intro.current
-      const e = t * t * (3 - 2 * t)
-      camera.position.copy(introPath.current.pos.getPoint(e))
-      camera.lookAt(introPath.current.look.getPoint(e))
-      if (t >= 1) {
+      // Cinematic: an even glide along the path (arc-length timed, eased at both ends,
+      // slowing into the top shot), with the aim following smoothly.
+      intro.current = Math.min(1, intro.current + dt / 13)
+      const { pos, look, T } = introPath.current
+      const u = timeToU(T, intro.current)
+      const prm = pos.getUtoTmapping(u, 0)
+      camera.position.copy(pos.getPoint(prm))
+      introLook.current.lerp(look.getPoint(prm), 1 - Math.exp(-dt * 5))
+      camera.lookAt(introLook.current)
+      if (intro.current >= 1) {
         intro.current = -1
         window.dispatchEvent(new CustomEvent('cinematic', { detail: false }))
       }
@@ -414,4 +430,41 @@ function nearestWalkable(ok: (x: number, z: number) => boolean, x: number, z: nu
       if (ok(px, pz)) return [px, pz]
     }
   return [x, z]
+}
+
+/**
+ * Time profile for the cinematic: speed along the path's length, easing in/out at
+ * the ends and slowing (not stopping) around the top shot. Returns cumulative time
+ * T[i] (normalised 0..1) for arc fraction u = i / (N - 1).
+ */
+function glideTiming(curve: THREE.CatmullRomCurve3, topParam: number) {
+  const N = 400
+  // arc fraction of the top shot
+  const lens = curve.getLengths(N)
+  const total = lens[lens.length - 1]
+  const uTop = lens[Math.round(topParam * N)] / total
+  const T = new Float32Array(N)
+  const smooth = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x))
+  let acc = 0
+  for (let i = 0; i < N; i++) {
+    const u = i / (N - 1)
+    const ends = 0.12 + 0.88 * smooth(Math.min(u, 1 - u) / 0.14)
+    const dwell = 1 - 0.8 * Math.exp(-(((u - uTop) / 0.07) ** 2))
+    if (i > 0) acc += 1 / (ends * dwell)
+    T[i] = acc
+  }
+  for (let i = 0; i < N; i++) T[i] /= acc
+  return T
+}
+
+function timeToU(T: Float32Array, t: number) {
+  let lo = 0
+  let hi = T.length - 1
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1
+    if (T[mid] < t) lo = mid
+    else hi = mid
+  }
+  const span = T[hi] - T[lo] || 1
+  return (lo + (t - T[lo]) / span) / (T.length - 1)
 }

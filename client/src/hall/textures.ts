@@ -55,26 +55,7 @@ export function terrazzo() {
   g.beginPath()
   g.ellipse(m(-11), n(19), 9 * PX, 6 * PX, 0, 0, Math.PI * 2)
   g.fill()
-  // Speckle every field with chips of its neighbours' colours.
-  const r = rng(7)
-  const img = g.getImageData(0, 0, c.width, c.height)
-  const d = img.data
-  for (let i = 0; i < d.length; i += 4) {
-    const k = r()
-    const lum = d[i] + d[i + 1] + d[i + 2]
-    if (k < 0.07) {
-      const v = lum > 500 ? -40 - r() * 50 : 60 + r() * 60 // dark chips on light, light chips on dark
-      d[i] += v
-      d[i + 1] += v
-      d[i + 2] += v
-    } else if (k < 0.2) {
-      const v = (r() - 0.5) * 16
-      d[i] += v
-      d[i + 1] += v
-      d[i + 2] += v
-    }
-  }
-  g.putImageData(img, 0, 0)
+  // (stone chips are added in the floor shader at real scale: see detail.ts addTerrazzo)
   // Thin brown divider strips.
   g.fillStyle = '#8b7a64'
   for (const z of [18.2, -1.5]) g.fillRect(0, n(z) - 4, c.width, 8)
@@ -162,6 +143,12 @@ export function ceilingTiles(w: number, d: number) {
   const g = c.getContext('2d')!
   g.fillStyle = '#f1efea'
   g.fillRect(0, 0, 128, 128)
+  // acoustic tile fissures
+  const rt = rng(31)
+  for (let i = 0; i < 420; i++) {
+    g.fillStyle = `rgba(150,145,135,${0.15 + rt() * 0.25})`
+    g.fillRect(rt() * 128, rt() * 128, 1 + rt() * 2, 1)
+  }
   g.strokeStyle = '#d6d2c9'
   g.lineWidth = 3
   g.strokeRect(0, 0, 128, 128)
@@ -323,4 +310,37 @@ export function glassPanes(panes: number, h = 4.6) {
   g.fillStyle = '#b9bdc3'
   for (let i = 1; i < panes; i += 3) g.fillRect(i * P + 12, c.height * 0.5, P - 24, 5)
   return tex(c)
+}
+
+/** Laptop screen showing the Meta infinity logo (blue gradient on a light screen). */
+let metaScreenTex: THREE.CanvasTexture | null = null
+export function metaScreen() {
+  if (metaScreenTex) return metaScreenTex
+  const c = document.createElement('canvas')
+  c.width = 320
+  c.height = 200
+  const g = c.getContext('2d')!
+  g.fillStyle = '#f2f2f2'
+  g.fillRect(0, 0, 320, 200)
+  const grd = g.createLinearGradient(40, 40, 280, 160)
+  grd.addColorStop(0, '#2a62d8')
+  grd.addColorStop(0.5, '#3a86f4')
+  grd.addColorStop(1, '#2f73e6')
+  g.strokeStyle = grd
+  g.lineWidth = 26
+  g.lineCap = 'round'
+  g.lineJoin = 'round'
+  // the Meta "infinity": two tall rounded loops crossing in the middle
+  g.beginPath()
+  for (let i = 0; i <= 200; i++) {
+    const t = (i / 200) * Math.PI * 2
+    const x = 160 + 108 * Math.sin(t)
+    const y = 104 - 58 * Math.sin(2 * t) * (1 + 0.25 * Math.cos(2 * t))
+    if (i === 0) g.moveTo(x, y)
+    else g.lineTo(x, y)
+  }
+  g.stroke()
+  metaScreenTex = new THREE.CanvasTexture(c)
+  metaScreenTex.colorSpace = THREE.SRGBColorSpace
+  return metaScreenTex
 }

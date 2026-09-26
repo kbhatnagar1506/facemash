@@ -1,160 +1,104 @@
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { CEIL, DOORS_Z, X0, X1, Z0, Z1 } from './layout'
+import { DOORS_Z, X1, Z0 } from './layout'
 
 // Light and air in the Klaus atrium: morning sunbeams raking in through the
 // east windows, dust drifting through them, and pools of sun on the terrazzo.
 
-function beamTexture() {
+/** Soft, spread-out morning light: a wash across the floor and a glow just inside the glass. */
+function washTexture(horizontal: boolean) {
   const c = document.createElement('canvas')
-  c.width = 64
-  c.height = 256
+  c.width = 256
+  c.height = 64
   const g = c.getContext('2d')!
-  // bright at the window, fading out along the beam; soft at both edges
-  const along = g.createLinearGradient(0, 0, 0, 256)
-  along.addColorStop(0, 'rgba(255,236,196,0.9)')
-  along.addColorStop(0.55, 'rgba(255,228,180,0.35)')
-  along.addColorStop(1, 'rgba(255,220,170,0)')
-  g.fillStyle = along
-  g.fillRect(0, 0, 64, 256)
-  g.globalCompositeOperation = 'destination-in'
-  const across = g.createLinearGradient(0, 0, 64, 0)
-  across.addColorStop(0, 'rgba(0,0,0,0)')
-  across.addColorStop(0.5, 'rgba(0,0,0,1)')
-  across.addColorStop(1, 'rgba(0,0,0,0)')
-  g.fillStyle = across
-  g.fillRect(0, 0, 64, 256)
+  // bright at the window edge (left of the canvas), fading smoothly into the room
+  const grd = g.createLinearGradient(0, 0, 256, 0)
+  grd.addColorStop(0, 'rgba(255,236,200,0.9)')
+  grd.addColorStop(0.35, 'rgba(255,232,192,0.45)')
+  grd.addColorStop(1, 'rgba(255,228,185,0)')
+  g.fillStyle = grd
+  g.fillRect(0, 0, 256, 64)
+  if (horizontal) {
+    // soften the two ends so the wash doesn't stop in a hard line
+    g.globalCompositeOperation = 'destination-in'
+    const ends = g.createLinearGradient(0, 0, 0, 64)
+    ends.addColorStop(0, 'rgba(0,0,0,0)')
+    ends.addColorStop(0.12, 'rgba(0,0,0,1)')
+    ends.addColorStop(0.88, 'rgba(0,0,0,1)')
+    ends.addColorStop(1, 'rgba(0,0,0,0)')
+    g.fillStyle = ends
+    g.fillRect(0, 0, 256, 64)
+  }
   const t = new THREE.CanvasTexture(c)
   t.colorSpace = THREE.SRGBColorSpace
-  t.flipY = false // bright end at the window
   return t
 }
 
-function poolTexture() {
-  const c = document.createElement('canvas')
-  c.width = c.height = 128
-  const g = c.getContext('2d')!
-  const grd = g.createRadialGradient(64, 64, 0, 64, 64, 64)
-  grd.addColorStop(0, 'rgba(255,232,190,0.85)')
-  grd.addColorStop(0.6, 'rgba(255,228,180,0.3)')
-  grd.addColorStop(1, 'rgba(255,228,180,0)')
-  g.fillStyle = grd
-  g.fillRect(0, 0, 128, 128)
-  return new THREE.CanvasTexture(c)
-}
-
-/** Beams start at the east windows (x = X1) and slope down westward into the room. */
-const BEAMS = [-22, -16, -9.5, -3, 3.5, 10].filter((z) => Math.abs(z - DOORS_Z) > 4)
-
-function Sunbeams() {
-  const tex = useMemo(beamTexture, [])
-  const pool = useMemo(poolTexture, [])
-  const mats = useRef<THREE.MeshBasicMaterial[]>([])
+function SunWash() {
+  const floorTex = useMemo(() => washTexture(true), [])
+  const hazeTex = useMemo(() => {
+    // vertical haze: brightest low down near the glass, fading upward and at the ends
+    const c = document.createElement('canvas')
+    c.width = 256
+    c.height = 128
+    const g = c.getContext('2d')!
+    const up = g.createLinearGradient(0, 128, 0, 0)
+    up.addColorStop(0, 'rgba(255,238,205,0.8)')
+    up.addColorStop(1, 'rgba(255,238,205,0)')
+    g.fillStyle = up
+    g.fillRect(0, 0, 256, 128)
+    g.globalCompositeOperation = 'destination-in'
+    const ends = g.createLinearGradient(0, 0, 256, 0)
+    ends.addColorStop(0, 'rgba(0,0,0,0)')
+    ends.addColorStop(0.1, 'rgba(0,0,0,1)')
+    ends.addColorStop(0.9, 'rgba(0,0,0,1)')
+    ends.addColorStop(1, 'rgba(0,0,0,0)')
+    g.fillStyle = ends
+    g.fillRect(0, 0, 256, 128)
+    const t = new THREE.CanvasTexture(c)
+    t.colorSpace = THREE.SRGBColorSpace
+    return t
+  }, [])
+  const air = useRef<THREE.MeshBasicMaterial>(null!)
   useFrame(({ clock }) => {
-    const t = clock.elapsedTime
-    mats.current.forEach((m, i) => {
-      if (m) m.opacity = 0.22 + 0.07 * Math.sin(t * 0.6 + i * 1.7) // clouds drifting past the sun
-    })
+    if (air.current) air.current.opacity = 0.2 + 0.05 * Math.sin(clock.elapsedTime * 0.5) // clouds passing
   })
-  const len = 16
-  const drop = 4.2 // metres the beam falls over its length
-  const tilt = Math.atan2(drop, len)
+  const z0 = Z0 + 1
+  const z1 = DOORS_Z - 5
+  const len = z1 - z0
+  const depth = 18 // metres the light spreads into the room
   return (
     <group>
-      {BEAMS.map((z, i) => (
-        <group key={z}>
-          {/* two crossed planes around the beam's own axis so it reads from any angle */}
-          <group position={[X1 - len / 2, 4.2 - drop / 2, z]} rotation-z={Math.PI / 2 + tilt}>
-            {[0, Math.PI / 2].map((roll) => (
-              <mesh key={roll} rotation-y={roll}>
-                <planeGeometry args={[2.4, Math.hypot(len, drop)]} />
-                <meshBasicMaterial
-                  ref={(m) => { if (m) mats.current[i * 2 + (roll ? 1 : 0)] = m }}
-                  map={tex}
-                  transparent
-                  opacity={0.25}
-                  depthWrite={false}
-                  blending={THREE.AdditiveBlending}
-                  side={THREE.DoubleSide}
-                  toneMapped={false}
-                />
-              </mesh>
-            ))}
-          </group>
-          {/* where it lands on the floor */}
-          <mesh rotation-x={-Math.PI / 2} position={[X1 - len + 1, 0.02, z]}>
-            <planeGeometry args={[7, 3.2]} />
-            <meshBasicMaterial map={pool} transparent opacity={0.55} depthWrite={false} blending={THREE.AdditiveBlending} />
-          </mesh>
-        </group>
+      {/* warm wash spreading across the floor from the east windows */}
+      <mesh rotation-x={-Math.PI / 2} position={[X1 - depth / 2, 0.02, (z0 + z1) / 2]}>
+        <planeGeometry args={[depth, len]} />
+        <meshBasicMaterial map={floorTex} transparent opacity={0.55} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
+      </mesh>
+      {/* layered haze just inside the glass: the light spreads and softens into the room */}
+      {[0.4, 2.2, 4.6, 7.5].map((d, i) => (
+        <mesh key={d} position={[X1 - d, 3, (z0 + z1) / 2]} rotation-y={-Math.PI / 2}>
+          <planeGeometry args={[len, 6]} />
+          <meshBasicMaterial
+            ref={i === 0 ? air : undefined}
+            map={hazeTex}
+            transparent
+            opacity={[0.22, 0.12, 0.08, 0.05][i]}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+            side={THREE.DoubleSide}
+            toneMapped={false}
+          />
+        </mesh>
       ))}
     </group>
-  )
-}
-
-/** Dust motes floating through the atrium, drifting slowly and twinkling in the light. */
-function Dust({ count = 900 }: { count?: number }) {
-  const pts = useRef<THREE.Points>(null!)
-  const { geo, seeds } = useMemo(() => {
-    const pos = new Float32Array(count * 3)
-    const seeds = new Float32Array(count)
-    for (let i = 0; i < count; i++) {
-      pos[i * 3] = X0 + Math.random() * (X1 - X0)
-      pos[i * 3 + 1] = 0.5 + Math.random() * (CEIL - 3)
-      pos[i * 3 + 2] = Z0 + Math.random() * (Z1 - Z0)
-      seeds[i] = Math.random() * 100
-    }
-    const geo = new THREE.BufferGeometry()
-    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3))
-    return { geo, seeds }
-  }, [count])
-  const sprite = useMemo(() => {
-    const c = document.createElement('canvas')
-    c.width = c.height = 32
-    const g = c.getContext('2d')!
-    const grd = g.createRadialGradient(16, 16, 0, 16, 16, 16)
-    grd.addColorStop(0, 'rgba(255,248,225,1)')
-    grd.addColorStop(1, 'rgba(255,248,225,0)')
-    g.fillStyle = grd
-    g.fillRect(0, 0, 32, 32)
-    return new THREE.CanvasTexture(c)
-  }, [])
-  useFrame((_, dt) => {
-    const p = geo.getAttribute('position') as THREE.BufferAttribute
-    const a = p.array as Float32Array
-    const t = performance.now() / 1000
-    for (let i = 0; i < count; i++) {
-      const s = seeds[i]
-      a[i * 3] += Math.sin(t * 0.3 + s) * 0.08 * dt
-      a[i * 3 + 1] += (Math.sin(t * 0.5 + s * 2) * 0.05 + 0.02) * dt
-      a[i * 3 + 2] += Math.cos(t * 0.25 + s) * 0.08 * dt
-      if (a[i * 3 + 1] > CEIL - 2) a[i * 3 + 1] = 0.5
-    }
-    p.needsUpdate = true
-  })
-  return (
-    <points ref={pts} geometry={geo}>
-      <pointsMaterial
-        map={sprite}
-        size={0.09}
-        sizeAttenuation
-        transparent
-        opacity={0.8}
-        depthWrite={false}
-        blending={THREE.AdditiveBlending}
-        color="#fff2d6"
-        toneMapped={false}
-      />
-    </points>
   )
 }
 
 export function Atmosphere() {
   return (
     <group>
-      <Sunbeams />
-      <Dust />
+      <SunWash />
     </group>
   )
 }

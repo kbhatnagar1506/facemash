@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { BALCONY, CEIL, COLUMNS, CX, SAG, ceilY, wallZ, DOORS_Z, HALL, L1, MEZZ_WEST_Z, MEZZ_X0, MEZZ_Z, STAIR, X0, X1, Z0, Z1 } from './layout'
 import { Entrance } from './Entrance'
+import { addTerrazzo } from './detail'
 import { ceilingTiles, checkerWall, glassPanes, netTexture, terrazzo, textCard } from './textures'
 
 const WHITE = '#f4f2ee'
@@ -13,51 +14,13 @@ for (let x = X0 + 2.5; x < X1; x += 4) for (let z = MEZZ_Z + 2; z < Z1; z += 4) 
 const BRONZE = '#6f655b'
 const HANDRAIL = '#b07a45'
 
-/** Soft radial glow texture for the downlight reflections on the polished floor. */
-function glowTexture() {
-  const c = document.createElement('canvas')
-  c.width = c.height = 64
-  const g = c.getContext('2d')!
-  const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32)
-  grd.addColorStop(0, 'rgba(255,250,235,1)')
-  grd.addColorStop(0.25, 'rgba(255,248,230,.45)')
-  grd.addColorStop(1, 'rgba(255,248,230,0)')
-  g.fillStyle = grd
-  g.fillRect(0, 0, 64, 64)
-  return new THREE.CanvasTexture(c)
-}
-
 function Floor() {
   const map = useMemo(terrazzo, [])
-  const glow = useMemo(glowTexture, [])
-  // Polished terrazzo: the photos show every downlight mirrored in the floor.
-  // A real mirror pass halves the frame rate, so fake it with soft light pools.
-  const pools = useMemo(() => {
-    const out: [number, number][] = []
-    for (let x = X0 + 3; x < X1; x += 4.2) for (let z = Z0 + 3; z < MEZZ_Z; z += 4.4) if (!(x < BALCONY.left.x1 && z < STAIR.zTop)) out.push([x, z])
-    out.push(...MEZZ_LIGHTS)
-    return out
-  }, [])
   return (
-    <group>
-      <mesh rotation-x={-Math.PI / 2} position={[CX, 0, 0]} receiveShadow>
-        <planeGeometry args={[HALL.w, HALL.d]} />
-        <meshStandardMaterial map={map} roughness={0.32} metalness={0} />
-      </mesh>
-      <instancedMesh
-        args={[undefined, undefined, pools.length]}
-        ref={(m) => {
-          if (!m) return
-          const mat = new THREE.Matrix4()
-          const rot = new THREE.Matrix4().makeRotationX(-Math.PI / 2)
-          pools.forEach(([x, z], i) => m.setMatrixAt(i, mat.makeTranslation(x, 0.015, z).multiply(rot)))
-          m.instanceMatrix.needsUpdate = true
-        }}
-      >
-        <planeGeometry args={[1.6, 1.6]} />
-        <meshBasicMaterial map={glow} transparent opacity={0.4} depthWrite={false} blending={THREE.AdditiveBlending} />
-      </instancedMesh>
-    </group>
+    <mesh rotation-x={-Math.PI / 2} position={[CX, 0, 0]} receiveShadow>
+      <planeGeometry args={[HALL.w, HALL.d]} />
+      <meshStandardMaterial map={map} roughness={0.32} metalness={0} onUpdate={addTerrazzo} />
+    </mesh>
   )
 }
 
