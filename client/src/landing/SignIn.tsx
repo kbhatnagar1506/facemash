@@ -82,6 +82,9 @@ export function SignInSheet({ clientId, next, onClose }: { clientId: string; nex
         <a className="btn btn-secondary sheet-guest" href={guestTo}>
           Continue as guest
         </a>
+        <p className="sheet-legal">
+          By continuing you agree to our <a href="/terms">Terms</a> and <a href="/privacy">Privacy Policy</a>.
+        </p>
       </div>
     </div>
   )
