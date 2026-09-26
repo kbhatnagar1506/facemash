@@ -349,7 +349,7 @@ export function Player({
     if (intro.current >= 0 && introPath.current) {
       // Cinematic: an even glide along the path (arc-length timed, eased at both ends,
       // slowing into the top shot), with the aim following smoothly.
-      intro.current = Math.min(1, intro.current + dt / 8)
+      intro.current = Math.min(1, intro.current + dt / 5)
       const { pos, look, T } = introPath.current
       const u = timeToU(T, intro.current)
       const prm = pos.getUtoTmapping(u, 0)
