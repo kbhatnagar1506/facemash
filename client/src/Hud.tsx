@@ -182,6 +182,8 @@ function nowNext(event: EventInfo | null) {
 }
 
 const TOUCH = touchFirst()
+/** Hall signs say "Press E"; a phone has no E, so there it's a tap on the card. */
+const keyHint = (text: string) => (TOUCH ? text.replace(/Press E to /g, 'Tap to ').replace(/Press E\b/g, 'Tap here') : text)
 
 export function Hud({
   campus, collider, net, info, eventOpen, setEventOpen, event, room, onEnterHall, onLeaveHall,
@@ -333,8 +335,8 @@ export function Hud({
           <p>
             {near.kind === 'shell' && <>🐚 A shiny shell at the Klaus entrance! It's glowing with <b>{title}</b> energy…</>}
             {near.kind === 'exit' && <>🐚 Head back out to campus?</>}
-            {near.kind === 'spot' && near.spot.text}
-            {near.kind === 'table' && <>Grab a seat and start hacking! Press E to see the tracks.</>}
+            {near.kind === 'spot' && keyHint(near.spot.text)}
+            {near.kind === 'table' && keyHint('Grab a seat and start hacking! Press E to see the tracks.')}
           </p>
           {(near.kind !== 'spot' || near.spot.action) && <span className="dialog-hint">{TOUCH ? 'Tap ▼' : 'Press E ▼'}</span>}
         </div>

@@ -67,7 +67,7 @@ export function PermissionsSheet({ onDone }: { onDone: (r: PermResult | null) =>
           {busy ? 'Waiting for your phone…' : 'Allow ▸'}
         </button>
         <button className="perm-skip" type="button" onClick={() => finish(null)} disabled={busy}>
-          Not now
+          Not now, I'll use the joystick
         </button>
       </div>
     </div>
