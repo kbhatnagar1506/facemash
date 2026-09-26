@@ -210,6 +210,10 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
       <Canvas
         shadows="soft"
         dpr={dpr}
+        onCreated={({ gl, scene }) => {
+          // ?perf: expose the renderer for live profiling from the console
+          if (location.search.includes('perf')) Object.assign(window, { __gl: gl, __scene: scene })
+        }}
         camera={{ fov: 40, near: 1, far: 800, position: [start[0], 25, start[1] + 20] }}
       >
         <color attach="background" args={['#bfe6ff']} />
