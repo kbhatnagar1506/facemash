@@ -246,6 +246,7 @@ type accounts struct {
 	store  Store
 	tenant string
 	sess   sessions
+	fast   *memFast // attendees' memory in MAPI (memfast.go); nil when off
 }
 
 // mountAuth adds /api/me, /api/auth/google and /api/auth/logout. With no client IDs

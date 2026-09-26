@@ -509,6 +509,7 @@ func main() {
 		go hub.saveLoop()
 	}
 	if acct != nil {
+		acct.fast = openMemFast(acct) // MAPI_READ_URL/MAPI_WRITE_URL + a tenant key; nil (off) otherwise
 		mountAuth(mux, clientIDs, acct, originOK)
 		mountMuse(mux, acct, hub, *eventFile, base, originOK)
 		if *devLogin {
