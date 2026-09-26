@@ -74,7 +74,7 @@
 .tk-where { margin: -4px 0 4px; text-align: center; font: 700 14px var(--round); color: #3a7f87; }
 .tk-field { border-radius: 12px; background: #f4f1e8; padding: 10px 12px; }
 .tk-field.ask { background: #fff4cc; }
-.tk-field small { display: block; font: 800 11px var(--round); text-transform: uppercase; letter-spacing: .6px; color: #7a7466; margin-bottom: 3px; }
+.tk-field small { display: block; font: 800 12px var(--round); text-transform: uppercase; letter-spacing: .6px; color: #5f5a4d; margin-bottom: 3px; }
 .tk-field p { margin: 0; font: 700 16px/1.4 var(--round); overflow-wrap: anywhere; }
 
 @keyframes tk-fade { from { opacity: 0; } }
