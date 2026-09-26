@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import * as THREE from 'three'
-import { CX, DOORS_Z, L1, SEMINAR_Z, X0, X1, Z1 } from './layout'
+import { CX, DOORS_Z, L1, SEMINAR_Z, X0, X1, Z1, westSlope, westX } from './layout'
 import { textCard } from './textures'
 import { FoldingChair } from './Sponsors'
 
@@ -252,7 +252,7 @@ function SeminarRoom() {
     <group>
       {/* Drawn in south-wall coordinates (door centre x=-8.6), then turned onto the
           west wall facing east, centred on SEMINAR_Z, as in the lobby photos. */}
-      <group position={[X0, 0, SEMINAR_Z + 8.6]} rotation-y={-Math.PI / 2}>
+      <group position={[westX(SEMINAR_Z + 8.6), 0, SEMINAR_Z + 8.6]} rotation-y={-Math.PI / 2 + Math.atan(westSlope(SEMINAR_Z))}>
         <group position={[0, 0, -Z1]}>
       {/* recessed alcove */}
       <Box p={[-8.6, 2.75, Z - 0.35]} s={[3.2, 0.3, 0.7]} color={WALL} />
@@ -278,9 +278,9 @@ function SeminarRoom() {
         </group>
       </group>
       {/* side corridor off the lobby */}
-      <Plane p={[-13.6, 1.6, Z - 0.02]} w={4.2} h={3.2} map={corridor} basic />
+      <Plane p={[westX(Z1) + 2.4, 1.6, Z - 0.02]} w={4.2} h={3.2} map={corridor} basic />
       {/* folding tables where people hack in the lobby */}
-      {[[-10.6, 22.5], [-6, 24.1]].map(([x, z]) => (
+      {[[-1.6, 22.5], [3.2, 24.1]].map(([x, z]) => (
         <group key={x} position={[x, 0, z]}>
           <Box p={[0, 0.74, 0]} s={[3, 0.05, 1.2]} color="#e2c79c" />
           {[[-1.35, -0.5], [1.35, -0.5], [-1.35, 0.5], [1.35, 0.5]].map(([lx, lz], i) => (

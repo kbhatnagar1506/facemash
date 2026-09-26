@@ -4,9 +4,36 @@
 // north on your left to the 2nd-floor balcony; the checkerboard wall is the far
 // (north) end; sponsor booths run down the right under the stacked balconies.
 
-export const X0 = -17 // west wall, right behind the glass stair
+/** Outer bound of the room on the west (for floor/ceiling extents). The actual west wall is westX(z). */
+export const X0 = -17
 export const X1 = 20 // east windows
 export const HALL = { w: X1 - X0, d: 56 } // 37 m across, 56 m from the back wall to the entrance
+/**
+ * The west wall, laid by walking it on site and pressing P at each corner (entrance
+ * end first). It angles in toward the entrance. Points are [z, x] with the wall
+ * 0.6 m beyond where the player stood.
+ */
+const WEST_MARKS: [number, number][] = [
+  [-27.07, -15.41],
+  [-12.87, -12.55],
+  [-1.93, -10.3],
+  [19.99, -7.71],
+].map(([z, x]) => [z, x - 0.6])
+export function westX(z: number) {
+  const P = WEST_MARKS
+  let i = 0
+  while (i < P.length - 2 && z > P[i + 1][0]) i++
+  const [za, xa] = P[i]
+  const [zb, xb] = P[i + 1]
+  return xa + ((xb - xa) * (z - za)) / (zb - za) // extrapolates past the ends
+}
+/** Slope dx/dz of the west wall at z (for turning things to sit flush against it). */
+export function westSlope(z: number) {
+  return (westX(z + 0.5) - westX(z - 0.5)) / 1
+}
+/** The wall's corner z's (plus the room ends), for building it as straight runs. */
+export const WEST_ZS = [-28, ...WEST_MARKS.map(([z]) => z).filter((z) => z > -28 && z < 28), 28]
+
 /** Centre line of the room (it isn't symmetric about x=0). */
 export const CX = (X0 + X1) / 2
 /**
@@ -32,7 +59,7 @@ export const L1 = 5 // 2nd-floor balcony height
 export const MEZZ_Z = 3 // the raised entrance mezzanine runs from here (the Table 7 row) to the doors
 /** Where the mezzanine's west wing starts (it only covers the stairwell beyond the stair foot). */
 export const MEZZ_WEST_Z = 17.6
-export const MEZZ_X0 = -11 // mezzanine's west edge over the stairwell
+export const MEZZ_X0 = -3 // mezzanine's west edge over the stairwell
 /** People are drawn at this scale inside Klaus so the building reads at true size. */
 export const PERSON_SCALE = 0.62
 
@@ -46,18 +73,18 @@ export const HALL_YAW = Math.PI / 2
 export const SEMINAR_Z = 24
 
 /** Glass stair on the left as you enter: bottom at z=17 (ground), top at z=5 (balcony). */
-export const STAIR = { x0: -16.5, x1: -12.5, zBottom: 17, zTop: 5, steps: 24 }
+export const STAIR = { x0: -8.5, x1: -4.5, zBottom: 17, zTop: 5, steps: 24 }
 
 /** Walkable 2nd-floor balcony: the left run and the back-left run (L-shape). */
 export const BALCONY = {
-  left: { x0: X0, x1: -10, z0: Z0, z1: STAIR.zTop },
+  left: { x0: X0, x1: -4, z0: Z0, z1: STAIR.zTop },
   back: { x0: X0, x1: -1, z0: Z0, z1: -14 },
 }
 
 /** Round white columns: [x, z, radius, height]. */
 export const COLUMNS: [number, number, number, number][] = [
-  [-10.2, 3.4, 0.4, L1],
-  [-10.2, -5, 0.4, L1],
+  [-4.2, 3.4, 0.4, L1],
+  [-4.2, -5, 0.4, L1],
   [-8, -14.2, 0.4, L1],
   [-1.6, -14.2, 0.4, L1],
   ...[-22, -14, -6, 2, 10].map((z): [number, number, number, number] => [X1 - 3.8 + ex(z), z, 0.45, 18.2]),
@@ -78,7 +105,7 @@ type Box = [number, number, number, number] // x0, z0, x1, z1
 
 /** Things on the ground floor you can't walk through. */
 export const GROUND_BLOCKS: Box[] = [
-  [X0, STAIR.zTop, STAIR.x1 + 0.4, STAIR.zBottom], // under/beside the stair (to the wall)
+  [-14, STAIR.zTop, STAIR.x1 + 0.4, STAIR.zBottom], // under/beside the stair (to the wall)
   [-0.45, -22.8, 4.45, -18.6], // photo booth frame
   [-0.7, -18.6, 4.7, -16.5], // the boat
   // back wall sponsor row (Notability, Visa, T-Mobile, Citadel, Aramco)
@@ -94,14 +121,18 @@ export const GROUND_BLOCKS: Box[] = [
   [18.3 + ex(1.8), 0.4, 19.9 + ex(1.8), 3.3],
   [18.1, 6.1, 19.9, 8.9],
   // organizers
-  [-12, 5.6, -10.6, 9.4], // Hardware Desk
-  [-11.4, 14.8, -8.2, 16.2], // MLH at the stair foot
+  [-4, 5.6, -2.6, 9.4], // Hardware Desk
+  [-3.4, 14.8, -0.2, 16.2], // MLH at the stair foot
   [-3.7, -11.8, -1.9, -5.8], // HackGT Help Desk + the bear (beside Tables 1 & 3)
   // entrance lobby (photos: doors, Seminar Room West, Research Wing)
   [X1 - 0.9, 16.1, X1 - 0.1, 16.9], // trash can by the doors
-  [-12.2, 21.8, -9, 23.2], // folding tables outside Seminar Room West
-  [-7.6, 23.4, -4.4, 24.8],
-  [X0 + 0.1, 20.6, X0 + 0.9, 21.4], // recycling bin by Seminar Room West
+  [-3.2, 21.8, 0, 23.2], // folding tables outside Seminar Room West
+  [1.6, 23.4, 4.8, 24.8],
+  [westX(21) + 0.1, 19.7, westX(21) + 0.9, 21.7], // 3-bin recycling station at the stair base
+  [westX(19.2) + 0.2, 18.9, westX(19.2) + 0.8, 19.5], // black chair
+  [westX(-15.6) + 0.1, -17.5, westX(-15.6) + 1.1, -13.4], // bins, boxes, wet-floor sign
+  [westX(-17.5) + 1.8, -18.9, westX(-17.5) + 2.7, -17.1], // loose folding chairs
+  [westX(-15.3) + 2.3, -15.6, westX(-15.3) + 2.9, -15], // trash can
   [6.4, 26.6, 7.3, 27.9], // info kiosk
   [13.2, 25.6, 15.6, 27.9], // folding table + chair
   ...TABLES.map((t): Box => [t.x - 1.55, t.z - 1.55, t.x + 1.55, t.z + 1.55]),
@@ -120,7 +151,7 @@ export function onFurniture(x: number, z: number) {
 }
 
 function groundOk(x: number, z: number, hop = false) {
-  if (x < X0 + 0.6 + R || z < Z0 + 0.6 + R || z > Z1 - 0.6 - R) return false
+  if (x < westX(z) + 0.6 + R || z < Z0 + 0.6 + R || z > Z1 - 0.6 - R) return false
   // East wall: only the entrance doorway lets you out to the exit shell.
   if (x > eastX(z) - 0.6 - R && Math.abs(z - DOORS_Z) > 2.3) return false
   if (x > eastX(z) + 1) return false
@@ -140,11 +171,11 @@ function balconyOk(x: number, z: number) {
   const onStairTop = x > STAIR.x0 + R && x < STAIR.x1 - R
   // Left run: its east edge is open where it meets the mezzanine (z between MEZZ_Z and the stair top).
   const leftX1 = z > MEZZ_Z + R ? left.x1 + 0.5 : left.x1 - R
-  const inLeft = x > left.x0 + 0.6 + R && x < leftX1 && z > left.z0 + 0.6 + R && z < left.z1 - (onStairTop ? -0.01 : R)
-  const inBack = x > back.x0 + 0.6 + R && x < back.x1 - R && z > back.z0 + 0.6 + R && z < back.z1 - R
+  const inLeft = x > westX(z) + 0.6 + R && x < leftX1 && z > left.z0 + 0.6 + R && z < left.z1 - (onStairTop ? -0.01 : R)
+  const inBack = x > westX(z) + 0.6 + R && x < back.x1 - R && z > back.z0 + 0.6 + R && z < back.z1 - R
   // Entrance mezzanine (walk onto it from the balcony), plus its west wing over the stair foot.
   const inMezz = x > MEZZ_X0 + R && x < X1 - 0.6 - R && z > MEZZ_Z + R && z < Z1 - 0.6 - R
-  const inMezzWest = x > X0 + 0.6 + R && x < MEZZ_X0 + 0.5 && z > MEZZ_WEST_Z + R && z < Z1 - 0.6 - R
+  const inMezzWest = x > westX(z) + 0.6 + R && x < MEZZ_X0 + 0.5 && z > MEZZ_WEST_Z + R && z < Z1 - 0.6 - R
   return inLeft || inBack || inMezz || inMezzWest
 }
 
@@ -202,8 +233,8 @@ export interface Spot {
 export const SPOTS: Spot[] = [
   { id: 'helpdesk', x: -1.1, z: -9.2, r: 2.4, text: 'HackGT Help Desk: questions, lost & found, and the full schedule. Press E.', action: 'schedule' },
   { id: 'photo', x: 2, z: -15.8, r: 2.4, text: '📸 The HackGT 13 photo booth. Hop in the boat! Press E to take a photo.', action: 'photo' },
-  { id: 'hardware', x: -9.4, z: 7.5, r: 2.6, text: 'Hardware Desk: check out Arduinos, sensors, cables… the line is long for a reason.' },
-  { id: 'mlh', x: -9.8, z: 17.2, r: 2.4, text: 'Major League Hacking: stickers, swag and challenge cards.' },
+  { id: 'hardware', x: -1.4, z: 7.5, r: 2.6, text: 'Hardware Desk: check out Arduinos, sensors, cables… the line is long for a reason.' },
+  { id: 'mlh', x: -1.8, z: 17.2, r: 2.4, text: 'Major League Hacking: stickers, swag and challenge cards.' },
   { id: 'notability', x: -6, z: -23.2, r: 2.4, text: 'Notability: “the app your semester runs on.” Download it now.' },
   { id: 'visa', x: 0.6, z: -24.2, r: 1.8, text: 'Visa: chat with engineers about payments at planet scale.' },
   { id: 'tmobile', x: 4.6, z: -24.2, r: 1.8, text: 'T-Mobile: “Unstoppable. Together.” Explore what’s possible.' },
@@ -213,9 +244,9 @@ export const SPOTS: Spot[] = [
   { id: 'meta', x: 17.1 + ex(-12), z: -12, r: 2.4, text: 'Meta: “Make Every Connection Matter.” Come say hi at the table.' },
   { id: 'impiricus', x: 17.2 + ex(-4), z: -4, r: 2.4, text: 'Impiricus: the Agentic Commercialization Platform for Healthcare. self.build()' },
   { id: 'spacex', x: 17.2, z: 7.5, r: 2.2, text: 'SpaceX: ask about building rockets.' },
-  { id: 'balcony', x: -14, z: -8, y: L1, r: 5, text: 'Up on the 2nd floor: the whole Seaside Market below you.' },
+  { id: 'balcony', x: -9, z: -8, y: L1, r: 5, text: 'Up on the 2nd floor: the whole Seaside Market below you.' },
   { id: 'mezz', x: 4, z: 4.6, y: L1, r: 6, text: 'The entrance mezzanine: look out over the hacking floor and the photo booth.' },
-  { id: 'seminar', x: X0 + 2, z: SEMINAR_Z, r: 2.6, text: 'Seminar Room West: workshops and tech talks happen in here.' },
+  { id: 'seminar', x: westX(SEMINAR_Z) + 2, z: SEMINAR_Z, r: 2.6, text: 'Seminar Room West: workshops and tech talks happen in here.' },
   { id: 'research', x: 10, z: 26.2, r: 2.6, text: 'Klaus Research Wing: the 1100s. Directions to the classroom wing are on the kiosk.' },
   { id: 'tv', x: 13.4, z: 26.5, r: 2.2, text: 'The lobby screen: “AI4OPT Showcase & Social.”' },
 ]

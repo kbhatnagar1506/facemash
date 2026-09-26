@@ -5,6 +5,7 @@ import { Architecture } from './hall/Architecture'
 import { detailEverything } from './hall/detail'
 import { Atmosphere } from './hall/Atmosphere'
 import { Decor } from './hall/Decor'
+import { WestWall } from './hall/WestWall'
 
 // The HackGT hall is its own multiplayer room: the Klaus atrium, rebuilt from
 // on-site photos. It is drawn instead of the campus, centred on the origin.
@@ -39,6 +40,7 @@ export function HackGTHall({ active }: { active: boolean }) {
       <Architecture />
       {active && <Atmosphere />}
       <Decor active={active} />
+      <WestWall />
     </group>
   )
 }

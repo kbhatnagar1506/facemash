@@ -1,16 +1,77 @@
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { BALCONY, CEIL, COLUMNS, CX, CXB, SAG, SLANT, XB, ceilY, eastX, wallZ, DOORS_Z, HALL, L1, MEZZ_WEST_Z, MEZZ_X0, MEZZ_Z, STAIR, X0, X1, Z0, Z1 } from './layout'
+import { BALCONY, CEIL, COLUMNS, CX, CXB, SAG, SLANT, WEST_ZS, XB, ceilY, eastX, wallZ, westX, DOORS_Z, HALL, L1, MEZZ_WEST_Z, MEZZ_X0, MEZZ_Z, STAIR, X0, X1, Z0, Z1 } from './layout'
 import { Entrance } from './Entrance'
 import { addTerrazzo } from './detail'
 import { ceilingTiles, checkerWall, glassPanes, netTexture, terrazzo, textCard } from './textures'
 
 const WHITE = '#f4f2ee'
 
+/** z stops along [z0, z1] where the west wall changes direction (for straight runs). */
+function westStops(z0: number, z1: number) {
+  return [z0, ...WEST_ZS.filter((z) => z > z0 && z < z1), z1]
+}
+
+/** A vertical strip following the west wall (optionally offset inward), y0..y1. */
+function westStrip(y0: number, y1: number, off = 0, z0 = Z0, z1 = Z1) {
+  const zs = westStops(z0, z1)
+  const pos: number[] = []
+  const uv: number[] = []
+  let len = 0
+  const total = zs.slice(1).reduce((a, z, i) => a + Math.hypot(z - zs[i], westX(z) - westX(zs[i])), 0)
+  for (let i = 0; i < zs.length - 1; i++) {
+    const za = zs[i]
+    const zb = zs[i + 1]
+    const xa = westX(za) + off
+    const xb = westX(zb) + off
+    const seg = Math.hypot(zb - za, xb - xa)
+    const ua = len / total
+    const ub = (len + seg) / total
+    len += seg
+    pos.push(xa, y0, za, xb, y0, zb, xb, y1, zb, xa, y0, za, xb, y1, zb, xa, y1, za)
+    uv.push(ua, 0, ub, 0, ub, 1, ua, 0, ub, 1, ua, 1)
+  }
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2))
+  g.computeVertexNormals()
+  return g
+}
+
+/** A floor slab whose west edge follows the wall; east edge at xEast (fixed x or offset from the wall). */
+function WestSlab({ z0, z1, top, thick = 0.5, east, eastOff }: { z0: number; z1: number; top: number; thick?: number; east?: number; eastOff?: number }) {
+  const geo = useMemo(() => {
+    const zs = westStops(z0, z1)
+    const ex = (z: number) => (east !== undefined ? east : westX(z) + (eastOff ?? 3))
+    const pts = [...zs.map((z) => new THREE.Vector2(westX(z) - 0.3, -z)), ...[...zs].reverse().map((z) => new THREE.Vector2(ex(z), -z))]
+    const g = new THREE.ExtrudeGeometry(new THREE.Shape(pts), { depth: thick, bevelEnabled: false })
+    g.rotateX(-Math.PI / 2)
+    g.translate(0, top - thick, 0)
+    return g
+  }, [z0, z1, top, thick, east, eastOff])
+  return (
+    <mesh geometry={geo} castShadow receiveShadow>
+      <meshLambertMaterial color={WHITE} />
+    </mesh>
+  )
+}
+
+/** Railing that follows the west wall line at an offset (e.g. the edge of an upper walkway). */
+function WestRailing({ off, y, z0 = Z0 + 0.3, z1 = Z1 - 0.3 }: { off: number; y: number; z0?: number; z1?: number }) {
+  const zs = westStops(z0, z1)
+  return (
+    <group>
+      {zs.slice(1).map((z, i) => (
+        <Railing key={i} from={[westX(zs[i]) + off, zs[i]]} to={[westX(z) + off, z]} y={y} />
+      ))}
+    </group>
+  )
+}
+
 /** Recessed downlights in the low ceiling under the entrance mezzanine (and its west wing). */
 const MEZZ_LIGHTS: [number, number][] = []
-for (let x = X0 + 2.5; x < X1; x += 4) for (let z = MEZZ_Z + 2; z < Z1; z += 4) if (x > MEZZ_X0 || z > MEZZ_WEST_Z) MEZZ_LIGHTS.push([x, z])
+for (let x = X0 + 2.5; x < X1; x += 4) for (let z = MEZZ_Z + 2; z < Z1; z += 4) if ((x > MEZZ_X0 || z > MEZZ_WEST_Z) && x > westX(z) + 1) MEZZ_LIGHTS.push([x, z])
 const BRONZE = '#6f655b'
 const HANDRAIL = '#b07a45'
 
@@ -71,6 +132,8 @@ function Walls() {
   const glassR = useMemo(() => glassPanes(12), [])
   const glassFront = useMemo(() => glassPanes(6), [])
   const h = CEIL
+  const westUpper = useMemo(() => westStrip(L1, h), [h])
+  const westLower = useMemo(() => westStrip(0, L1), [])
   const curvedWall = useMemo(() => {
     const g = new THREE.PlaneGeometry(XB - X0, h, 48, 1)
     const p = g.getAttribute('position')
@@ -97,21 +160,13 @@ function Walls() {
         <meshLambertMaterial color="#efece6" side={THREE.DoubleSide} />
       </mesh>
       {/* left wall: white corridor wall at ground/2nd floor, checker panels above */}
-      <mesh position={[X0, L1 + (h - L1) / 2, 0]} rotation-y={Math.PI / 2}>
-        <planeGeometry args={[HALL.d, h - L1]} />
-        <meshLambertMaterial map={leftUpper} />
+      {/* west wall: follows the line walked on site (angles in toward the entrance) */}
+      <mesh geometry={westUpper}>
+        <meshLambertMaterial map={leftUpper} side={THREE.DoubleSide} />
       </mesh>
-      <mesh position={[X0, L1 / 2, 0]} rotation-y={Math.PI / 2}>
-        <planeGeometry args={[HALL.d, L1]} />
-        <meshLambertMaterial color="#efece6" />
+      <mesh geometry={westLower}>
+        <meshLambertMaterial color="#efece6" side={THREE.DoubleSide} />
       </mesh>
-      {/* wooden doors to the ground-floor hallway (under the balcony) */}
-      {[-18, -9, 9].map((z) => (
-        <mesh key={z} position={[X0 + 0.02, 1.2, z]} rotation-y={Math.PI / 2}>
-          <planeGeometry args={[1.8, 2.4]} />
-          <meshLambertMaterial color="#c58e4d" />
-        </mesh>
-      ))}
       {/* right wall: tall dark windows at ground level, white above */}
       {/* glass wall north of the entrance doors, plain wall around the doorway */}
       {/* the glass: straight through the lobby end, then splayed outward to the back */}
@@ -158,7 +213,7 @@ function Ceiling() {
     const out: [number, number, number][] = []
     for (let x = X0 + 3; x < XB; x += 4.2) for (let z = Z0 + 3; z < MEZZ_Z; z += 4.4) if (x < eastX(z) - 1.5) out.push([x, ceilY(z) - 0.05, z])
     for (const [x, z] of MEZZ_LIGHTS) out.push([x, L1 - 0.52, z])
-    for (let x = X0 + 2.5; x < BALCONY.left.x1 + 1; x += 3.5) for (let z = Z0 + 2.5; z < STAIR.zTop; z += 4) out.push([x, L1 - 0.52, z])
+    for (let x = X0 + 2.5; x < BALCONY.left.x1 + 1; x += 3.5) for (let z = Z0 + 2.5; z < STAIR.zTop; z += 4) if (x > westX(z) + 1) out.push([x, L1 - 0.52, z])
     return out
   }, [])
   const slopedCeiling = useMemo(() => {
@@ -305,7 +360,7 @@ function Mezzanine() {
   return (
     <group>
       <Slab x0={MEZZ_X0} x1={X1} z0={MEZZ_Z} z1={Z1} top={L1} thick={0.5} />
-      <Slab x0={X0} x1={MEZZ_X0} z0={MEZZ_WEST_Z} z1={Z1} top={L1} thick={0.5} />
+      <WestSlab z0={MEZZ_WEST_Z} z1={Z1} top={L1} thick={0.5} east={MEZZ_X0} />
       {/* white fascia on the edge facing the atrium */}
       <mesh position={[(BALCONY.left.x1 + X1) / 2, L1 - 0.95, MEZZ_Z - 0.02]}>
         <boxGeometry args={[X1 - BALCONY.left.x1, 1.3, 0.12]} />
@@ -314,7 +369,7 @@ function Mezzanine() {
       <Railing from={[BALCONY.left.x1, MEZZ_Z]} to={[X1 - 0.3, MEZZ_Z]} y={L1} />
       {/* over the stairwell */}
       <Railing from={[MEZZ_X0, STAIR.zTop]} to={[MEZZ_X0, MEZZ_WEST_Z]} y={L1} />
-      <Railing from={[X0 + 0.3, MEZZ_WEST_Z]} to={[MEZZ_X0, MEZZ_WEST_Z]} y={L1} />
+      <Railing from={[westX(MEZZ_WEST_Z) + 0.3, MEZZ_WEST_Z]} to={[MEZZ_X0, MEZZ_WEST_Z]} y={L1} />
     </group>
   )
 }
@@ -335,14 +390,15 @@ function LeftBalcony() {
   )
   return (
     <group>
-      <Slab x0={left.x0} x1={left.x1} z0={left.z0} z1={left.z1} top={L1} />
+      <WestSlab z0={left.z0} z1={left.z1} top={L1} east={left.x1} />
       <Slab x0={left.x1} x1={back.x1} z0={back.z0} z1={back.z1} top={L1} />
       {/* deeper white fascia band under the front edges */}
       <mesh position={[(left.x1 + back.x1) / 2, L1 - 0.95, back.z1 + 0.02]}>
         <boxGeometry args={[back.x1 - left.x1 + 0.3, 1.3, 0.12]} />
         <meshLambertMaterial color={WHITE} />
       </mesh>
-      <mesh position={[-7, L1 - 1.1, back.z1 + 0.1]}>
+      {/* the Klaus lettering on the balcony's front edge, facing into the atrium */}
+      <mesh position={[left.x1 + 0.1, L1 - 1.1, -6]} rotation-y={Math.PI / 2}>
         <planeGeometry args={[11, 11 / letters.aspect]} />
         <meshBasicMaterial map={letters.map} transparent />
       </mesh>
@@ -354,7 +410,7 @@ function LeftBalcony() {
       <Railing from={[left.x1, back.z1]} to={[left.x1, MEZZ_Z]} y={L1} />
       <Railing from={[left.x1, back.z1]} to={[back.x1, back.z1]} y={L1} />
       <Railing from={[back.x1, back.z1]} to={[back.x1, back.z0 + 0.3]} y={L1} />
-      <Railing from={[X0 + 0.3, left.z1]} to={[STAIR.x0, left.z1]} y={L1} />
+      <Railing from={[westX(left.z1) + 0.3, left.z1]} to={[STAIR.x0, left.z1]} y={L1} />
       <Railing from={[STAIR.x1, left.z1]} to={[MEZZ_X0, left.z1]} y={L1} />
     </group>
   )
@@ -392,20 +448,20 @@ function UpperFloors() {
           {y === levels[0] ? (
             <>
               {/* opening where the upper stair comes up */}
-              <Slab x0={X0} x1={-14} z0={Z0} z1={-9} top={y} thick={0.6} />
-              <Slab x0={X0} x1={-14} z0={2.5} z1={Z1} top={y} thick={0.6} />
+              <WestSlab z0={Z0} z1={-9} top={y} thick={0.6} eastOff={4} />
+              <WestSlab z0={2.5} z1={Z1} top={y} thick={0.6} eastOff={4} />
             </>
           ) : (
-            <Slab x0={X0} x1={-14} z0={Z0} z1={Z1} top={y} thick={0.6} />
+            <WestSlab z0={Z0} z1={Z1} top={y} thick={0.6} eastOff={4} />
           )}
-          <Railing from={[-14, Z0 + 0.3]} to={[-14, Z1 - 0.3]} y={y} />
+          <WestRailing off={4} y={y} />
           {/* right stacked balconies (following the splayed east wall at the back) */}
           <Slab x0={(X1 - 3.4)} x1={X1} z0={MEZZ_Z} z1={Z1} top={y} thick={0.6} />
           <SlantSlab top={y} thick={0.6} />
           <Railing from={[(X1 - 3.4), MEZZ_Z]} to={[(X1 - 3.4), Z1 - 0.3]} y={y} />
           <Railing from={[(XB - 3.4), Z0 + 0.3]} to={[(X1 - 3.4), MEZZ_Z]} y={y} />
-          <Slab x0={-14} x1={(X1 - 3.4)} z0={Z1 - 3} z1={Z1} top={y} thick={0.6} />
-          <Railing from={[-14, Z1 - 3]} to={[(X1 - 3.4), Z1 - 3]} y={y} />
+          <Slab x0={westX(Z1 - 1.5) + 4} x1={(X1 - 3.4)} z0={Z1 - 3} z1={Z1} top={y} thick={0.6} />
+          <Railing from={[westX(Z1 - 3) + 4, Z1 - 3]} to={[(X1 - 3.4), Z1 - 3]} y={y} />
         </group>
       ))}
       <UpperStair />
@@ -413,14 +469,14 @@ function UpperFloors() {
       <SlantSlab top={L1} thick={0.55} />
       <Railing from={[(XB - 3.4), Z0 + 0.3]} to={[(X1 - 3.4), MEZZ_Z - 0.3]} y={L1} />
       {/* bridge across the back at the 3rd floor (seen from the entrance) */}
-      <Slab x0={-14} x1={(XB - 3.4)} z0={Z0} z1={Z0 + 3.2} top={levels[0]} thick={0.6} />
-      <Railing from={[-14, Z0 + 3.2]} to={[(XB - 3.4), Z0 + 3.2]} y={levels[0]} />
+      <Slab x0={westX(Z0 + 1.6) + 4} x1={(XB - 3.4)} z0={Z0} z1={Z0 + 3.2} top={levels[0]} thick={0.6} />
+      <Railing from={[westX(Z0 + 3.2) + 4, Z0 + 3.2]} to={[(XB - 3.4), Z0 + 3.2]} y={levels[0]} />
       {/* projecting study box on the left upper level (photo 6) */}
-      <mesh position={[-10.5, 11.2, -10]} castShadow>
+      <mesh position={[westX(-10) + 4.2, 11.2, -10]} castShadow>
         <boxGeometry args={[7, 2.6, 6]} />
         <meshLambertMaterial color={BRONZE} transparent opacity={0.9} />
       </mesh>
-      <mesh position={[-10.5, 12.55, -10]}>
+      <mesh position={[westX(-10) + 4.2, 12.55, -10]}>
         <boxGeometry args={[7.1, 0.1, 6.1]} />
         <meshLambertMaterial color={HANDRAIL} />
       </mesh>
@@ -444,33 +500,35 @@ function Columns() {
 /** The glass-railed staircase on the left as you walk in, with garlands and a net. */
 /** The second glass stair: from the 2nd-floor balcony up to the 3rd floor (top left in the photos). */
 function UpperStair() {
-  const x0 = -16.6
-  const x1 = -14.4
+  // runs up along the west wall from the 2nd-floor balcony (z = 2.5) to the 3rd floor (z = -9)
   const zB = 2.5
   const zT = -9
+  const x0 = westX(zB) + 0.5
+  const ang = Math.atan((westX(zB) - westX(zT)) / (zB - zT)) // follow the wall's angle
+  const w = 2.2
+  const L = Math.hypot(zB - zT, westX(zB) - westX(zT))
   const steps = 22
   const rise = (9.6 - L1) / steps
-  const run = (zB - zT) / steps
-  const len = Math.hypot(zB - zT, 9.6 - L1)
-  const ang = Math.atan2(9.6 - L1, zB - zT)
+  const run = L / steps
+  const slope = Math.atan2(9.6 - L1, L)
+  const len = Math.hypot(L, 9.6 - L1)
   return (
-    <group>
+    <group position={[x0, 0, zB]} rotation-y={ang}>
       {Array.from({ length: steps }, (_, i) => (
-        <mesh key={i} position={[(x0 + x1) / 2, L1 + rise * (i + 0.5), zB - run * (i + 0.5)]} castShadow>
-          <boxGeometry args={[x1 - x0, 0.06, run * 0.92]} />
+        <mesh key={i} position={[w / 2, L1 + rise * (i + 0.5), -run * (i + 0.5)]} castShadow>
+          <boxGeometry args={[w, 0.06, run * 0.92]} />
           <meshLambertMaterial color="#dce6e3" transparent opacity={0.9} />
         </mesh>
       ))}
-      {/* white stringer under the open side and glass balustrade with a steel rail */}
-      <mesh position={[x1, L1 + (9.6 - L1) / 2 - 0.3, (zB + zT) / 2]} rotation-x={ang}>
+      <mesh position={[w, L1 + (9.6 - L1) / 2 - 0.3, -L / 2]} rotation-x={slope}>
         <boxGeometry args={[0.12, 0.45, len]} />
         <meshLambertMaterial color={WHITE} />
       </mesh>
-      <mesh position={[x1 + 0.05, L1 + (9.6 - L1) / 2 + 0.55, (zB + zT) / 2]} rotation-x={ang}>
+      <mesh position={[w + 0.05, L1 + (9.6 - L1) / 2 + 0.55, -L / 2]} rotation-x={slope}>
         <boxGeometry args={[0.02, 1.0, len]} />
         <meshLambertMaterial color="#cfe8e2" transparent opacity={0.3} depthWrite={false} />
       </mesh>
-      <mesh position={[x1 + 0.05, L1 + (9.6 - L1) / 2 + 1.08, (zB + zT) / 2]} rotation-x={ang}>
+      <mesh position={[w + 0.05, L1 + (9.6 - L1) / 2 + 1.08, -L / 2]} rotation-x={slope}>
         <boxGeometry args={[0.06, 0.06, len]} />
         <meshLambertMaterial color="#b9bec4" />
       </mesh>

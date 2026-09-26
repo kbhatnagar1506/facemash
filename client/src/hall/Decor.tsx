@@ -12,9 +12,9 @@ import { Bear, FoldingChair, Sponsors } from './Sponsors'
 const PASTELS = ['#f6a6b2', '#fbd36b', '#9ad9b5', '#b8a8e6', '#f7c59f', '#8fd3e8', '#f28ca0', '#c9e98f']
 const BUNTING: [THREE.Vector3Tuple, THREE.Vector3Tuple, number][] = [
   [[-14, 13.4, -24.6], [16.6, 13.8, -24.6], 1.6], // across the checkerboard wall
-  [[-14, 9.6, -12], [16.6, 9.2, -20], 1.8],
-  [[-10, 10.8, 3], [16.6, 11.2, -6], 2.0],
-  [[-14, 12.2, 12], [16.6, 12.6, 4], 1.8],
+  [[-12, 9.6, -12], [16.6, 9.2, -20], 1.8],
+  [[-9.5, 10.8, 3], [16.6, 11.2, -6], 2.0],
+  [[-8.5, 12.2, 12], [16.6, 12.6, 4], 1.8],
 ]
 
 function Bunting() {
