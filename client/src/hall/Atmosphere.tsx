@@ -1,7 +1,7 @@
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { SLANT, X1, XB, Z0 } from './layout'
+import { DOORS_Z, SLANT, X1, XB, Z0, eastX } from './layout'
 
 // Light and air in the Klaus atrium: morning sunbeams raking in through the
 // east windows, dust drifting through them, and pools of sun on the terrazzo.
@@ -96,10 +96,72 @@ function SunWash() {
   )
 }
 
+/**
+ * Soft shafts of morning sun through each bay of the east glass, slanting down along
+ * the sun direction used for the indoor shadows (Player.tsx). Wide, feathered and
+ * faint so they read as light spreading in, not hard beams.
+ */
+function SunShafts() {
+  const tex = useMemo(() => {
+    const c = document.createElement('canvas')
+    c.width = 64
+    c.height = 128
+    const g = c.getContext('2d')!
+    const down = g.createLinearGradient(0, 0, 0, 128)
+    down.addColorStop(0, 'rgba(255,240,210,1)')
+    down.addColorStop(0.6, 'rgba(255,236,200,0.45)')
+    down.addColorStop(1, 'rgba(255,232,195,0)')
+    g.fillStyle = down
+    g.fillRect(0, 0, 64, 128)
+    g.globalCompositeOperation = 'destination-in'
+    const side = g.createLinearGradient(0, 0, 64, 0)
+    side.addColorStop(0, 'rgba(0,0,0,0)')
+    side.addColorStop(0.35, 'rgba(0,0,0,1)')
+    side.addColorStop(0.65, 'rgba(0,0,0,1)')
+    side.addColorStop(1, 'rgba(0,0,0,0)')
+    g.fillStyle = side
+    g.fillRect(0, 0, 64, 128)
+    const t = new THREE.CanvasTexture(c)
+    t.colorSpace = THREE.SRGBColorSpace
+    return t
+  }, [])
+  const geo = useMemo(() => {
+    const top = 4.4
+    const dir = new THREE.Vector3(-34, -52, -14).normalize()
+    const k = top / -dir.y
+    const off = new THREE.Vector3(dir.x * k, -top, dir.z * k) // top of the glass to the floor
+    const pos: number[] = []
+    const uv: number[] = []
+    const w = 2.4
+    for (let z = Z0 + 2; z < DOORS_Z - 6; z += 2.35) {
+      const a = new THREE.Vector3(eastX(z - w / 2) - 0.15, top, z - w / 2)
+      const b = new THREE.Vector3(eastX(z + w / 2) - 0.15, top, z + w / 2)
+      const c = b.clone().add(off)
+      const d = a.clone().add(off)
+      pos.push(...a.toArray(), ...b.toArray(), ...c.toArray(), ...a.toArray(), ...c.toArray(), ...d.toArray())
+      uv.push(0, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0)
+    }
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2))
+    return g
+  }, [])
+  const mat = useRef<THREE.MeshBasicMaterial>(null!)
+  useFrame(({ clock }) => {
+    if (mat.current) mat.current.opacity = 0.075 + 0.02 * Math.sin(clock.elapsedTime * 0.4) // clouds drifting past
+  })
+  return (
+    <mesh geometry={geo} renderOrder={5}>
+      <meshBasicMaterial ref={mat} map={tex} transparent opacity={0.075} depthWrite={false} blending={THREE.AdditiveBlending} side={THREE.DoubleSide} toneMapped={false} />
+    </mesh>
+  )
+}
+
 export function Atmosphere() {
   return (
     <group>
       <SunWash />
+      <SunShafts />
     </group>
   )
 }
