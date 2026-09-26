@@ -141,10 +141,10 @@ export function Crowd() {
     add(fixed(-3.9, -9.6, Math.PI / 2), { pack: false }) // HackGT Help Desk
     add(fixed(-15.4, 7.5, Math.PI / 2, { wave: false }), { pack: false }) // Hardware Desk
     add(fixed(-12.8, 14.5, 0, { wave: false }), { pack: false }) // MLH
-    add(fixed(19.6, -24.3, west, { sit: true, wave: false }), { pack: false }) // Aramco, in his folding chair
-    add(fixed(21.5, -20.3, west, { wave: false }), { pack: false }) // NSA
-    add(fixed(21.6, -4, west), { pack: false }) // Impiricus
-    add(fixed(21.6, -12.5, west, { wave: false }), { pack: false }) // Meta, behind the long table
+    add(fixed(18.9, -24.3, west, { sit: true, wave: false }), { pack: false }) // Aramco, in his folding chair
+    add(fixed(19.5, -20.3, west, { wave: false }), { pack: false }) // NSA
+    add(fixed(19.6, -4, west), { pack: false }) // Impiricus
+    add(fixed(19.6, -12.5, west, { wave: false }), { pack: false }) // Meta, behind the long table
 
     // 8. The janitor mopping by the entrance.
     add(walker([[6, 16.4], [-3, 16.8]], 0.55, false), { pack: false, mop: true, look: { shirt: '#3c3f46', pants: '#1f2126', skin: '#8d5a3b', hair: '#2a2a2a' } })

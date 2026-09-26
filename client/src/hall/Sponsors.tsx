@@ -676,7 +676,7 @@ function BackRow({ art }: { art: Art }) {
         <FoldingChair key={x} x={x} z={-26.9} rot={0} />
       ))}
       <Bin x={18.1} z={-26.8} />
-      <FoldingChair x={19.6} z={-24.3} rot={-Math.PI / 2} />
+      <FoldingChair x={18.9} z={-24.3} rot={-Math.PI / 2} />
     </group>
   )
 }
@@ -879,7 +879,10 @@ export function Sponsors() {
   return (
     <group>
       <BackRow art={art} />
-      <EastRow art={art} />
+      {/* drawn against the old 44 m wall line; the room is now 40 m wide */}
+      <group position={[-2, 0, 0]}>
+        <EastRow art={art} />
+      </group>
       <Organizers art={art} />
       <Balloons />
     </group>

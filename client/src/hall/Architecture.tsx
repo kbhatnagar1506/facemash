@@ -274,18 +274,18 @@ function UpperFloors() {
           <Slab x0={X0} x1={-17} z0={Z0} z1={Z1} top={y} thick={0.6} />
           <Railing from={[-17, Z0 + 0.3]} to={[-17, Z1 - 0.3]} y={y} />
           {/* right stacked balconies */}
-          <Slab x0={18.6} x1={X1} z0={Z0} z1={Z1} top={y} thick={0.6} />
-          <Railing from={[18.6, Z0 + 0.3]} to={[18.6, Z1 - 0.3]} y={y} />
-          <Slab x0={-17} x1={18.6} z0={Z1 - 3} z1={Z1} top={y} thick={0.6} />
-          <Railing from={[-17, Z1 - 3]} to={[18.6, Z1 - 3]} y={y} />
+          <Slab x0={(X1 - 3.4)} x1={X1} z0={Z0} z1={Z1} top={y} thick={0.6} />
+          <Railing from={[(X1 - 3.4), Z0 + 0.3]} to={[(X1 - 3.4), Z1 - 0.3]} y={y} />
+          <Slab x0={-17} x1={(X1 - 3.4)} z0={Z1 - 3} z1={Z1} top={y} thick={0.6} />
+          <Railing from={[-17, Z1 - 3]} to={[(X1 - 3.4), Z1 - 3]} y={y} />
         </group>
       ))}
       {/* right 2nd floor too (over the sponsor booths) */}
-      <Slab x0={18.6} x1={X1} z0={Z0} z1={MEZZ_Z} top={L1} thick={0.55} />
-      <Railing from={[18.6, Z0 + 0.3]} to={[18.6, MEZZ_Z - 0.3]} y={L1} />
+      <Slab x0={(X1 - 3.4)} x1={X1} z0={Z0} z1={MEZZ_Z} top={L1} thick={0.55} />
+      <Railing from={[(X1 - 3.4), Z0 + 0.3]} to={[(X1 - 3.4), MEZZ_Z - 0.3]} y={L1} />
       {/* bridge across the back at the 3rd floor (seen from the entrance) */}
-      <Slab x0={-17} x1={18.6} z0={Z0} z1={Z0 + 3.2} top={levels[0]} thick={0.6} />
-      <Railing from={[-17, Z0 + 3.2]} to={[18.6, Z0 + 3.2]} y={levels[0]} />
+      <Slab x0={-17} x1={(X1 - 3.4)} z0={Z0} z1={Z0 + 3.2} top={levels[0]} thick={0.6} />
+      <Railing from={[-17, Z0 + 3.2]} to={[(X1 - 3.4), Z0 + 3.2]} y={levels[0]} />
       {/* projecting study box on the left upper level (photo 6) */}
       <mesh position={[-13.5, 11.2, -10]} castShadow>
         <boxGeometry args={[7, 2.6, 6]} />
