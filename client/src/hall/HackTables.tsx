@@ -180,6 +180,7 @@ const Prop = {
 const BODIES = ['#c9ccd2', '#2b2d33', '#b8bcc3', '#8c9097', '#d9d2c7']
 const CAN_COLORS = ['#c9302c', '#d8d9dc', '#2a5cc8', '#141417', '#3aa35c', '#f2c230']
 const BAG_COLORS = ['#f29a2e', '#f2c230', '#6b3f8f', '#2f80ed', '#c9302c', '#3aa35c']
+const PACKS = ['#2b2d33', '#4a3a31', '#1f2f4a', '#5b5f66', '#3d5a3f', '#6d2e2e']
 const NOTEBOOKS = ['#1f2f4a', '#c9302c', '#2b2d33', '#3aa35c', '#f2c230']
 
 /** Scatter a hacker's things in front of one seat (seat faces +z in this frame). */
@@ -244,7 +245,7 @@ function buildTable({ len = TABLE.w, d = TABLE.d, leaves = 2, seed = 1, seats = 
     }
     if (used) {
       k.at([x, 0, side * (d / 2 - 0.28)], side > 0 ? 0 : Math.PI, () => seatSpread(k, r, T))
-      r(); r(); r(); r(); r() // (backpacks removed; keep the random sequence stable)
+      if (r() < 0.6) Prop.backpack(k, cx + (r() < 0.5 ? -0.42 : 0.42), cz + side * 0.1, r() * 3, pick(r, PACKS), r() < 0.3 ? 0.25 : 0)
     }
   }
   seats.forEach((x) => place(x, 1))

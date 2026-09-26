@@ -1,9 +1,9 @@
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { addTerrazzo } from './detail'
 import { BALCONY, CEIL, COLUMNS, CX, CXB, SAG, SLANT, WEST_ZS, XB, ceilY, eastX, wallZ, westX, DOORS_Z, HALL, L1, MEZZ_WEST_Z, MEZZ_X0, MEZZ_Z, STAIR, X0, X1, Z0, Z1 } from './layout'
 import { Entrance } from './Entrance'
+import { addTerrazzo } from './detail'
 import { ceilingTiles, checkerWall, glassPanes, terrazzo } from './textures'
 
 const WHITE = '#f4f2ee'
@@ -510,6 +510,9 @@ function UpperFloors() {
       {/* right 2nd floor too (over the sponsor booths) */}
       <SlantSlab top={L1} thick={0.55} />
       <Railing from={[(XB - 3.4), Z0 + 0.3]} to={[(X1 - 3.4), MEZZ_Z - 0.3]} y={L1} />
+      {/* bridge across the back at the 3rd floor (seen from the entrance) */}
+      <Slab x0={westX(Z0 + 1.6) + 4} x1={(XB - 3.4)} z0={Z0} z1={Z0 + 3.2} top={levels[0]} thick={0.6} />
+      <Railing from={[westX(Z0 + 3.2) + 4, Z0 + 3.2]} to={[(XB - 3.4), Z0 + 3.2]} y={levels[0]} glass />
       {/* projecting study box on the left upper level (photo 6) */}
       <mesh position={[westX(-10) + 4.2, 11.2, -10]} castShadow>
         <boxGeometry args={[7, 2.6, 6]} />

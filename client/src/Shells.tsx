@@ -60,11 +60,10 @@ function Shell({
     [],
   )
 
-  useFrame(({ clock, camera }) => {
+  useFrame(({ clock }) => {
     const t = clock.elapsedTime + seed
     spin.current.position.y = 2.8 + Math.sin(t * 2) * 0.18
-    // face the camera wherever it has been turned, with a gentle sway
-    spin.current.rotation.y = Math.atan2(camera.position.x - x, camera.position.z - z) + Math.sin(t * 0.9) * 0.6
+    spin.current.rotation.y = Math.sin(t * 0.9) * 0.6
     const k = hover ? 1.9 : 1.6
     spin.current.scale.lerp(new THREE.Vector3(k, k, k), 0.2)
     const pulse = (t * 0.8) % 1
@@ -80,7 +79,7 @@ function Shell({
   }
 
   return (
-    // The shell turns to face the camera; `facing` only orients the post.
+    // The shell always faces the overhead camera (south); `facing` only orients the post.
     <group position={[x, 0, z]}>
       {/* sandy patch + pulsing ring so the spot reads from far away */}
       <mesh rotation-x={-Math.PI / 2} position={[0, 0.12, 0]}>

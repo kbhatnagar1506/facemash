@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { Bloom, BrightnessContrast, EffectComposer, HueSaturation, N8AO, SMAA, Vignette } from '@react-three/postprocessing'
+import { Bloom, EffectComposer, N8AO, SMAA, Vignette } from '@react-three/postprocessing'
 import { Collider, loadCampus, type Campus } from './map'
 import { Net } from './net'
 import { World } from './World'
@@ -175,7 +175,7 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
   useEffect(() => {
     const wheel = (e: WheelEvent) => {
       if ((e.target as HTMLElement).closest?.('.chat-log, .modal')) return
-      zoom.current = Math.min(110, Math.max(6, zoom.current * (e.deltaY > 0 ? 1.1 : 0.9)))
+      zoom.current = Math.min(110, Math.max(12, zoom.current * (e.deltaY > 0 ? 1.1 : 0.9)))
     }
     window.addEventListener('wheel', wheel, { passive: true })
     return () => window.removeEventListener('wheel', wheel)
@@ -193,7 +193,7 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
         <fog attach="fog" args={['#bfe6ff', 180, 700]} />
         {/* campus: sky + grass bounce; inside Klaus: warm neutral bounce off the terrazzo */}
         <hemisphereLight
-          args={room === 'hackgt' ? ['#fff6ea', '#c9c2b4', 1.15] : ['#e8f2ff', '#7faf65', 1.1]}
+          args={room === 'hackgt' ? ['#fff6ea', '#cfc8ba', 1.45] : ['#e8f2ff', '#7faf65', 1.1]}
           key={room}
         />
         {/* inside Klaus: the mezzanine's downlights, as a soft shadowless top light so the
@@ -226,9 +226,6 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
           <EffectComposer key="hall" multisampling={0}>
             <N8AO halfRes aoRadius={1.4} distanceFalloff={0.6} intensity={2.6} color="#2a2420" />
             <Bloom mipmapBlur intensity={0.35} luminanceThreshold={0.99} luminanceSmoothing={0.03} />
-            {/* grade: a touch richer and punchier, warm vignette */}
-            <HueSaturation saturation={0.1} />
-            <BrightnessContrast brightness={-0.03} contrast={0.06} />
             <Vignette offset={0.3} darkness={0.55} />
             <SMAA />
           </EffectComposer>
@@ -324,7 +321,7 @@ function Cinematic() {
         <strong>HackGT 13</strong>
         <span>Klaus Advanced Computing Building · Seaside Market</span>
       </div>
-      <div className="cine-skip">Esc or click to skip</div>
+      <div className="cine-skip">Press any key to skip</div>
     </div>
   )
 }

@@ -49,15 +49,11 @@ function qr(g: CanvasRenderingContext2D, x: number, y: number, s: number, seed =
 
 /** A tablecloth front: base colour + whatever is printed on it. 512 px per metre-ish. */
 function print(bg: string, draw?: (g: CanvasRenderingContext2D, w: number, h: number) => void, w = 1024, h = 400) {
-  // drawn at 2× so logos and small print stay crisp on the cloth
-  const t = paint(w * 2, h * 2, (g) => {
-    g.scale(2, 2)
+  return paint(w, h, (g) => {
     g.fillStyle = bg
     g.fillRect(0, 0, w, h)
     draw?.(g, w, h)
   })
-  t.anisotropy = 16
-  return t
 }
 
 /* ------------------------------------------------------------ drape geometry */
@@ -93,7 +89,7 @@ export const DRAPED_H = 0.95
 export function Cloth({ w, d, color, front, h = DRAPED_H, seed = 1, loose = 1 }: { w: number; d: number; color: string; front?: THREE.Texture; h?: number; seed?: number; loose?: number }) {
   const geos = useMemo(
     () => ({
-      front: drape(w, h, seed, loose * 0.45), // shallower folds up front so the print reads
+      front: drape(w, h, seed, loose),
       back: drape(w, h, seed + 3, loose * 0.7),
       side: drape(d, h, seed + 7, loose * 0.8),
     }),
@@ -106,8 +102,7 @@ export function Cloth({ w, d, color, front, h = DRAPED_H, seed = 1, loose = 1 }:
         <meshLambertMaterial color={color} />
       </mesh>
       <mesh geometry={geos.front} position={[0, h / 2, d / 2]} castShadow receiveShadow>
-        {/* the print glows a little so logos pop out of the folds and shadow */}
-        <meshLambertMaterial color={front ? '#ffffff' : color} map={front} emissiveMap={front ?? null} emissive={front ? '#ffffff' : '#000000'} emissiveIntensity={0.28} side={THREE.DoubleSide} />
+        <meshLambertMaterial color={front ? '#ffffff' : color} map={front} side={THREE.DoubleSide} />
       </mesh>
       <mesh geometry={geos.back} position={[0, h / 2, -d / 2]} rotation-y={Math.PI}>
         <meshLambertMaterial color={color} side={THREE.DoubleSide} />
@@ -763,6 +758,19 @@ function SuitCase({ x, z, rot = 0 }: { x: number; z: number; rot?: number }) {
   )
 }
 
+function Backpack({ x, z, rot = 0, color = '#2b2d33', y = 0 }: { x: number; z: number; rot?: number; color?: string; y?: number }) {
+  return (
+    <group position={[x, y, z]} rotation-y={rot}>
+      <Box p={[0, 0.2, 0]} s={[0.34, 0.4, 0.2]} color={color} />
+      <mesh position={[0, 0.4, 0]} rotation-x={Math.PI / 2}>
+        <cylinderGeometry args={[0.17, 0.17, 0.2, 12]} />
+        <meshLambertMaterial color={color} />
+      </mesh>
+      <Box p={[0, 0.15, 0.12]} s={[0.26, 0.18, 0.06]} color={color} />
+    </group>
+  )
+}
+
 function EastRow({ art }: { art: Art }) {
   // Along the east windows, back corner to the lobby; table fronts face west, into the atrium.
   const west = -Math.PI / 2
@@ -777,6 +785,7 @@ function EastRow({ art }: { art: Art }) {
           <Box p={[-0.8, 1.01, 0.25]} s={[0.22, 0.12, 0.16]} color="#2a5cc8" />
         </group>
         {[-20.8, -19.2].map((z) => <FoldingChair key={z} x={REP} z={z} rot={west} />)}
+        <Backpack x={REP + 0.05} z={-18.3} rot={0.4} color="#1f2f4a" />
         <Bin x={REP} z={-22.4} />
         {[-23.2, -22.5].map((z, i) => <FoldingChair key={z} x={TX - 0.2 - i * 0.2} z={z - 0.4} rot={west + 0.3 * i} />)}
       </Along>
@@ -815,6 +824,7 @@ function EastRow({ art }: { art: Art }) {
         </group>
         {[-13.3, -11.7].map((z) => <FoldingChair key={z} x={REP} z={z} rot={west} />)}
         <FoldingChair x={FRONT} z={-12.9} rot={Math.PI / 2 + 0.35} />
+        <Backpack x={REP} z={-10.9} rot={-0.3} />
         <RollUp map={art.meta} x={TX - 0.1} z={-10.1} rot={-1.28} w={1} h={2.3} />
       </Along>
 
@@ -826,6 +836,7 @@ function EastRow({ art }: { art: Art }) {
           <Swag w={3.6} seed={11} laptops={2} />
         </group>
         {[-5, -3.4].map((z) => <FoldingChair key={z} x={REP} z={z} rot={west} />)}
+        <Backpack x={REP + 0.05} z={-6} rot={0.2} color="#6d2e2e" />
         <RollUp map={art.selfBuild} x={TX} z={-1.9} rot={west} w={0.95} h={2.2} dark />
         <SuitCase x={TX - 0.2} z={-1.2} rot={0.3} />
       </Along>
@@ -847,6 +858,7 @@ function EastRow({ art }: { art: Art }) {
       </group>
       {[4.1, 5.5].map((z) => <FoldingChair key={z} x={REP} z={z} rot={west} />)}
       <Box p={[REP, 0.72, 4.1]} s={[0.4, 0.34, 0.14]} color="#b98a55" />
+      <Backpack x={REP} z={5.5} y={0.46} rot={Math.PI / 2} color="#4a3a31" />
       {/* the SpaceX sign on a black easel stand at the table's south end (not on the glass) */}
       <group position={[TX + 0.1, 0, 6.9]} rotation-y={west + 0.35}>
         {[-0.35, 0.35].map((x) => <Box key={x} p={[x, 0.75, 0]} s={[0.04, 1.5, 0.04]} color="#1b1b1f" />)}

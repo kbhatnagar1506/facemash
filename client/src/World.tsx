@@ -5,8 +5,7 @@ import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import type { Campus, Pt } from './map'
 import { withCutaway } from './cutaway'
-import { detailTexture, worldUV } from './campusTextures'
-import { dataMap, detailMap } from './realTextures'
+import { asphaltTexture, detailTexture, grassTexture, paverTexture, worldUV } from './campusTextures'
 
 const WALL = new THREE.Color('#f4ead2')
 const WALL_EVENT = new THREE.Color('#fff4c9')
@@ -132,19 +131,10 @@ function Ground({ campus }: { campus: Campus }) {
     }
   }, [campus])
   const tex = useMemo(() => {
-    // real photographed surfaces (Poly Haven), used as detail over the campus palette
+    const grass = grassTexture()
     const [x0, z0, x1, z1] = campus.bounds
-    const gx = (x1 - x0 + 800) / 4 // 4 m grass tiles
-    const gz = (z1 - z0 + 800) / 4
-    return {
-      grass: detailMap('leafy_grass_diff_1k', gx, gz, 0.55, 0.92),
-      grassN: dataMap('leafy_grass_nor_gl_1k', gx, gz),
-      detail: detailTexture(),
-      asphalt: detailMap('asphalt_02_diff_1k', 1, 1, 0.6, 0.9),
-      asphaltN: dataMap('asphalt_02_nor_gl_1k', 1, 1),
-      pavers: detailMap('brick_pavement_02_diff_1k', 1, 1, 0.55, 0.92),
-      paversN: dataMap('brick_pavement_02_nor_gl_1k', 1, 1),
-    }
+    grass.repeat.set((x1 - x0 + 800) / 5, (z1 - z0 + 800) / 5) // 5 m tiles
+    return { grass, detail: detailTexture(), asphalt: asphaltTexture(), pavers: paverTexture() }
   }, [campus])
 
   const [x0, z0, x1, z1] = campus.bounds
@@ -152,16 +142,16 @@ function Ground({ campus }: { campus: Campus }) {
     <group>
       <mesh rotation-x={-Math.PI / 2} position={[(x0 + x1) / 2, 0, (z0 + z1) / 2]} receiveShadow>
         <planeGeometry args={[x1 - x0 + 800, z1 - z0 + 800]} />
-        <meshLambertMaterial color="#8fd06f" map={tex.grass} normalMap={tex.grassN} normalScale={[0.8, 0.8]} />
+        <meshLambertMaterial map={tex.grass} />
       </mesh>
       <mesh geometry={areas} receiveShadow>
         <meshLambertMaterial vertexColors map={tex.detail} />
       </mesh>
       <mesh geometry={roads} receiveShadow>
-        <meshLambertMaterial color="#aab0bb" map={tex.asphalt} normalMap={tex.asphaltN} polygonOffset polygonOffsetFactor={-1} />
+        <meshLambertMaterial color="#b9bdc8" map={tex.asphalt} polygonOffset polygonOffsetFactor={-1} />
       </mesh>
       <mesh geometry={paths} receiveShadow>
-        <meshLambertMaterial color="#e8d2a6" map={tex.pavers} normalMap={tex.paversN} polygonOffset polygonOffsetFactor={-2} />
+        <meshLambertMaterial map={tex.pavers} polygonOffset polygonOffsetFactor={-2} />
       </mesh>
     </group>
   )
