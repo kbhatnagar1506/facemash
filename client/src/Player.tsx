@@ -142,8 +142,12 @@ export function Player({
     const [ux, uz] = hopDir.current
     let d = 0
     while (d < 12 && collider.furniture?.(x + ux * d, z + uz * d)) d += 0.1
-    hopLen.current = Math.max(0.8, d + 0.5)
+    // Only jump if there's clear floor to land on (not a wall right behind the table).
+    const land = d + 0.5
+    if (collider.surface?.(x + ux * land, z + uz * land, height.current) == null) return false
+    hopLen.current = Math.max(0.8, land)
     hop.current = 0.001
+    return true
   }
 
   useFrame((_, rawDt) => {
@@ -211,14 +215,16 @@ export function Player({
       // Slide along walls: try the full step, then each axis on its own.
       const tryMove = (nx: number, nz: number) => {
         if (collider.surface) {
-          let h = collider.surface(nx, nz, height.current, hop.current > 0)
+          // Already standing inside furniture (e.g. spawned there)? Let them walk out freely.
+          const stuck = collider.furniture?.(p.x, p.y) ?? false
+          let h = collider.surface(nx, nz, height.current, hop.current > 0 || stuck)
           // Walked into a table/chair/booth on the ground: jump and pass over it.
           if (h === null && hop.current === 0 && height.current < 0.1 && collider.furniture?.(nx, nz)) {
             h = collider.surface(nx, nz, height.current, true)
             if (h !== null) {
               const L = Math.hypot(nx - p.x, nz - p.y) || 1
               hopDir.current = [(nx - p.x) / L, (nz - p.y) / L]
-              startHop(nx, nz)
+              if (!startHop(nx, nz)) h = null // nowhere to land: it blocks like a wall
             }
           }
           if (h === null) return false
@@ -254,6 +260,7 @@ export function Player({
       }
       if (hop.current >= 1) {
         hop.current = 0
+        // came down on furniture: jump on only if there's somewhere to land; else walk out
         if (collider.furniture?.(p.x, p.y)) startHop(p.x, p.y)
       }
     }
