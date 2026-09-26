@@ -2,7 +2,14 @@
 // mutable map (read every frame by three.js); roster and chat changes are
 // pushed to React through subscribe().
 
+import { fetchMe } from './account'
+
 export type Room = 'campus' | 'hackgt'
+
+// Close codes the server uses to refuse a hello (see server/main.go).
+const CLOSE_SIGN_IN = 4401 // no valid ticket: fetch a fresh one (tickets last a day)
+const CLOSE_TOO_MANY = 4429 // this account already has several tabs in the game
+const CLOSE_FULL = 1013 // server full, try again later
 
 export interface NetPlayer {
   id: number
@@ -77,11 +84,24 @@ export class Net {
     }
     ws.binaryType = 'arraybuffer'
     ws.onmessage = (ev) => (ev.data instanceof ArrayBuffer ? this.onFrame(ev.data) : this.onMessage(JSON.parse(ev.data)))
-    ws.onclose = () => {
+    ws.onclose = (ev) => {
       this.connected = false
       this.players.clear()
       this.emit()
-      if (!this.closed) setTimeout(() => this.open(), 1500)
+      if (this.closed) return
+      if (ev.code === CLOSE_SIGN_IN) {
+        // the game needs an account: pick up a fresh ticket, or go sign in
+        fetchMe(true).then((me) => {
+          if (this.closed) return
+          if (me.ticket) {
+            this.hello.ticket = me.ticket
+            setTimeout(() => this.open(), 1500)
+          } else if (me.googleClientId) location.replace('/?signin')
+          else setTimeout(() => this.open(), 5000)
+        })
+        return
+      }
+      setTimeout(() => this.open(), ev.code === CLOSE_TOO_MANY || ev.code === CLOSE_FULL ? 5000 : 1500)
     }
   }
 

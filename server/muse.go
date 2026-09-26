@@ -19,7 +19,6 @@ import (
 	"io"
 	"log"
 	"math"
-	"net"
 	"net/http"
 	"os"
 	"sort"
@@ -280,17 +279,22 @@ func describeLook(look, color string) string {
 	return strings.Join(parts, ", ")
 }
 
+// counts is how many people are online, and in which room. While the hub is running the
+// tick works them out once per tick (every join, leave and room change marks it dirty), so
+// this is a read of that; a hub that isn't ticking (tests) counts under the lock.
 func (h *Hub) counts() map[string]int {
-	counts := map[string]int{"online": 0, "campus": 0, "hackgt": 0}
+	if n := h.online.Load(); n != nil && h.ticking.Load() {
+		return map[string]int{"online": n.online, "campus": n.campus, "hackgt": n.hackgt}
+	}
+	var n onlineCounts
 	h.mu.Lock()
 	for _, c := range h.clients {
 		if c.joined {
-			counts["online"]++
-			counts[c.p.Room]++
+			n.add(c.p.Room)
 		}
 	}
 	h.mu.Unlock()
-	return counts
+	return map[string]int{"online": n.online, "campus": n.campus, "hackgt": n.hackgt}
 }
 
 type schedItem struct {
@@ -820,7 +824,8 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": `POST {"code": "gtqp_..."} to redeem a pairing code`})
 			return
 		}
-		if !pairs.allow(clientIP(r)) {
+		// a very loose cap per caller (agents behind one proxy or NAT share an address)...
+		if !pairs.allow("ip:"+clientIP(r), claimsPerIP) {
 			writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many attempts, wait a minute"})
 			return
 		}
@@ -828,6 +833,11 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 		b, _ := io.ReadAll(io.LimitReader(r.Body, 1024))
 		if json.Unmarshal(b, &in) != nil || !strings.HasPrefix(strings.TrimSpace(in.Code), pairPrefix) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": `send JSON {"code": "gtqp_..."}`})
+			return
+		}
+		// ...and a tight one per code
+		if !pairs.allow("code:"+string(hashToken(strings.TrimSpace(in.Code))), claimsPerCode) {
+			writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many attempts, wait a minute"})
 			return
 		}
 		p, ok := pairs.take(strings.TrimSpace(in.Code))
@@ -936,36 +946,45 @@ func (p *pairings) pending(tenant string, id int64) bool {
 	return false
 }
 
-// allow rate-limits claims per client IP (codes are unguessable; this just keeps noise down).
-func (p *pairings) allow(ip string) bool {
+// Claim limits, per minute. Codes are unguessable, so these only keep noise down: tight per
+// code, and very loose per caller address, since every agent that reaches us through Vercel
+// (or one campus NAT) arrives from the same few addresses.
+const (
+	claimsPerCode = 5
+	claimsPerIP   = 600
+)
+
+// allow counts one claim attempt against key (at most max a minute).
+func (p *pairings) allow(key string, max int) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	now := time.Now()
-	recent := p.hits[ip][:0]
-	for _, t := range p.hits[ip] {
+	recent := p.hits[key][:0]
+	for _, t := range p.hits[key] {
 		if now.Sub(t) < time.Minute {
 			recent = append(recent, t)
 		}
 	}
-	if len(recent) >= 20 {
-		p.hits[ip] = recent
+	if len(recent) >= max {
+		p.hits[key] = recent
 		return false
 	}
-	p.hits[ip] = append(recent, now)
-	if len(p.hits) > 10000 { // don't grow without bound
-		p.hits = map[string][]time.Time{}
+	p.hits[key] = append(recent, now)
+	if len(p.hits) > 10000 { // don't grow without bound: forget the quiet first
+		for k, ts := range p.hits {
+			if len(ts) == 0 || now.Sub(ts[len(ts)-1]) >= time.Minute {
+				delete(p.hits, k)
+			}
+		}
+		if len(p.hits) > 10000 {
+			p.hits = map[string][]time.Time{}
+		}
 	}
 	return true
 }
 
-func clientIP(r *http.Request) string {
-	// behind Vercel and Caddy: the first hop in X-Forwarded-For is the caller
-	if f := r.Header.Get("X-Forwarded-For"); f != "" {
-		return strings.TrimSpace(strings.Split(f, ",")[0])
-	}
-	host, _, _ := net.SplitHostPort(r.RemoteAddr)
-	return host
-}
+// clientIP is the caller's address as our own proxy saw it (see peerIP).
+func clientIP(r *http.Request) string { return peerIP(r) }
 
 // pairPrompt is what the attendee pastes into their agent.
 func pairPrompt(base, code string, exp time.Time) string {
@@ -1241,7 +1260,7 @@ type callLog struct {
 }
 
 func (l *callLog) add(id int64, what string, at time.Time, d time.Duration) {
-	log.Printf("agent: #%d %s %.1fms", id, what, float64(d.Microseconds())/1000)
+	log.Printf("agent: #%d %q %.1fms", id, what, float64(d.Microseconds())/1000)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	cs := append(l.by[id], museCall{at, what, d})
