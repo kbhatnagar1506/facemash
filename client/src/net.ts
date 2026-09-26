@@ -2,7 +2,14 @@
 // mutable map (read every frame by three.js); roster and chat changes are
 // pushed to React through subscribe().
 
+import { fetchMe } from './account'
+
 export type Room = 'campus' | 'hackgt'
+
+// Close codes the server uses to refuse a hello (see server/main.go).
+const CLOSE_SIGN_IN = 4401 // no valid ticket: fetch a fresh one (tickets last a day)
+const CLOSE_TOO_MANY = 4429 // this account already has several tabs in the game
+const CLOSE_FULL = 1013 // server full, try again later
 
 export interface NetPlayer {
   id: number
@@ -27,6 +34,13 @@ export interface ChatLine {
 
 type Listener = () => void
 
+/** Agent talk frames the server pushes to this account (see talk/talkState.ts). */
+export interface TalkFrame {
+  t: 'encounter' | 'agents' | 'verdict' | 'reveal' | 'closed' | 'reconnected'
+  id?: string
+  [k: string]: unknown
+}
+
 export class Net {
   /** Players currently in view (the server streams only nearby players: area of interest). */
   players = new Map<number, NetPlayer>()
@@ -42,6 +56,8 @@ export class Net {
 
   private ws: WebSocket | null = null
   private listeners = new Set<Listener>()
+  private talkListeners = new Set<(f: TalkFrame) => void>()
+  private everConnected = false
   private hello: { name: string; color: string; x: number; z: number; room: Room; look?: string; ticket?: string }
   private lastSent = ''
   private chatKey = 0
@@ -68,11 +84,24 @@ export class Net {
     }
     ws.binaryType = 'arraybuffer'
     ws.onmessage = (ev) => (ev.data instanceof ArrayBuffer ? this.onFrame(ev.data) : this.onMessage(JSON.parse(ev.data)))
-    ws.onclose = () => {
+    ws.onclose = (ev) => {
       this.connected = false
       this.players.clear()
       this.emit()
-      if (!this.closed) setTimeout(() => this.open(), 1500)
+      if (this.closed) return
+      if (ev.code === CLOSE_SIGN_IN) {
+        // the game needs an account: pick up a fresh ticket, or go sign in
+        fetchMe(true).then((me) => {
+          if (this.closed) return
+          if (me.ticket) {
+            this.hello.ticket = me.ticket
+            setTimeout(() => this.open(), 1500)
+          } else if (me.googleClientId) location.replace('/?signin')
+          else setTimeout(() => this.open(), 5000)
+        })
+        return
+      }
+      setTimeout(() => this.open(), ev.code === CLOSE_TOO_MANY || ev.code === CLOSE_FULL ? 5000 : 1500)
     }
   }
 
@@ -123,7 +152,12 @@ export class Net {
     switch (msg.t) {
       case 'welcome':
       case 'room':
-        if (msg.t === 'welcome') this.myId = msg.id
+        if (msg.t === 'welcome') {
+          this.myId = msg.id
+          // back after a drop: an agent talk may have moved on without us
+          if (this.everConnected) this.emitTalk({ t: 'reconnected' })
+          this.everConnected = true
+        }
         this.connected = true
         this.room = msg.room
         this.players.clear()
@@ -171,6 +205,13 @@ export class Net {
       case 'correct':
         this.correction = { x: msg.x, z: msg.z }
         break
+      case 'encounter':
+      case 'agents':
+      case 'verdict':
+      case 'reveal':
+      case 'closed':
+        this.emitTalk(msg as TalkFrame)
+        break
     }
   }
 
@@ -217,6 +258,18 @@ export class Net {
     return () => {
       this.listeners.delete(fn)
     }
+  }
+
+  /** Agent talk pushes (only ever this account's own talks). */
+  onTalk(fn: (f: TalkFrame) => void) {
+    this.talkListeners.add(fn)
+    return () => {
+      this.talkListeners.delete(fn)
+    }
+  }
+
+  private emitTalk(f: TalkFrame) {
+    for (const fn of this.talkListeners) fn(f)
   }
 
   private emit() {

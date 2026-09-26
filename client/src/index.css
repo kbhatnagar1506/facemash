@@ -41,10 +41,13 @@ canvas { display: block; touch-action: none; }
   border-radius: 8px; outline: none;
 }
 .title-card input:focus { border-color: #4f7fd6; }
-.swatches { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+/* one row of eight at any width (it wrapped one swatch onto its own line on phones) */
+.swatches { display: grid; grid-template-columns: repeat(8, minmax(0, 32px)); justify-content: center; gap: 6px; }
 .swatch {
-  width: 32px; height: 32px; border-radius: 50%; border: 3px solid var(--ink); cursor: pointer;
+  width: 100%; height: auto; aspect-ratio: 1; padding: 0; border-radius: 50%; border: 3px solid var(--ink); cursor: pointer;
+  position: relative;
 }
+.swatch::after { content: ''; position: absolute; inset: -9px; border-radius: 50%; }
 .swatch.on { outline: 3px solid var(--gold); outline-offset: 2px; }
 .start {
   font: 14px var(--pixel); padding: 14px; background: var(--red); color: #fff;
@@ -75,7 +78,7 @@ canvas { display: block; touch-action: none; }
 /* ---------- HUD ---------- */
 .hud { position: fixed; inset: 0; pointer-events: none; }
 .hud > * { pointer-events: auto; }
-.topbar { position: absolute; top: 12px; left: 12px; display: flex; gap: 8px; }
+.topbar { position: absolute; top: calc(12px + env(safe-area-inset-top)); left: calc(12px + env(safe-area-inset-left)); display: flex; gap: 8px; }
 .online, .pill {
   font: 800 13px var(--round); background: var(--paper); border: 3px solid var(--ink);
   border-radius: 999px; padding: 4px 12px;
@@ -84,7 +87,7 @@ canvas { display: block; touch-action: none; }
 .online.off { color: #b0413b; }
 
 .location {
-  position: absolute; top: 56px; left: 12px; transform: translateX(-120%);
+  position: absolute; top: calc(56px + env(safe-area-inset-top)); left: calc(12px + env(safe-area-inset-left)); transform: translateX(-120%);
   transition: transform 0.35s cubic-bezier(.2,.9,.3,1.2);
   background: var(--paper); border: 4px solid var(--ink); border-radius: 6px;
   box-shadow: 4px 4px 0 rgba(0,0,0,.2); padding: 10px 16px; font: 11px/1.4 var(--pixel);
@@ -93,12 +96,12 @@ canvas { display: block; touch-action: none; }
 .location.show { transform: none; }
 
 .minimap {
-  position: absolute; top: 12px; right: 12px; border: 4px solid var(--ink); border-radius: 10px;
+  position: absolute; top: calc(12px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right)); border: 4px solid var(--ink); border-radius: 10px;
   overflow: hidden; cursor: pointer; box-shadow: 0 4px 0 var(--ink); line-height: 0;
 }
 .minimap.big { top: 50%; right: 50%; transform: translate(50%, -50%); z-index: 5; }
 
-.chat { position: absolute; left: 12px; bottom: 44px; width: min(360px, calc(100vw - 24px)); }
+.chat { position: absolute; left: calc(12px + env(safe-area-inset-left)); bottom: calc(44px + env(safe-area-inset-bottom)); width: min(360px, calc(100vw - 24px)); }
 .chat-log { display: grid; gap: 2px; margin-bottom: 6px; }
 .chat-line {
   font: 700 13px var(--round); background: rgba(255,253,246,.88); border-radius: 6px;
@@ -162,16 +165,25 @@ kbd {
   .minimap canvas { width: 120px !important; height: 120px !important; }
   .minimap.big canvas { width: calc(100vw - 32px) !important; height: calc(100vw - 32px) !important; }
   .help { display: none; }
-  .chat { bottom: 12px; }
+  .chat { bottom: calc(12px + env(safe-area-inset-bottom)); }
 }
 
 /* HackGT hall: live "Now / Next" from the real schedule */
 .now-next {
-  position: absolute; top: 12px; right: 12px; max-width: min(380px, calc(100vw - 24px)); cursor: pointer;
+  position: absolute; top: calc(12px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right)); max-width: min(380px, calc(100vw - 24px)); cursor: pointer;
   display: grid; gap: 4px; padding: 10px 14px; font: 700 13px 'Sen', var(--round);
   background: #fbf6ea; border: 4px solid #c98a4b; border-radius: 12px; box-shadow: 0 4px 0 #8e5a2b;
 }
 .now-next b { font-family: 'Darumadrop One', 'Chewy', sans-serif; font-weight: 400; color: #1f5566; margin-right: 6px; }
+/* phones: the card spans the width under the player count instead of covering it; the
+   static "HackGT 13 · Klaus Atrium" sign gives way (the card already says where you are) */
+@media (max-width: 640px) {
+  .now-next {
+    top: calc(52px + env(safe-area-inset-top)); left: calc(12px + env(safe-area-inset-left)); right: calc(12px + env(safe-area-inset-right));
+    max-width: none; padding: 8px 12px; font-size: 12px;
+  }
+  .hud:has(> .now-next) > .location { display: none; }
+}
 
 /* Georgia Tech wordmark over the campus minimap (campus only) */
 .minimap-head { background: #003057; padding: 7px 10px; line-height: 0; border-bottom: 3px solid var(--ink); }
@@ -190,7 +202,7 @@ kbd {
 @keyframes toast { 0% { opacity: 0; transform: translate(-50%, 10px); } 10%, 80% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; } }
 
 /* live location */
-.live-ui { position: fixed; left: 12px; bottom: 96px; z-index: 40; display: grid; gap: 8px; justify-items: start; pointer-events: none; }
+.live-ui { position: fixed; left: calc(12px + env(safe-area-inset-left)); bottom: calc(96px + env(safe-area-inset-bottom)); z-index: 40; display: grid; gap: 8px; justify-items: start; pointer-events: none; }
 .live-ui > * { pointer-events: auto; }
 .live-pill {
   font: 800 13px var(--round); padding: 5px 12px; border-radius: 999px; cursor: pointer;
@@ -238,7 +250,9 @@ kbd {
 .studio-title { position: absolute; top: 18px; left: 20px; display: grid; gap: 4px; pointer-events: none; }
 .studio-title span { font-family: var(--pixel); font-size: 10px; color: #c56b95; letter-spacing: 1px; }
 .studio-title strong { font-family: var(--pixel); font-size: 26px; color: #ffd23f; -webkit-text-stroke: 1.5px var(--ink); text-shadow: 3px 3px 0 var(--ink); }
-.studio-poses { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; }
+.studio-poses { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; width: max-content; }
+/* centred with left: 50%, so they'd otherwise shrink to half the stage and wrap */
+.studio-poses button, .studio-saved { white-space: nowrap; }
 .studio-poses button, .chip, .studio-random, .studio-play { font: 800 14px var(--round); color: var(--ink); background: #fff; border: 3px solid var(--ink); border-radius: 999px; padding: 8px 14px; cursor: pointer; box-shadow: 0 3px 0 var(--ink); transition: transform .08s; }
 .studio-poses button:active, .chip:active, .studio-random:active, .studio-play:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
 .studio-poses button.on, .chip.on { background: #ffd23f; }
@@ -247,17 +261,25 @@ kbd {
 .studio-name { display: grid; gap: 6px; font-weight: 800; }
 .studio-name input { font: 800 18px var(--round); padding: 10px 12px; border: 3px solid var(--ink); border-radius: 12px; }
 .studio-swatches { display: flex; flex-wrap: wrap; gap: 10px; }
-.sw { width: 38px; height: 38px; border-radius: 50%; border: 3px solid var(--ink); cursor: pointer; box-shadow: 0 3px 0 var(--ink); }
+.sw { position: relative; width: 38px; height: 38px; border-radius: 50%; border: 3px solid var(--ink); cursor: pointer; box-shadow: 0 3px 0 var(--ink); }
+.sw::after { content: ''; position: absolute; inset: -6px; border-radius: 50%; }
 .sw.on { outline: 4px solid #ffd23f; outline-offset: 2px; transform: scale(1.08); }
 .studio-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip .ico { font-size: 16px; }
-.studio-actions { display: grid; grid-template-columns: 1fr 1.3fr; gap: 10px; position: sticky; bottom: 0; background: var(--paper); padding-top: 8px; }
+.studio-actions { display: grid; grid-template-columns: 1fr 1.3fr; gap: 10px; position: sticky; bottom: 0; z-index: 2; background: var(--paper); padding-top: 8px; margin: 0 -22px; padding-inline: 22px; box-shadow: 0 -10px 10px -10px rgba(27, 29, 36, .35); }
+/* the bar sits over the pickers as they scroll: nothing (a selected swatch's ring, the Accent label) shows through or below it */
 .studio-random { background: #e6f7ff; }
 .studio-play { background: #ff5d6c; color: #fff; font-size: 16px; }
 @media (max-width: 800px) {
-  .studio { grid-template-columns: 1fr; grid-template-rows: 48vh 1fr; }
-  .studio-panel { border-left: 0; border-top: 4px solid var(--ink); padding: 16px; }
+  .studio { grid-template-columns: 1fr; grid-template-rows: 48vh 1fr; grid-template-rows: 44svh minmax(0, 1fr); }
+  .studio-panel { border-left: 0; border-top: 4px solid var(--ink); padding: 16px calc(16px + env(safe-area-inset-right)) 0 calc(16px + env(safe-area-inset-left)); overscroll-behavior: contain; }
+  .studio-title { top: calc(14px + env(safe-area-inset-top)); left: calc(16px + env(safe-area-inset-left)); }
+  .studio-title span { font-size: 11px; }
   .studio-title strong { font-size: 18px; }
+  .studio-panel h3 { font-size: 12px; }
+  .studio-poses { bottom: 12px; }
+  .studio-actions { padding-bottom: calc(12px + env(safe-area-inset-bottom)); margin: 0 calc(-16px - env(safe-area-inset-right)) 0 calc(-16px - env(safe-area-inset-left)); padding-inline: calc(16px + env(safe-area-inset-left)) calc(16px + env(safe-area-inset-right)); }
+  .chip { min-height: 44px; }
 }
 .studio-saved { position: absolute; top: 38%; left: 50%; transform: translate(-50%, -50%); font: 900 34px var(--round); color: #fff; background: #ff5d6c; border: 4px solid var(--ink); border-radius: 20px; padding: 10px 22px; box-shadow: 0 5px 0 var(--ink); animation: savedPop .5s cubic-bezier(.2,1.6,.4,1) both; pointer-events: none; }
 @keyframes savedPop { from { transform: translate(-50%, -50%) scale(.3); opacity: 0 } to { transform: translate(-50%, -50%) scale(1); opacity: 1 } }
@@ -293,3 +315,53 @@ kbd {
 @keyframes perm-up { from { opacity: 0; transform: translateY(40px); } }
 @media (prefers-reduced-motion: reduce) { .perm-backdrop, .perm-card { animation-duration: 0.01s; } }
 .studio-dressed { font: 800 12px var(--round); font-style: normal; color: var(--ink); background: #fff; border: 2px solid var(--ink); border-radius: 999px; padding: 3px 10px; justify-self: start; margin-top: 4px; }
+
+/* agent talk switch (talk/TalkLayer.tsx) */
+.talk-switch {
+  display: flex; align-items: center; gap: 9px; max-width: min(300px, calc(100vw - 24px)); text-align: left;
+  font: 800 13px/1.2 var(--round); padding: 6px 12px 6px 7px; border-radius: 999px; cursor: pointer;
+  background: var(--paper); border: 3px solid var(--ink); color: var(--ink);
+}
+.talk-switch small { display: block; font-weight: 700; font-size: 12px; color: #17703d; }
+.talk-knob { flex: none; width: 34px; height: 20px; border-radius: 99px; background: #c9ccd4; position: relative; transition: background .2s; }
+.talk-knob::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: transform .2s; }
+.talk-switch.on .talk-knob { background: #2e9b4f; }
+.talk-switch.on .talk-knob::after { transform: translateX(14px); }
+@media (prefers-reduced-motion: reduce) { .talk-knob, .talk-knob::after { transition: none; } }
+/* phones: the switches step above an open dialog instead of covering it */
+@media (max-width: 900px) { .hud:has(> .dialog) ~ .live-ui { bottom: 262px; } }
+/* ---------- phones and tablets (touch first) ---------- */
+.stick {
+  position: absolute; right: calc(20px + env(safe-area-inset-right)); bottom: calc(20px + env(safe-area-inset-bottom));
+  width: 132px; height: 132px; border-radius: 50%; touch-action: none; user-select: none; -webkit-user-select: none;
+  display: grid; place-items: center; background: rgba(255, 253, 246, 0.35); border: 3px solid rgba(43, 42, 51, 0.55);
+  -webkit-tap-highlight-color: transparent;
+}
+.stick-knob {
+  width: 56px; height: 56px; border-radius: 50%; background: var(--paper); border: 3px solid var(--ink);
+  box-shadow: 0 3px 0 var(--ink); pointer-events: none; will-change: transform;
+}
+@media (pointer: coarse) and (hover: none) {
+  .help { display: none; }
+  /* leave the right thumb's corner to the stick */
+  .chat { bottom: calc(12px + env(safe-area-inset-bottom)); width: min(360px, calc(100vw - 24px - 152px - env(safe-area-inset-left) - env(safe-area-inset-right))); }
+  /* 16px: iOS zooms the whole page into any smaller input when it's focused */
+  .chat input { font-size: 16px; }
+  .chat input { min-height: 44px; }
+  .live-ui { bottom: calc(172px + env(safe-area-inset-bottom)); }
+  .minimap.big canvas { width: min(calc(100vw - 32px), calc(100dvh - 140px)) !important; height: min(calc(100vw - 32px), calc(100dvh - 140px)) !important; }
+  .dialog { bottom: calc(172px + env(safe-area-inset-bottom)); }
+  /* the dialog sits at 172px here (not 110px), so the switches step above it by its full
+     height: up to three lines (~122px) plus its 7px ink ring and a gap */
+  .hud:has(> .dialog) ~ .live-ui { bottom: calc(316px + env(safe-area-inset-bottom)); }
+  .cine-skip { right: calc(24px + env(safe-area-inset-right)); }
+}
+/* landscape phones: smaller map, and the dialog up top, clear of the chat and the stick */
+@media (pointer: coarse) and (hover: none) and (max-height: 500px) {
+  .minimap canvas { width: 110px !important; height: 110px !important; }
+  .minimap-head img { max-width: 90px; }
+  /* between the status pill and the map, clear of the chat and the stick */
+  .dialog { top: calc(10px + env(safe-area-inset-top)); bottom: auto; width: min(420px, calc(100vw - 440px)); padding: 10px 14px 20px; font-size: 14px; }
+  /* the dialog is up top here, so the switches stay where they are */
+  .hud:has(> .dialog) ~ .live-ui { bottom: calc(172px + env(safe-area-inset-bottom)); }
+}

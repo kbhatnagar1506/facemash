@@ -46,8 +46,8 @@ export function Privacy() {
   return (
     <Page title="Privacy Policy">
       <p>
-        This app (the landing page, the game at /play, the Bean Studio at /avatar and the Muse connection at /muse) is
-        facemash, a project built at HackGT 13. It is not run by HackGT. This page explains what we collect, why, where
+        This app (the landing page, the game at /play, the Bean Studio at /avatar and the Muse connection and voice
+        guide at /muse) is facemash, a project built at HackGT 13. It is not run by HackGT. This page explains what we collect, why, where
         it lives, and how to delete it.
       </p>
 
@@ -75,6 +75,11 @@ export function Privacy() {
           you connect it, your Muse sends what it remembers about you; we store that copy in our database and in our memory
           service so your Muse can look things up for you. We ask your Muse not to include anything about other people, and
           you can delete it any time on the /muse page.
+        </li>
+        <li>
+          <b>If you talk to the voice guide instead</b> (optional, at /muse): you answer five spoken questions. We keep
+          only a text transcript of what you said, stored as your memory the same way as a Muse upload (with passwords and
+          similar details removed), never the audio. You can delete it any time on the /muse page.
         </li>
         <li>
           <b>In your browser:</b> a sign-in cookie (it lasts up to 30 days) and a few settings saved on your device, such
@@ -105,6 +110,12 @@ export function Privacy() {
           pick an outfit for your bean.
         </li>
         <li>
+          <b>ElevenLabs</b> runs the voice guide call if you use it: it hears your voice and turns it into text. We set it
+          not to record the audio, and we delete the call's transcript from ElevenLabs right after we save your answers.
+          If a call ends without being saved (say you close the tab), we delete its transcript within about half an hour,
+          and ElevenLabs is set to keep none for more than a day.
+        </li>
+        <li>
           <b>Google</b> handles sign-in.
         </li>
         <li>
@@ -124,7 +135,7 @@ export function Privacy() {
 
       <h2>Deleting your data</h2>
       <ul>
-        <li>On the /muse page you can disconnect your Muse and delete the memory it sent us.</li>
+        <li>On the /muse page you can disconnect your Muse and delete your saved memory, whether your Muse sent it or you told the voice guide.</li>
         <li>
           To delete your whole account, email <a href={`mailto:${CONTACT}`}>{CONTACT}</a> from the address you signed in
           with. We delete it and confirm.
@@ -176,7 +187,7 @@ export function Terms() {
 
       <h2>Accounts</h2>
       <p>
-        You can use the app as a guest, or sign in with Google to save your progress. We may remove content or suspend
+        You sign in with Google to use the app; your account keeps your bean and where you were. We may remove content or suspend
         access that breaks these terms.
       </p>
 

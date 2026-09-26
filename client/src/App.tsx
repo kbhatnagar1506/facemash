@@ -12,6 +12,7 @@ import { decodeLook, defaultLook, encodeLook, loadLook, saveLook } from './look'
 import { Hud } from './Hud'
 import { Shells } from './Shells'
 import { fetchMe, type Me } from './account'
+import { touchFirst } from './touch'
 import { PermissionsSheet, wantsPermissions, type PermResult } from './Permissions'
 import { CALIBRATION_SPOTS, HallCollider, HALL_BOUNDS, HALL_SPAWN, HALL_YAW, PERSON_SCALE, TABLE, TABLES, cameraCeiling, eastX, westX } from './hall/layout'
 // the Klaus hall is big: it downloads in its own chunk, only once you're near Klaus
@@ -19,6 +20,7 @@ const HackGTHall = lazy(() => import('./HackGTHall').then((m) => ({ default: m.H
 import { toHall, useLiveLocation, type GeoCfg } from './geo'
 import { Calibrate, LivePill, MotionPill } from './LiveLocation'
 import type { EventInfo } from './HackGTWelcome'
+import { TalkLayer } from './talk/TalkLayer'
 
 const COLORS = ['#e0564f', '#4f7fd6', '#e89a3c', '#5aa56a', '#9b6bd1', '#d9c24a', '#3fa7b3', '#f06ba8']
 
@@ -49,7 +51,7 @@ function Title({ onStart, me }: { onStart: (name: string, color: string) => void
         className="title-card"
         onSubmit={(e) => {
           e.preventDefault()
-          const n = name.trim() || 'Trainer'
+          const n = name.trim() || me?.user?.given?.trim() || 'Hacker'
           save('gt.name', n)
           save('gt.color', color)
           onStart(n, color)
@@ -99,7 +101,10 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
   const start = useMemo<[number, number]>(() => {
     if (resume && !inHall) return collider.freeSpot(resume.x, resume.z)
     if (inHall && campus.event) return collider.freeSpot(...campus.event.center)
-    return collider.freeSpot(...campus.spawn)
+    // new here: a step or two off the spawn point, so arrivals' nameplates don't stack
+    const a = Math.random() * Math.PI * 2
+    const r = 1.5 + Math.random() * 1.5
+    return collider.freeSpot(campus.spawn[0] + Math.cos(a) * r, campus.spawn[1] + Math.sin(a) * r)
   }, [collider, campus, resume, inHall])
   // Created in an effect (not useMemo) so StrictMode's double mount doesn't leave a closed socket.
   const [net, setNet] = useState<Net | null>(null)
@@ -127,7 +132,7 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
   }, [room])
   // rendering quality (see <PerformanceMonitor>)
   const [dpr, setDpr] = useState(() => Math.min(MAX_DPR, window.devicePixelRatio))
-  const [lite, setLite] = useState(false)
+  const [lite, setLite] = useState(PHONE) // phones start without ambient occlusion; it comes back if frames allow
   // The hall loads (and pre-compiles) once you get within 300 m of Klaus, then stays.
   const [hallWanted, setHallWanted] = useState(false)
   useEffect(() => {
@@ -360,13 +365,13 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
     const hall = fix && geoCfg ? toHall(geoCfg, fix.lat, fix.lon) : null
     const k = kf.current
     postSample({
-      name, status, lat: fix?.lat, lon: fix?.lon, acc: fix?.acc, hall,
+      status, lat: fix?.lat, lon: fix?.lon, acc: fix?.acc, hall,
       est: k ? [+k.x.toFixed(2), +k.z.toFixed(2), +Math.sqrt(k.p).toFixed(1)] : null,
       motion: motionStatusRef.current, steps: stepCount.current,
       stride: +learn.current.stride.toFixed(2), bias: +((learn.current.bias * 180) / Math.PI).toFixed(0),
       where,
     })
-  }, [fix, status, live, room, geoCfg, name])
+  }, [fix, status, live, room, geoCfg])
   const calibrating = useMemo(() => new URLSearchParams(location.search).has('calibrate'), [])
 
   // Where to put the player back on campus when they leave the hall.
@@ -395,12 +400,21 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
     return () => window.removeEventListener('wheel', wheel)
   }, [])
 
+  // an agent talk covers the screen: stop drawing the world behind it (phones stay cool)
+  const [talkOpen, setTalkOpen] = useState(false)
+  useEffect(() => {
+    const h = (e: Event) => setTalkOpen((e as CustomEvent<boolean>).detail)
+    addEventListener('talk-open', h)
+    return () => removeEventListener('talk-open', h)
+  }, [])
+
   if (!net) return <div className="loading">Connecting…</div>
   return (
     <>
       <Canvas
         shadows="soft"
         dpr={dpr}
+        frameloop={talkOpen ? 'never' : 'always'}
         onCreated={({ gl, scene }) => {
           // ?perf: expose the renderer for live profiling from the console
           if (location.search.includes('perf')) Object.assign(window, { __gl: gl, __scene: scene })
@@ -489,6 +503,7 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
         onLeaveHall={leaveHall}
       />
       <div className="live-ui">
+        {ticket && <TalkLayer net={net} myLook={encodeLook(myLook)} />}
         {room === 'hackgt' && <LivePill
           live={live}
           status={status}
@@ -505,7 +520,7 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
           <Calibrate
             fix={fix}
             spots={CALIBRATION_SPOTS}
-            onMark={(label) => fix && postSample({ name, label, status, lat: fix.lat, lon: fix.lon, acc: fix.acc })}
+            onMark={(label) => fix && postSample({ label, status, lat: fix.lat, lon: fix.lon, acc: fix.acc })}
             onApply={(c) => {
               save('gt.geo', c)
               setGeoCfg(c)
@@ -571,11 +586,15 @@ export default function App() {
   )
 }
 
+/** Positions only (the server needs your session, and never stores who you are). */
 function postSample(s: Record<string, unknown>) {
+  const sample = { ...s }
+  delete sample.name
   fetch('/api/geo/samples', {
     method: 'POST',
+    credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...s, t: new Date().toISOString(), ua: navigator.userAgent.slice(0, 80) }),
+    body: JSON.stringify({ ...sample, t: new Date().toISOString(), ua: navigator.userAgent.slice(0, 80) }),
   }).catch(() => {})
 }
 
@@ -596,7 +615,7 @@ function Cinematic() {
         <strong>HackGT 13</strong>
         <span>Klaus Advanced Computing Building · Seaside Market</span>
       </div>
-      <div className="cine-skip">Esc or click to skip</div>
+      <div className="cine-skip">{touchFirst() ? 'Tap to skip' : 'Esc or click to skip'}</div>
     </div>
   )
 }

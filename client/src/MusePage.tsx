@@ -3,6 +3,7 @@ import QRCode from 'qrcode'
 import { fetchMe, type Me } from './account'
 import { SignInSheet } from './landing/SignIn'
 import { BEAN_STEP, MUSE_STEP } from './onboarding'
+import { VoiceCard } from './VoiceCard'
 import './landing.css'
 
 // Connect your own AI agent (Meta's Muse) to your HackGT 13 account.
@@ -15,6 +16,45 @@ import './landing.css'
 //    URL; it never has to browse, POST or sign in (its browser agent is slow).
 
 const MUSE_URL = 'https://muse.ai'
+
+/** Runs `fn` now and every `ms` while the tab is visible (a hidden tab asks for nothing, and
+ *  catches up the moment it's shown again). `ms` null: once, then only on becoming visible. */
+function usePoll(fn: () => void, ms: number | null, on = true) {
+  const f = useRef(fn)
+  f.current = fn
+  useEffect(() => {
+    if (!on) return
+    let t = 0
+    const stop = () => {
+      clearInterval(t)
+      t = 0
+    }
+    const start = () => {
+      stop()
+      if (document.visibilityState !== 'visible') return
+      f.current()
+      if (ms != null) t = window.setInterval(() => f.current(), ms)
+    }
+    const vis = () => (document.visibilityState === 'visible' ? start() : stop())
+    start()
+    document.addEventListener('visibilitychange', vis)
+    return () => {
+      stop()
+      document.removeEventListener('visibilitychange', vis)
+    }
+  }, [ms, on])
+}
+
+/** "just now", "3 min ago", "2 h ago" */
+function ago(iso?: string) {
+  const t = iso ? new Date(iso).getTime() : NaN
+  if (!Number.isFinite(t)) return ''
+  const m = Math.round((Date.now() - t) / 60000)
+  if (m < 1) return 'just now'
+  if (m < 60) return `${m} min ago`
+  const h = Math.round(m / 60)
+  return h < 24 ? `${h} h ago` : new Date(t).toLocaleDateString([], { month: 'short', day: 'numeric' })
+}
 const PAIR = /^#?(gtqp_[A-Za-z0-9_-]{16,})$/
 
 type Claimed = { prompt: string; connector_url: string; memory_prompt?: string }
@@ -126,7 +166,7 @@ function Scanned({ code }: { code: string }) {
       (c) => {
         setGot(c)
         // the code is spent; keep it out of the address bar (and screenshots of it)
-        history.replaceState(null, '', location.pathname)
+        history.replaceState(null, '', location.pathname + location.search)
       },
       (e: Error) => {
         setError(e.message)
@@ -137,17 +177,29 @@ function Scanned({ code }: { code: string }) {
   return (
     <Shell>
       <section className="muse-card">
+        <Step />
         <h1>Connect your Muse</h1>
         {error ? (
-          <p className="muse-error" role="alert">
-            {error}
-          </p>
+          <>
+            <p className="muse-error" role="alert">
+              {error}
+            </p>
+            {onboarding() && (
+              <div className="muse-actions">
+                <a className="btn btn-secondary muse-wide" href={MUSE_STEP}>
+                  Try again
+                </a>
+                <Onward connected={false} />
+              </div>
+            )}
+          </>
         ) : !got ? (
           <>
             <p className="muse-sub">Tap to link your Muse to your HackGT 13 account. You'll get one line to paste into Muse.</p>
             <button className="btn btn-primary muse-wide" type="button" onClick={redeem} disabled={busy}>
               {busy ? 'Linking…' : 'Get my Muse link'}
             </button>
+            <Onward connected={false} />
           </>
         ) : (
           <>
@@ -158,6 +210,7 @@ function Scanned({ code }: { code: string }) {
               <a className="btn btn-secondary muse-wide" href={MUSE_URL} target="_blank" rel="noopener noreferrer">
                 Open Muse
               </a>
+              <Onward connected />
             </div>
             <p className="muse-fine">The link inside is your personal key: keep it to yourself. You can disconnect it any time in the app.</p>
             {got.memory_prompt && (
@@ -197,18 +250,24 @@ function Memory() {
   const load = () =>
     fetch('/api/muse/memory', { credentials: 'same-origin' })
       .then((r) => (r.ok ? (r.json() as Promise<MemInfo>) : null))
-      .then(setM)
+      .then(setM) // a new object each time, so "3 min ago" stays current too
       .catch(() => {})
+  // the first two minutes (Muse may be sending it right now): every 5 s; after that, or once
+  // it's here, a slow check for a newer one
+  const [fresh, setFresh] = useState(true)
   useEffect(() => {
-    load()
-    const t = setInterval(load, 5000)
-    return () => clearInterval(t)
+    const t = setTimeout(() => setFresh(false), 120_000)
+    return () => clearTimeout(t)
   }, [])
+  usePoll(load, m?.stored || !fresh ? 15000 : 5000)
   if (!m?.stored) return null
+  const when = ago(m.received_at)
+  // the voice guide's memory carries a "source" key; a Muse export doesn't
+  const from = m.sections?.includes('source') ? 'your voice chat' : 'Muse'
   return (
     <p className="muse-fine">
-      Muse's memory about you: {m.kb} KB ({(m.sections ?? []).join(', ')}), received{' '}
-      {new Date(m.received_at!).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.{' '}
+      Saved: {m.kb || '<1'} KB from {from}
+      {when && <> · {when}</>}.{' '}
       <button className="muse-link" type="button" onClick={() => fetch('/api/muse/memory', { method: 'DELETE', credentials: 'same-origin' }).then(load)}>
         Delete it
       </button>
@@ -218,16 +277,13 @@ function Memory() {
 
 function Latency() {
   const [qs, setQs] = useState<Question[]>([])
-  useEffect(() => {
-    const load = () =>
-      fetch('/api/muse/latency', { credentials: 'same-origin' })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((d) => d && setQs(d.questions ?? []))
-        .catch(() => {})
-    load()
-    const t = setInterval(load, 2000)
-    return () => clearInterval(t)
-  }, [])
+  const load = () =>
+    fetch('/api/muse/latency', { credentials: 'same-origin' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && setQs(d.questions ?? []))
+      .catch(() => {})
+  const pending = qs.slice(0, 6).some((q) => q.calls == null)
+  usePoll(load, pending ? 2000 : null)
   const ask = () => fetch('/api/muse/ask', { method: 'POST', credentials: 'same-origin' }).then(() => setQs((q) => [{ asked_at: new Date().toISOString(), status: 'waiting for the agent' }, ...q]))
   return (
     <div className="lat">
@@ -274,6 +330,8 @@ async function post<T>(path: string): Promise<T> {
 }
 
 const onboarding = () => new URLSearchParams(location.search).has('onboard')
+// the latency test is a tool for us, not for attendees: /muse?debug
+const DEBUG = new URLSearchParams(location.search).has('debug')
 
 /** Onboarding: which step this is, and the way on to the next one. */
 function Step() {
@@ -292,8 +350,22 @@ function Onward({ connected }: { connected: boolean }) {
   )
 }
 
+/** No Muse: the way to the voice guide instead. */
+function VoiceLink({ onVoice }: { onVoice?: () => void }) {
+  if (!onVoice) return null
+  return (
+    <button className="btn btn-secondary muse-wide vc-alt" type="button" onClick={onVoice}>
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor" />
+        <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+      No Muse? Talk for two minutes instead
+    </button>
+  )
+}
+
 /** Signed in: your personal QR, and whether your agent is connected. */
-function Pairing() {
+function Pairing({ onVoice }: { onVoice?: () => void }) {
   const [pair, setPair] = useState<Pair | null>(null)
   const [qr, setQr] = useState('')
   const [left, setLeft] = useState(0)
@@ -335,10 +407,11 @@ function Pairing() {
   }, [pair])
 
   // while a code is out: first it gets scanned (redeemed), then Muse makes its first call
+  // (every 2.5 s, only while the tab is visible and the code is live or already scanned)
   const [scanned, setScanned] = useState(false)
-  useEffect(() => {
-    if (!pair || (left === 0 && !scanned)) return
-    const t = setInterval(() => {
+  const watching = !!pair && (left > 0 || scanned)
+  usePoll(
+    () =>
       fetch('/api/muse/status', { credentials: 'same-origin' })
         .then((r) => (r.ok ? (r.json() as Promise<Status>) : null))
         .then((s) => {
@@ -349,10 +422,10 @@ function Pairing() {
             setPair(null)
           }
         })
-        .catch(() => {})
-    }, 2500)
-    return () => clearInterval(t)
-  }, [pair, left === 0, scanned]) // eslint-disable-line react-hooks/exhaustive-deps
+        .catch(() => {}),
+    2500,
+    watching,
+  )
 
   if (error)
     return (
@@ -365,6 +438,7 @@ function Pairing() {
           <button className="btn btn-primary muse-wide" type="button" onClick={make}>
             Try again
           </button>
+          <VoiceLink onVoice={onVoice} />
           <Onward connected={false} />
         </div>
       </section>
@@ -401,7 +475,7 @@ function Pairing() {
           </button>
         </div>
         <Memory />
-        <Latency />
+        {DEBUG && <Latency />}
       </section>
     )
 
@@ -417,8 +491,10 @@ function Pairing() {
         <h1>Scanned</h1>
         <p className="muse-sub">Now paste it into Muse and send. This turns to connected as soon as Muse checks in.</p>
         <p className="muse-waiting">Waiting for your Muse…</p>
-        <Onward connected={false} />
-        <Latency />
+        <div className="muse-actions">
+          <Onward connected />
+        </div>
+        {DEBUG && <Latency />}
       </section>
     )
 
@@ -438,21 +514,30 @@ function Pairing() {
         )}
       </div>
       <p className="muse-timer">{!pair ? 'Making your code…' : expired ? 'This code expired.' : `Works once · expires in ${mm}`}</p>
-      {pair && !expired && (
-        <div className="muse-actions">
-          <a className="btn btn-secondary muse-wide" href={'/muse#' + pair.code}>
+      <div className="muse-actions">
+        {pair && !expired && (
+          <a className="btn btn-secondary muse-wide" href={'/muse' + (onboarding() ? '?onboard' : '') + '#' + pair.code}>
             Muse is on this device
           </a>
-        </div>
-      )}
+        )}
+        <VoiceLink onVoice={onVoice} />
+      </div>
       <p className="muse-waiting">{pair && !expired ? 'Waiting for your Muse…' : ''}</p>
       <Onward connected={false} />
+      <Memory />
     </section>
   )
 }
 
 export function MusePage() {
-  const scanned = PAIR.exec(location.hash)?.[1]
+  // "Muse is on this device" only changes the #fragment (the ?onboard stays), so follow it
+  const [hash, setHash] = useState(() => location.hash)
+  useEffect(() => {
+    const f = () => setHash(location.hash)
+    addEventListener('hashchange', f)
+    return () => removeEventListener('hashchange', f)
+  }, [])
+  const scanned = PAIR.exec(hash)?.[1]
   const [me, setMe] = useState<Me | null>(null)
   useEffect(() => {
     if (!scanned) fetchMe().then(setMe)
@@ -471,12 +556,32 @@ export function MusePage() {
             <p className="muse-sub">Sign-in isn't switched on yet. Check back soon.</p>
           )}
         </section>
-        {me.googleClientId && <SignInSheet clientId={me.googleClientId} next={onboarding() ? MUSE_STEP : '/muse'} onClose={() => (location.href = '/')} />}
+        {me.googleClientId && <SignInSheet
+            clientId={me.googleClientId}
+            next={onboarding() ? MUSE_STEP : '/muse'}
+            onClose={() => (location.href = '/')}
+            title="Connect your Muse"
+            sub="Sign in with Google first, so your Muse links to your account."
+          />}
       </Shell>
     )
+  return <SignedIn me={me} />
+}
+
+// ?voice opens the voice guide straight away (e.g. from a poster or a link)
+function SignedIn({ me }: { me: Me }) {
+  const [voice, setVoice] = useState(() => !!me.voice && new URLSearchParams(location.search).has('voice'))
   return (
     <Shell>
-      <Pairing />
+      {voice ? (
+        <>
+          <VoiceCard step={onboarding()} onBack={() => setVoice(false)} />
+          {/* onboarding: a way on from every state of the call, even an error */}
+          <Onward connected={false} />
+        </>
+      ) : (
+        <Pairing onVoice={me.voice ? () => setVoice(true) : undefined} />
+      )}
     </Shell>
   )
 }

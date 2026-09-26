@@ -326,14 +326,8 @@ func openMemFast(acc *accounts) *memFast {
 		log.Printf("memfast: off: no MAPI key for tenant %s (set MAPI_KEY_FILE_%s or MAPI_KEY_%s)", acc.tenant, fastEnvName(acc.tenant), fastEnvName(acc.tenant))
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-	if err := fs.fastEnsureSchema(ctx); err != nil {
-		log.Printf("memfast: off: schema: %v", err)
-		return nil
-	}
+	// its tables are made, and its workers started, once the database is up (accounts.connect)
 	f := newMemFast(fs, newFastClient(read, write, keys))
-	f.start(fastWorkers)
 	log.Printf("memfast: on, tenant %s (read %s, write %s)", acc.tenant, read, write)
 	return f
 }
@@ -560,16 +554,21 @@ func (f *memFast) run(who fastWho, job *fastJob) {
 	}
 }
 
-// uploaded queues a sync of what someone's agent just sent (called once agent_memory has it).
-// It only marks the person as behind; the worker reads and splits the upload itself.
-func (f *memFast) uploaded(ctx context.Context, tenant string, id int64) {
+// uploaded queues a sync of what someone's agent just sent (called once agent_memory has it,
+// with the upload's received_at): it marks the person as behind and hands the worker the
+// split the upload handler already made, so a fresh upload is never parsed twice. (A worker
+// only reads agent_memory back when that split is stale: after a restart, or when a newer
+// upload has replaced it.)
+func (f *memFast) uploaded(ctx context.Context, tenant string, id int64, items []fastItem, received time.Time) {
 	if f == nil || id == 0 {
 		return
 	}
 	if err := f.store.fastMarkDirty(ctx, tenant, id); err != nil {
 		log.Printf("memfast: #%d outbox: %v (queued in memory only)", id, err)
 	}
-	f.enqueue(fastWho{tenant, id}, func(j *fastJob) { j.sync, j.split, j.items = true, false, nil })
+	f.enqueue(fastWho{tenant, id}, func(j *fastJob) {
+		j.sync, j.split, j.at, j.items = true, !received.IsZero(), received, items
+	})
 	log.Printf("memfast: #%d upload queued", id)
 }
 
@@ -659,20 +658,20 @@ func (f *memFast) syncTurn(who fastWho, job *fastJob) (more bool, err error) {
 		if job.split && job.at.Equal(*st.received) {
 			items = job.items
 		} else {
-			start := time.Now()
-			data, err := f.store.fastMemoryData(ctx, who.tenant, who.id, *st.received)
+			// reading an upload back takes the same slot as parsing a big one in its handler,
+			// so the two never add up
+			if !takeParseSlot(ctx, f.stop) {
+				return false, errors.New("stopped")
+			}
+			items, err = f.readSplit(ctx, who, *st.received)
+			<-bigParse
 			if err != nil {
 				return false, err
 			}
-			if data == nil {
+			if items == nil {
 				return true, nil // replaced (or deleted) just now: go again with what's there
 			}
-			var obj map[string]any
-			json.Unmarshal(data, &obj)
-			var capped bool
-			items, capped = fastSplit(obj)
 			job.split, job.at, job.items = true, *st.received, items
-			log.Printf("memfast: #%d split %.1fKB into %d sections (capped %v) in %.1fms", who.id, float64(len(data))/1024, len(items), capped, ms(time.Since(start)))
 		}
 	}
 	if more, err = f.syncStep(ctx, who, items); err != nil || more {
@@ -682,6 +681,27 @@ func (f *memFast) syncTurn(who fastWho, job *fastJob) (more bool, err error) {
 		return false, f.store.fastSynced(ctx, who.tenant, who.id, *st.dirty)
 	}
 	return false, nil
+}
+
+// readSplit reads the upload received at `received` back from agent_memory and splits it;
+// nil when it has been replaced or deleted since.
+func (f *memFast) readSplit(ctx context.Context, who fastWho, received time.Time) ([]fastItem, error) {
+	start := time.Now()
+	data, err := f.store.fastMemoryData(ctx, who.tenant, who.id, received)
+	if err != nil || data == nil {
+		return nil, err
+	}
+	obj, err := decodeMemory(data)
+	if err != nil { // stored before uploads were checked: nothing in it can be read
+		log.Printf("memfast: #%d stored upload unreadable (%v): indexing nothing", who.id, err)
+		obj = map[string]any{}
+	}
+	items, capped := fastSplit(obj)
+	if items == nil {
+		items = []fastItem{}
+	}
+	log.Printf("memfast: #%d split %.1fKB into %d sections (capped %v) in %.1fms", who.id, float64(len(data))/1024, len(items), capped, ms(time.Since(start)))
+	return items, nil
 }
 
 // syncStep moves the person's space one batch closer to items: unchanged sections cost
@@ -1112,7 +1132,7 @@ func fastQuery(r *http.Request) string {
 }
 
 // askHandler serves /api/ask and /api/ask/t/<key>.
-func (f *memFast) askHandler(caller func(*http.Request) (*museCaller, error), unauthorized func(http.ResponseWriter), writeJSON func(http.ResponseWriter, int, any)) http.HandlerFunc {
+func (f *memFast) askHandler(caller func(*http.Request) (*museCaller, error), unauthorized func(http.ResponseWriter, error), writeJSON func(http.ResponseWriter, int, any)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost && r.Method != http.MethodGet {
 			w.Header().Set("Allow", "POST, GET")
@@ -1121,7 +1141,7 @@ func (f *memFast) askHandler(caller func(*http.Request) (*museCaller, error), un
 		}
 		c, err := caller(r)
 		if err != nil {
-			unauthorized(w)
+			unauthorized(w, err)
 			return
 		}
 		start := time.Now()
@@ -1168,7 +1188,7 @@ var fastTools = []tool{
 			q, _ := args["q"].(string)
 			q = strings.TrimSpace(q)
 			if q == "" {
-				return nil, errors.New("q is required")
+				return nil, publicError("q is required")
 			}
 			if utf8.RuneCountInString(q) > fastMaxQuery {
 				q = string([]rune(q)[:fastMaxQuery])

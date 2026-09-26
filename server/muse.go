@@ -19,9 +19,9 @@ import (
 	"io"
 	"log"
 	"math"
-	"net"
 	"net/http"
 	"os"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -280,17 +280,22 @@ func describeLook(look, color string) string {
 	return strings.Join(parts, ", ")
 }
 
+// counts is how many people are online, and in which room. While the hub is running the
+// tick works them out once per tick (every join, leave and room change marks it dirty), so
+// this is a read of that; a hub that isn't ticking (tests) counts under the lock.
 func (h *Hub) counts() map[string]int {
-	counts := map[string]int{"online": 0, "campus": 0, "hackgt": 0}
+	if n := h.online.Load(); n != nil && h.ticking.Load() {
+		return map[string]int{"online": n.online, "campus": n.campus, "hackgt": n.hackgt}
+	}
+	var n onlineCounts
 	h.mu.Lock()
 	for _, c := range h.clients {
 		if c.joined {
-			counts["online"]++
-			counts[c.p.Room]++
+			n.add(c.p.Room)
 		}
 	}
 	h.mu.Unlock()
-	return counts
+	return map[string]int{"online": n.online, "campus": n.campus, "hackgt": n.hackgt}
 }
 
 type schedItem struct {
@@ -309,17 +314,11 @@ type schedDay struct {
 }
 
 func schedule(eventFile, when string, now time.Time) (any, error) {
-	b, err := os.ReadFile(eventFile)
+	ev, err := eventSchedule(eventFile) // parsed once, re-read when the file changes (warm.go)
 	if err != nil {
 		return nil, errors.New("schedule unavailable")
 	}
-	var ev struct {
-		Days []schedDay `json:"days"`
-	}
-	if json.Unmarshal(b, &ev) != nil {
-		return nil, errors.New("schedule unavailable")
-	}
-	loc, _ := time.LoadLocation(eventTZ)
+	loc := talkLoc()
 	now = now.In(loc)
 	at := func(date, hm string) (time.Time, bool) {
 		t, err := time.ParseInLocation("2006-01-02 15:04", date+" "+hm, loc)
@@ -390,6 +389,55 @@ func dayRange(days []schedDay) string {
 // ---------- HTTP: auth, MCP, REST, OpenAPI, tokens ----------
 
 // mountMuse adds the connector endpoints. base is the public origin (for URLs we hand out).
+// ingestMemory is the one way a memory about someone gets in, whoever brought it (their
+// agent's upload, or what they told the voice guide, voice.go): scrub it, keep the latest
+// copy, queue it for their private index (memfast.go) and pick their bean an outfit from
+// it (jevlook.go). Always for one (tenant, person), which the caller got from a token or a
+// session, never from the body. raw, when given, is obj as it arrived: kept byte for byte
+// unless something had to be redacted. It returns the stored JSON and how many items were
+// redacted.
+func ingestMemory(ctx context.Context, acc *accounts, tenant string, id int64, obj map[string]any, raw []byte, what string) ([]byte, int, error) {
+	// guardrail: credentials and sensitive numbers never get stored or indexed, whatever
+	// the agent sent (redact.go); only the counts are logged
+	counts := map[string]int{}
+	obj = redactJSON(obj, counts).(map[string]any)
+	redacted := 0
+	for _, n := range counts {
+		redacted += n
+	}
+	if redacted > 0 {
+		log.Printf("muse: #%d %s: %d item(s) redacted %v", id, what, redacted, counts)
+	}
+	body := raw
+	if redacted > 0 || body == nil {
+		var err error
+		if body, err = marshalMemory(obj); err != nil {
+			return nil, redacted, err
+		}
+	}
+	var exported *time.Time
+	if s, _ := obj["exported_at"].(string); s != "" {
+		if t, err := time.Parse(time.RFC3339, s); err == nil {
+			exported = &t
+		}
+	}
+	// split for the index here, once, while the object is at hand: the worker then never
+	// parses the upload again (only after a restart, or if a newer one replaced it)
+	var items []fastItem
+	if acc.fast != nil {
+		items, _ = fastSplit(obj)
+	}
+	received, err := acc.store.SaveMemory(ctx, tenant, id, body, exported)
+	if err != nil {
+		log.Printf("muse: memory for #%d: %v", id, err)
+		return nil, redacted, err
+	}
+	acc.fast.uploaded(ctx, tenant, id, items, received) // and into their private memory index, in the background
+	acc.jev.suggest(tenant, id, obj)                    // and an outfit for their bean, picked from it
+	acc.talk.memoryArrived(tenant, id)                  // and the brief their agent talks from (agenttalk.go)
+	return body, redacted, nil
+}
+
 func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base string, originOK func(*http.Request) bool) {
 	// this server's own public address, for big uploads that shouldn't pass through Vercel
 	direct := strings.TrimRight(envOr("DIRECT_URL", base), "/")
@@ -403,6 +451,11 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 	// cross-site page could ride along on)
 	// The token comes as "Authorization: Bearer gtq_…", or inside the connector URL
 	// (/api/mcp/t/gtq_…) so an agent only has to register one URL: nothing to sign in to.
+	// Only a well-formed token is looked up, a known one is remembered for a minute (so its
+	// last_used is written at most once a minute), and an address sending unknown ones is
+	// told to wait before it costs the database anything more.
+	tokens := newTokenCache()
+	misses := newKeyLimiter(tokenMissBurst, tokenMissEvery, 0)
 	caller := func(r *http.Request) (*museCaller, error) {
 		tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 		for _, prefix := range []string{mcpKeyPath, nowKeyPath, memKeyPath, askKeyPath} {
@@ -410,20 +463,45 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 				tok, ok = inURL, true
 			}
 		}
-		if !ok || !strings.HasPrefix(tok, tokenPrefix) {
+		tok = strings.TrimSpace(tok)
+		if !ok || !tokenWellFormed(tok) {
 			return nil, errBadToken
+		}
+		h := hashToken(tok)
+		if e, ok := tokens.get(h); ok {
+			return &museCaller{tenant: e.tenant, id: e.id, acc: acc, hub: hub, event: eventFile}, nil
+		}
+		ip := fastWho{tenant: "ip:" + clientIP(r)}
+		if !misses.peek(ip) {
+			return nil, errTokenMisses
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		tenant, id, err := acc.store.TokenOwner(ctx, hashToken(strings.TrimSpace(tok)))
+		tenant, id, err := acc.store.TokenOwner(ctx, h)
 		if err != nil {
+			if errors.Is(err, errBadToken) {
+				if release, _, ok := misses.acquire(ip); ok {
+					release() // a rate, not a count in flight
+				}
+			}
 			return nil, err
 		}
+		tokens.put(h, tenant, id)
 		return &museCaller{tenant: tenant, id: id, acc: acc, hub: hub, event: eventFile}, nil
 	}
-	unauthorized := func(w http.ResponseWriter) {
-		w.Header().Set("WWW-Authenticate", `Bearer realm="`+serverSlug+`", error="invalid_token", error_description="Create a token in the HackGT 13 app: Connect your Muse"`)
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing or invalid token: create one in the HackGT 13 app (Connect your Muse)"})
+	unauthorized := func(w http.ResponseWriter, err error) {
+		switch {
+		case errors.Is(err, errTokenMisses):
+			w.Header().Set("Retry-After", "30")
+			writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many unknown tokens from this address: wait a minute"})
+		case err != nil && !errors.Is(err, errBadToken):
+			log.Printf("muse: token lookup: %v", err)
+			w.Header().Set("Retry-After", "5")
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "temporarily unavailable: try again in a moment"})
+		default:
+			w.Header().Set("WWW-Authenticate", `Bearer realm="`+serverSlug+`", error="invalid_token", error_description="Create a token in the HackGT 13 app: Connect your Muse"`)
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing or invalid token: create one in the HackGT 13 app (Connect your Muse)"})
+		}
 	}
 
 	// --- MCP ---
@@ -446,7 +524,7 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 		}
 		c, err := caller(r)
 		if err != nil {
-			unauthorized(w)
+			unauthorized(w, err)
 			return
 		}
 		start := time.Now()
@@ -511,7 +589,7 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 			}
 			c, err := caller(r)
 			if err != nil {
-				unauthorized(w)
+				unauthorized(w, err)
 				return
 			}
 			start := time.Now()
@@ -524,25 +602,45 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 			defer cancel()
 			out, err := t.Run(ctx, c, args)
 			if err != nil {
-				log.Printf("muse: %s for #%d: %v", t.Name, c.id, err)
-				writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+				log.Printf("muse: %s for #%d: %v", t.Name, c.id, err) // the details stay here
+				writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": publicMessage(err)})
 				return
 			}
 			writeJSON(w, http.StatusOK, out)
 		})
 	}
 	// the fast path: one GET, one JSON blob (key in the Authorization header or in the URL)
+	// Each call reads the account, so it is rate-limited per address (before the token is
+	// even looked at) and per token.
+	nowByIP := newKeyLimiter(nowIPBurst, nowIPEvery, 0)
+	nowByToken := newKeyLimiter(nowTokenBurst, nowTokenEvery, nowTokenInFlight)
+	tooMany := func(w http.ResponseWriter, wait time.Duration) {
+		w.Header().Set("Retry-After", strconv.Itoa(max(1, int(math.Ceil(wait.Seconds())))))
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many requests: slow down"})
+	}
 	nowHandler := func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead && (r.Method != http.MethodPost || acc.fast == nil) {
 			w.Header().Set("Allow", "GET")
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		c, err := caller(r)
-		if err != nil {
-			unauthorized(w)
+		release, wait, ok := nowByIP.acquire(fastWho{tenant: "ip:" + clientIP(r)})
+		if !ok {
+			tooMany(w, wait)
 			return
 		}
+		release() // a rate per address, not a count in flight
+		c, err := caller(r)
+		if err != nil {
+			unauthorized(w, err)
+			return
+		}
+		release, wait, ok = nowByToken.acquire(fastWho{c.tenant, c.id})
+		if !ok {
+			tooMany(w, wait)
+			return
+		}
+		defer release()
 		start := time.Now()
 		label := "GET /api/now"
 		defer func() { calls.add(c.id, label, start, time.Since(start)) }()
@@ -570,7 +668,6 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 	// an agent sends what it remembers about its person (their choice: the page asks first)
 	uploads := newKeyLimiter(uploadBurst, uploadEvery, 1)
 	reading := make(chan struct{}, uploadsAtOnce)
-	parsingBig := make(chan struct{}, bigUploadsAtOnce)
 	busy := func(w http.ResponseWriter) {
 		w.Header().Set("Retry-After", "10")
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "busy: send it again in a few seconds"})
@@ -583,7 +680,7 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 		}
 		c, err := caller(r)
 		if err != nil {
-			unauthorized(w)
+			unauthorized(w, err)
 			return
 		}
 		release, wait, ok := uploads.acquire(fastWho{c.tenant, c.id})
@@ -599,57 +696,51 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 		}
 		defer func() { <-reading }()
 		start := time.Now()
-		body, err := io.ReadAll(io.LimitReader(r.Body, maxMemory+1))
-		label := fmt.Sprintf("POST /api/memory %.1fKB", float64(len(body))/1024)
+		body := newSlowBody(w, r) // a trickle can't keep the slot
+		raw, err := readMemoryBody(body, r.ContentLength)
+		body.done()
+		label := fmt.Sprintf("POST /api/memory %.1fKB", float64(len(raw))/1024)
 		defer func() { calls.add(c.id, label, start, time.Since(start)) }()
-		if err != nil {
+		switch {
+		case errors.Is(err, errUploadTooBig):
+			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "over 25 MB: send only the memory files, not everything"})
+			return
+		case errors.Is(err, errUploadSlow) || errors.Is(err, os.ErrDeadlineExceeded):
+			label += " (too slow)"
+			w.Header().Set("Connection", "close")
+			writeJSON(w, http.StatusRequestTimeout, map[string]string{"error": "the upload was too slow: send it again from a faster connection"})
+			return
+		case err != nil:
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "couldn't read the body"})
 			return
 		}
-		if len(body) > maxMemory {
-			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "over 25 MB: send only the memory files, not everything"})
-			return
-		}
-		if len(body) > bigUpload {
-			if !takeSlot(r.Context(), parsingBig) {
+		if len(raw) > bigUpload {
+			if !takeSlot(r.Context(), bigParse) {
 				busy(w)
 				return
 			}
-			defer func() { <-parsingBig }()
+			// a big upload leaves tens of MB of garbage (the body, its decoded and encoded
+			// copies): collect it before the next big one starts, so they never add up
+			defer func() { runtime.GC(); <-bigParse }()
 		}
-		var obj map[string]any
-		if json.Unmarshal(body, &obj) != nil || obj == nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "send one JSON object"})
-			return
-		}
-		// guardrail: credentials and sensitive numbers never get stored or indexed, whatever
-		// the agent sent (redact.go); only the counts are logged
-		counts := map[string]int{}
-		obj = redactJSON(obj, counts).(map[string]any)
-		redacted := 0
-		for _, n := range counts {
-			redacted += n
-		}
-		if redacted > 0 {
-			body, _ = json.Marshal(obj)
-			log.Printf("muse: #%d memory upload: %d item(s) redacted %v", c.id, redacted, counts)
-		}
-		var exported *time.Time
-		if s, _ := obj["exported_at"].(string); s != "" {
-			if t, err := time.Parse(time.RFC3339, s); err == nil {
-				exported = &t
+		obj, err := decodeMemory(raw)
+		raw = nil // only obj from here on: what's kept is what gets stored
+		if err != nil {
+			var me *memoryError
+			if !errors.As(err, &me) {
+				me = errMemoryNotObject
 			}
+			writeJSON(w, me.status, map[string]string{"error": me.msg})
+			return
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
-		if err := acc.store.SaveMemory(ctx, c.tenant, c.id, body, exported); err != nil {
-			log.Printf("muse: memory for #%d: %v", c.id, err)
+		stored, redacted, err := ingestMemory(ctx, acc, c.tenant, c.id, obj, nil, "memory upload")
+		if err != nil {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "try again in a moment"})
 			return
 		}
-		acc.fast.uploaded(ctx, c.tenant, c.id) // and into their private memory index, in the background
-		acc.jev.suggest(c.tenant, c.id, obj)   // and an outfit for their bean, picked from it
-		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "kb": float64(len(body)*10/1024) / 10, "redacted": redacted})
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "kb": float64(len(stored)*10/1024) / 10, "redacted": redacted})
 	}
 	mux.HandleFunc("/api/memory", memoryHandler)
 	mux.HandleFunc(memKeyPath, memoryHandler)
@@ -681,6 +772,7 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 				return
 			}
 			acc.jev.forget(ctx, acc.tenant, id)
+			acc.talk.forget(ctx, acc.tenant, id)
 			if err := acc.store.DeleteMemory(ctx, acc.tenant, id); err != nil {
 				writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "try again in a moment"})
 				return
@@ -741,7 +833,9 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 		tok := newToken()
 		ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
 		defer cancel()
-		if err := acc.store.CreateToken(ctx, acc.tenant, id, museLabel, hashToken(tok)); err != nil {
+		err := acc.store.CreateToken(ctx, acc.tenant, id, museLabel, hashToken(tok))
+		tokens.dropOwner(acc.tenant, id) // the old token is revoked with it
+		if err != nil {
 			log.Printf("muse: token for #%d: %v", id, err)
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "accounts unavailable"})
 			return
@@ -761,7 +855,9 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
 		defer cancel()
-		if err := acc.store.RevokeTokens(ctx, acc.tenant, id, museLabel); err != nil {
+		err := acc.store.RevokeTokens(ctx, acc.tenant, id, museLabel)
+		tokens.dropOwner(acc.tenant, id)
+		if err != nil {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "accounts unavailable"})
 			return
 		}
@@ -797,7 +893,8 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": `POST {"code": "gtqp_..."} to redeem a pairing code`})
 			return
 		}
-		if !pairs.allow(clientIP(r)) {
+		// a very loose cap per caller (agents behind one proxy or NAT share an address)...
+		if !pairs.allow("ip:"+clientIP(r), claimsPerIP) {
 			writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many attempts, wait a minute"})
 			return
 		}
@@ -805,6 +902,11 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 		b, _ := io.ReadAll(io.LimitReader(r.Body, 1024))
 		if json.Unmarshal(b, &in) != nil || !strings.HasPrefix(strings.TrimSpace(in.Code), pairPrefix) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": `send JSON {"code": "gtqp_..."}`})
+			return
+		}
+		// ...and a tight one per code
+		if !pairs.allow("code:"+string(hashToken(strings.TrimSpace(in.Code))), claimsPerCode) {
+			writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many attempts, wait a minute"})
 			return
 		}
 		p, ok := pairs.take(strings.TrimSpace(in.Code))
@@ -815,7 +917,9 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 		tok := newToken()
 		ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
 		defer cancel()
-		if err := acc.store.CreateToken(ctx, p.tenant, p.id, museLabel, hashToken(tok)); err != nil {
+		err := acc.store.CreateToken(ctx, p.tenant, p.id, museLabel, hashToken(tok))
+		tokens.dropOwner(p.tenant, p.id)
+		if err != nil {
 			log.Printf("muse: claim for #%d: %v", p.id, err)
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "accounts unavailable, try again"})
 			return
@@ -913,36 +1017,45 @@ func (p *pairings) pending(tenant string, id int64) bool {
 	return false
 }
 
-// allow rate-limits claims per client IP (codes are unguessable; this just keeps noise down).
-func (p *pairings) allow(ip string) bool {
+// Claim limits, per minute. Codes are unguessable, so these only keep noise down: tight per
+// code, and very loose per caller address, since every agent that reaches us through Vercel
+// (or one campus NAT) arrives from the same few addresses.
+const (
+	claimsPerCode = 5
+	claimsPerIP   = 600
+)
+
+// allow counts one claim attempt against key (at most max a minute).
+func (p *pairings) allow(key string, max int) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	now := time.Now()
-	recent := p.hits[ip][:0]
-	for _, t := range p.hits[ip] {
+	recent := p.hits[key][:0]
+	for _, t := range p.hits[key] {
 		if now.Sub(t) < time.Minute {
 			recent = append(recent, t)
 		}
 	}
-	if len(recent) >= 20 {
-		p.hits[ip] = recent
+	if len(recent) >= max {
+		p.hits[key] = recent
 		return false
 	}
-	p.hits[ip] = append(recent, now)
-	if len(p.hits) > 10000 { // don't grow without bound
-		p.hits = map[string][]time.Time{}
+	p.hits[key] = append(recent, now)
+	if len(p.hits) > 10000 { // don't grow without bound: forget the quiet first
+		for k, ts := range p.hits {
+			if len(ts) == 0 || now.Sub(ts[len(ts)-1]) >= time.Minute {
+				delete(p.hits, k)
+			}
+		}
+		if len(p.hits) > 10000 {
+			p.hits = map[string][]time.Time{}
+		}
 	}
 	return true
 }
 
-func clientIP(r *http.Request) string {
-	// behind Vercel and Caddy: the first hop in X-Forwarded-For is the caller
-	if f := r.Header.Get("X-Forwarded-For"); f != "" {
-		return strings.TrimSpace(strings.Split(f, ",")[0])
-	}
-	host, _, _ := net.SplitHostPort(r.RemoteAddr)
-	return host
-}
+// clientIP is the caller's address as our own proxy saw it (see peerIP).
+func clientIP(r *http.Request) string { return peerIP(r) }
 
 // pairPrompt is what the attendee pastes into their agent.
 func pairPrompt(base, code string, exp time.Time) string {
@@ -1100,7 +1213,7 @@ func handleRPC(ctx context.Context, c *museCaller, raw json.RawMessage) any {
 			cancel()
 			if err != nil {
 				log.Printf("muse: %s for #%d: %v", t.Name, c.id, err)
-				return rpcResult(m.ID, map[string]any{"isError": true, "content": []any{map[string]any{"type": "text", "text": "Couldn't get that right now: " + err.Error()}}})
+				return rpcResult(m.ID, map[string]any{"isError": true, "content": []any{map[string]any{"type": "text", "text": "Couldn't get that right now: " + publicMessage(err)}}})
 			}
 			b, _ := json.Marshal(out)
 			return rpcResult(m.ID, map[string]any{
@@ -1165,6 +1278,9 @@ func mintTestToken(email, keyFile, base string) {
 		log.Fatal("no database")
 	}
 	defer a.store.Close()
+	if a.connect(); !a.waitReady(time.Minute) {
+		log.Fatal("database unavailable")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	acc, _, err := a.store.SignIn(ctx, a.tenant, user{Sub: "test:" + email, Email: email, Name: "Test attendee", Given: "Test"})
@@ -1186,6 +1302,9 @@ func mintTestSession(email, keyFile string) {
 		log.Fatal("no database")
 	}
 	defer a.store.Close()
+	if a.connect(); !a.waitReady(time.Minute) {
+		log.Fatal("database unavailable")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	acc, _, err := a.store.SignIn(ctx, a.tenant, user{Sub: "test:" + email, Email: email, Name: "Test attendee", Given: "Test"})
@@ -1218,7 +1337,7 @@ type callLog struct {
 }
 
 func (l *callLog) add(id int64, what string, at time.Time, d time.Duration) {
-	log.Printf("agent: #%d %s %.1fms", id, what, float64(d.Microseconds())/1000)
+	log.Printf("agent: #%d %q %.1fms", id, what, float64(d.Microseconds())/1000)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	cs := append(l.by[id], museCall{at, what, d})

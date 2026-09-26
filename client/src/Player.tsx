@@ -5,6 +5,10 @@ import { Avatar, type AvatarState } from './Avatar'
 import type { Look } from './look'
 import type { Net } from './net'
 import { cutawayUniforms } from './cutaway'
+import { phone, stick } from './touch'
+
+// phones: a quarter of the shadow-map memory and fill (4096² is 64 MB of depth on its own)
+const SHADOW_MAP: [number, number] = phone() ? [2048, 2048] : [4096, 4096]
 
 const WALK = 7
 const RUN = 14
@@ -165,11 +169,13 @@ export function Player({
     const el = gl.domElement
     // Only drags that start on the 3D view turn the camera, and only while a
     // button is actually held (checked per event, so it can never get stuck).
-    let armed = false
-    const downH = () => (armed = true)
+    // Tracked per pointer, so a thumb on the on-screen stick never turns the camera.
+    let armed = -1
+    const downH = (e: PointerEvent) => (armed = e.pointerId)
     const move = (e: PointerEvent) => {
-      if (!(e.buttons & 1)) armed = false
-      else if (armed) {
+      if (e.pointerId !== armed) return
+      if (!(e.buttons & 1)) armed = -1
+      else {
         yaw.current -= e.movementX * 0.006
         if (inside) pitch.current = Math.max(-0.6, Math.min(1.3, pitch.current - e.movementY * 0.006)) // drag up = look up
       }
@@ -255,6 +261,8 @@ export function Player({
       if (keys.has('KeyS') || keys.has('ArrowDown')) dz += 1
       if (keys.has('KeyA') || keys.has('ArrowLeft')) dx -= 1
       if (keys.has('KeyD') || keys.has('ArrowRight')) dx += 1
+      dx += stick.x
+      dz += stick.z
     }
     const inside = view.mode === 'inside'
     if (!typing()) {
@@ -278,7 +286,7 @@ export function Player({
     if (moving && hop.current === 0) {
       const len = Math.hypot(dx, dz)
       const k = view.mode === 'inside' ? (view.scale ?? 1) * 0.8 : 1 // indoor pace, relative to your size
-      const running = goal ? gpsDist > 6 : keys.has('ShiftLeft') || keys.has('ShiftRight')
+      const running = goal ? gpsDist > 6 : keys.has('ShiftLeft') || keys.has('ShiftRight') || stick.run
       const speed = (info.current.bike && !goal && view.mode !== 'inside' ? BIKE : running ? RUN : WALK) * k
       const step = goal ? Math.min(speed * dt, gpsDist) : speed * dt
       const sx = (dx / len) * step
@@ -465,7 +473,7 @@ export function Player({
         intensity={2}
         color="#ffe1b3"
         castShadow
-        shadow-mapSize={[4096, 4096]}
+        shadow-mapSize={SHADOW_MAP}
         shadow-radius={3}
         shadow-camera-left={-90}
         shadow-camera-right={90}

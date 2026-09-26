@@ -11,7 +11,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"flag"
-	"io"
 	"log"
 	"math"
 	"net/http"
@@ -21,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -36,12 +36,30 @@ const (
 	maxSpeed      = 30.0 // m/s, a little above the client's sprint speed
 	maxNameLen    = 16
 	maxChatLen    = 140
-	chatCooldown  = 800 * time.Millisecond
+	chatBurst     = 3           // chat: a burst of this many...
+	chatEvery     = time.Second // ...then one message per this long
 	writeTimeout  = 5 * time.Second
 	pongTimeout   = 30 * time.Second
 	pingInterval  = 20 * time.Second
 	sendQueueSize = 64
+
+	// Sockets. Only joined players count toward maxPlayers; a socket that hasn't said hello
+	// within helloTimeout (below) is closed, and one address can hold at most maxSocketsPerIP
+	// sockets that haven't joined yet (or joined as guests, when sign-in is off). Signed-in
+	// sockets are capped per account instead, so a campus NAT with hundreds of players behind
+	// one address is fine. maxSockets bounds everything open, joined or not.
+	maxSocketsPerIP      = 40
+	maxSocketsPerAccount = 6 // tabs and devices of one signed-in person
+	maxSockets           = maxPlayers + 800
+
+	// close codes for a refused hello (the client re-fetches its ticket on closeSignIn)
+	closeSignIn  = 4401
+	closeTooMany = 4429
+	closeFull    = 1013 // "try again later"
 )
+
+// helloTimeout: a socket that hasn't said hello by then is closed (a var for tests).
+var helloTimeout = 5 * time.Second
 
 // World bounds in meters, matching client/public/campus.json with some slack.
 var bounds = [4]float64{-1100, -1100, 1100, 1100}
@@ -70,19 +88,38 @@ var rooms = map[string]bool{"campus": true, "hackgt": true}
 type client struct {
 	hub      *Hub
 	conn     *websocket.Conn
-	send     chan []byte
+	send     chan []byte     // JSON messages (and, with no state channel, frames)
+	state    chan stateFrame // the latest position frame only: chat can't crowd it out
 	p        Player
 	joined   bool
 	lastMove time.Time
-	lastChat time.Time
 
+	chatTokens float64 // chat token bucket (chatBurst, one back per chatEvery)
+	chatAt     time.Time
+
+	// kmu guards known, lastState and gone, and orders the tick's sends to this client
+	// against leave messages (the tick builds frames without the hub lock).
+	kmu       sync.Mutex
 	known     map[int]bool // players whose name/colour/look this client already has
 	lastState []byte       // last state frame sent (identical frames are skipped)
-	msgWindow time.Time    // start of the current rate-limit second
+	gone      bool         // disconnected: send is closed
+	// epoch goes up when this player changes room or leaves, so frames built from an
+	// older snapshot are dropped (by the tick for neighbours, by writeLoop for the client).
+	epoch atomic.Int64
+
+	msgWindow time.Time // start of the current rate-limit second
 	msgCount  int
+	ip        string // address counted in hub.perIP while not yet joined ("" = not counted)
+	reject    int    // set by handle when hello is refused: close with this code
 
 	uid   int64    // signed-in account (0 = guest)
 	saved Progress // last position written to the database
+}
+
+// stateFrame is a position frame and the epoch of the client it was built for.
+type stateFrame struct {
+	epoch int64
+	b     []byte
 }
 
 type inbound struct {
@@ -106,9 +143,33 @@ type Hub struct {
 	clients map[int]*client
 	nextID  int
 	dirty   bool
+
+	joinedN int            // clients that have said hello (what maxPlayers caps)
+	perIP   map[string]int // sockets per client address that haven't joined yet
+	byUID   map[int64]int  // joined sockets per signed-in account
+	ipCap   int            // maxSocketsPerIP (a flag can raise it for load tests)
+	// requireTicket: hello must carry a valid ticket from /api/me (sign-in is on)
+	requireTicket bool
+
+	online  atomic.Pointer[onlineCounts] // worked out once per tick (see counts)
+	ticking atomic.Bool
 }
 
-func newHub() *Hub { return &Hub{clients: map[int]*client{}, nextID: 1} }
+type onlineCounts struct{ online, campus, hackgt int }
+
+func (n *onlineCounts) add(room string) {
+	n.online++
+	switch room {
+	case "campus":
+		n.campus++
+	case "hackgt":
+		n.hackgt++
+	}
+}
+
+func newHub() *Hub {
+	return &Hub{clients: map[int]*client{}, nextID: 1, perIP: map[string]int{}, byUID: map[int64]int{}, ipCap: maxSocketsPerIP}
+}
 
 func mustJSON(v any) []byte {
 	b, err := json.Marshal(v)
@@ -129,10 +190,64 @@ func (h *Hub) broadcast(room string, msg []byte, except int) {
 }
 
 // trySend queues msg without blocking; a full queue means a stalled client.
-func (c *client) trySend(msg []byte) {
+func (c *client) trySend(msg []byte) bool {
 	select {
 	case c.send <- msg:
+		return true
 	default:
+		return false
+	}
+}
+
+// pushState hands the writer the newest position frame, replacing one it hasn't sent yet.
+// Called by the tick with c.kmu held.
+func (c *client) pushState(b []byte, epoch int64) {
+	if c.state == nil {
+		c.trySend(b)
+		return
+	}
+	f := stateFrame{epoch, b}
+	select {
+	case c.state <- f:
+		return
+	default:
+	}
+	select {
+	case <-c.state: // an older frame the writer hasn't got to: this one supersedes it
+	default:
+	}
+	select {
+	case c.state <- f:
+	default:
+	}
+}
+
+// releaseIP stops counting c against its address. Must be called with h.mu held.
+func (h *Hub) releaseIP(c *client) {
+	if c.ip == "" {
+		return
+	}
+	if h.perIP[c.ip]--; h.perIP[c.ip] <= 0 {
+		delete(h.perIP, c.ip)
+	}
+	c.ip = ""
+}
+
+// broadcastLeave tells everyone else in c's room that c has gone, and forgets that they were
+// introduced to c (their client drops c's name with the leave), so if c comes back they're
+// introduced again. Must be called with h.mu held.
+func (h *Hub) broadcastLeave(c *client) {
+	msg := mustJSON(map[string]any{"t": "leave", "id": c.p.ID})
+	for _, o := range h.clients {
+		if o == c || !o.joined || o.p.Room != c.p.Room {
+			continue
+		}
+		o.kmu.Lock()
+		delete(o.known, c.p.ID)
+		if !o.gone {
+			o.trySend(msg)
+		}
+		o.kmu.Unlock()
 	}
 }
 
@@ -144,47 +259,72 @@ func (c *client) trySend(msg []byte) {
 // Names, colours and looks go out once per player per client ({"t":"i"}), the first
 // time that player comes into view. Unchanged frames aren't resent, so an idle
 // room costs almost nothing. Work per tick is ~O(players × neighbours), not O(n²).
+//
+// The hub lock is held only to copy positions out (and count who's online); frames are
+// built from that snapshot without it, so moves, chat, joins and /api/online don't wait
+// on the tick. Each client's own lock (kmu) orders its intros and frames against the
+// leave messages sent to it, and epochs drop anything built from a snapshot that a room
+// change or a disconnect has since overtaken.
 func (h *Hub) run() {
 	t := time.NewTicker(time.Second / tickRate)
+	defer t.Stop()
+	h.ticking.Store(true)
+	defer h.ticking.Store(false)
 	type key struct {
 		room string
 		x, z int
 	}
+	type snap struct {
+		c     *client
+		p     Player
+		epoch int64
+	}
 	type cand struct {
-		c  *client
+		s  *snap
 		d2 float64
 	}
-	grid := map[key][]*client{}
+	cell := func(v float64) int { return int(math.Floor(v / aoiRadius)) }
+	grid := map[key][]*snap{}
+	var snaps []snap
 	var near []cand
 	for range t.C {
+		retry := false
 		h.mu.Lock()
 		if !h.dirty {
 			h.mu.Unlock()
 			continue
 		}
+		h.dirty = false // a move from here on marks the next tick
+		snaps = snaps[:0]
+		n := &onlineCounts{}
+		for _, c := range h.clients {
+			if c.joined {
+				snaps = append(snaps, snap{c, c.p, c.epoch.Load()})
+				n.add(c.p.Room)
+			}
+		}
+		h.mu.Unlock()
+		h.online.Store(n)
+
 		for k := range grid {
 			delete(grid, k)
 		}
-		cell := func(v float64) int { return int(math.Floor(v / aoiRadius)) }
-		for _, c := range h.clients {
-			if c.joined {
-				k := key{c.p.Room, cell(c.p.X), cell(c.p.Z)}
-				grid[k] = append(grid[k], c)
-			}
+		for i := range snaps {
+			s := &snaps[i]
+			k := key{s.p.Room, cell(s.p.X), cell(s.p.Z)}
+			grid[k] = append(grid[k], s)
 		}
-		for _, c := range h.clients {
-			if !c.joined {
-				continue
-			}
+		for i := range snaps {
+			s := &snaps[i]
 			near = near[:0]
-			cx, cz := cell(c.p.X), cell(c.p.Z)
+			cx, cz := cell(s.p.X), cell(s.p.Z)
 			for dx := -1; dx <= 1; dx++ {
 				for dz := -1; dz <= 1; dz++ {
-					for _, o := range grid[key{c.p.Room, cx + dx, cz + dz}] {
-						if o == c {
+					for _, o := range grid[key{s.p.Room, cx + dx, cz + dz}] {
+						if o == s {
 							continue
 						}
-						ddx, ddz := o.p.X-c.p.X, o.p.Z-c.p.Z
+						ddx, ddz := o.p.X-s.p.X, o.p.Z-s.p.Z
 						if d2 := ddx*ddx + ddz*ddz; d2 <= aoiRadius*aoiRadius {
 							near = append(near, cand{o, d2})
 						}
@@ -195,24 +335,33 @@ func (h *Hub) run() {
 				sort.Slice(near, func(i, j int) bool { return near[i].d2 < near[j].d2 })
 				near = near[:maxVisible]
 			}
-			// introduce anyone new in view (once)
-			var intro []map[string]any
-			for _, n := range near {
-				if !c.known[n.c.p.ID] {
-					c.known[n.c.p.ID] = true
-					intro = append(intro, map[string]any{"id": n.c.p.ID, "name": n.c.p.Name, "color": n.c.p.Color, "look": n.c.p.Look})
-				}
+			c := s.c
+			c.kmu.Lock()
+			if c.gone || c.epoch.Load() != s.epoch {
+				c.kmu.Unlock() // left, or changed room since the snapshot: the next tick has them
+				continue
 			}
-			if len(intro) > 0 {
-				c.trySend(mustJSON(map[string]any{"t": "i", "p": intro}))
+			if c.known == nil {
+				c.known = map[int]bool{}
 			}
 			// binary frame: 'S', count u16, then per player
 			// id u32 | x i16 dm | z i16 dm | r i16 crad | y i16 dm | moving u8  (13 bytes)
 			frame := make([]byte, 3, 3+len(near)*13)
 			frame[0] = 'S'
-			binary.LittleEndian.PutUint16(frame[1:], uint16(len(near)))
-			for _, n := range near {
-				q := n.c.p
+			var intro []map[string]any
+			var introduced []int
+			count := 0
+			for _, nb := range near {
+				if nb.s.c.epoch.Load() != nb.s.epoch {
+					continue // they changed room or left since the snapshot (c has had the leave)
+				}
+				q := nb.s.p
+				// introduce anyone new in view (once)
+				if !c.known[q.ID] {
+					intro = append(intro, map[string]any{"id": q.ID, "name": q.Name, "color": q.Color, "look": q.Look})
+					introduced = append(introduced, q.ID)
+				}
+				count++
 				frame = binary.LittleEndian.AppendUint32(frame, uint32(q.ID))
 				frame = binary.LittleEndian.AppendUint16(frame, uint16(int16(math.Round(q.X*10))))
 				frame = binary.LittleEndian.AppendUint16(frame, uint16(int16(math.Round(q.Z*10))))
@@ -224,13 +373,28 @@ func (h *Hub) run() {
 					frame = append(frame, 0)
 				}
 			}
+			binary.LittleEndian.PutUint16(frame[1:], uint16(count))
+			// an intro that didn't fit in a full queue is tried again next tick
+			if len(intro) > 0 {
+				if c.trySend(mustJSON(map[string]any{"t": "i", "p": intro})) {
+					for _, id := range introduced {
+						c.known[id] = true
+					}
+				} else {
+					retry = true
+				}
+			}
 			if !bytes.Equal(frame, c.lastState) {
 				c.lastState = frame
-				c.trySend(frame)
+				c.pushState(frame, s.epoch)
 			}
+			c.kmu.Unlock()
 		}
-		h.dirty = false
-		h.mu.Unlock()
+		if retry {
+			h.mu.Lock()
+			h.dirty = true
+			h.mu.Unlock()
+		}
 	}
 }
 
@@ -265,17 +429,6 @@ func cleanText(s string, max int) string {
 
 func clamp(v, lo, hi float64) float64 { return math.Max(lo, math.Min(hi, v)) }
 
-// roommates lists the other joined players in c's room. Must be called with h.mu held.
-func (h *Hub) roommates(c *client) []Player {
-	ps := make([]Player, 0, len(h.clients))
-	for _, o := range h.clients {
-		if o.joined && o != c && o.p.Room == c.p.Room {
-			ps = append(ps, o.p)
-		}
-	}
-	return ps
-}
-
 func (c *client) handle(m inbound) {
 	h := c.hub
 	h.mu.Lock()
@@ -286,9 +439,26 @@ func (c *client) handle(m inbound) {
 		if c.joined {
 			return
 		}
+		var uid int64
+		if acct != nil && m.Ticket != "" {
+			if id, ok := acct.sess.check(kindTicket, m.Ticket); ok {
+				uid = id
+			}
+		}
+		switch {
+		case h.requireTicket && uid == 0: // sign-in is required: no ticket, no game
+			c.reject = closeSignIn
+			return
+		case h.joinedN >= maxPlayers:
+			c.reject = closeFull
+			return
+		case uid != 0 && h.byUID[uid] >= maxSocketsPerAccount:
+			c.reject = closeTooMany
+			return
+		}
 		c.p.Name = cleanText(m.Name, maxNameLen)
 		if c.p.Name == "" {
-			c.p.Name = "Trainer"
+			c.p.Name = "Hacker" // the client sends your first name when it has one
 		}
 		c.p.Color = m.Color
 		if !palette[c.p.Color] {
@@ -301,21 +471,25 @@ func (c *client) handle(m inbound) {
 		if !rooms[c.p.Room] {
 			c.p.Room = "campus"
 		}
-		if acct != nil && m.Ticket != "" {
-			if id, ok := acct.sess.check(kindTicket, m.Ticket); ok {
-				c.uid = id
-				c.saved = Progress{Room: c.p.Room, X: c.p.X, Z: c.p.Z}
-				acct.saveProfile(id, Profile{Name: c.p.Name, Color: c.p.Color, Look: c.p.Look})
-			}
+		if uid != 0 {
+			h.releaseIP(c) // signed in: counted per account from here, not per address (NATs)
+			c.uid = uid
+			c.saved = Progress{Room: c.p.Room, X: c.p.X, Z: c.p.Z}
+			acct.saveProfile(uid, Profile{Name: c.p.Name, Color: c.p.Color, Look: c.p.Look})
+			h.byUID[uid]++
 		}
 		c.joined = true
+		h.joinedN++
 		c.lastMove = time.Now()
+		c.chatTokens, c.chatAt = chatBurst, c.lastMove
 
+		c.kmu.Lock()
 		c.known = map[int]bool{}
 		c.lastState = nil
+		c.kmu.Unlock()
 		c.trySend(mustJSON(map[string]any{"t": "welcome", "id": c.p.ID, "room": c.p.Room, "players": []Player{}}))
 		h.dirty = true
-		log.Printf("join #%d %q (%d online)", c.p.ID, c.p.Name, len(h.clients))
+		log.Printf("join #%d %q (%d online)", c.p.ID, c.p.Name, h.joinedN)
 
 	case "move":
 		if !c.joined || math.IsNaN(m.X) || math.IsNaN(m.Z) || math.IsNaN(m.R) {
@@ -341,27 +515,41 @@ func (c *client) handle(m inbound) {
 		if !c.joined || !rooms[m.Room] || m.Room == c.p.Room || math.IsNaN(m.X) || math.IsNaN(m.Z) {
 			return
 		}
-		h.broadcast(c.p.Room, mustJSON(map[string]any{"t": "leave", "id": c.p.ID}), c.p.ID)
+		c.epoch.Add(1) // frames built for the old room are dropped (by the tick and by writeLoop)
+		h.broadcastLeave(c)
 		c.p.Room = m.Room
 		c.p.X = clamp(m.X, bounds[0], bounds[2])
 		c.p.Z = clamp(m.Z, bounds[1], bounds[3])
 		c.p.M = false
 		c.p.Y = 0
 		c.lastMove = time.Now()
+		c.kmu.Lock()
 		c.lastState = nil
+		select {
+		case <-c.state: // an unsent frame of the old room
+		default:
+		}
+		c.kmu.Unlock()
 		c.trySend(mustJSON(map[string]any{"t": "room", "room": c.p.Room, "players": []Player{}}))
 		h.dirty = true
 		log.Printf("#%d %q -> %s", c.p.ID, c.p.Name, c.p.Room)
 
 	case "chat":
-		if !c.joined || time.Since(c.lastChat) < chatCooldown {
+		if !c.joined {
 			return
 		}
 		text := cleanText(m.Text, maxChatLen)
 		if text == "" {
 			return
 		}
-		c.lastChat = time.Now()
+		// token bucket: a burst of chatBurst, then one per chatEvery
+		now := time.Now()
+		c.chatTokens = min(chatBurst, c.chatTokens+float64(now.Sub(c.chatAt))/float64(chatEvery))
+		c.chatAt = now
+		if c.chatTokens < 1 {
+			return
+		}
+		c.chatTokens--
 		h.broadcast(c.p.Room, mustJSON(map[string]any{
 			"t": "chat", "id": c.p.ID, "name": c.p.Name, "text": text,
 		}), 0)
@@ -373,21 +561,34 @@ func (c *client) readLoop() {
 		h := c.hub
 		h.mu.Lock()
 		delete(h.clients, c.p.ID)
-		h.dirty = true // neighbours' frames drop this player
-		if c.joined && c.uid != 0 {
-			acct.saveProgress(c.uid, c.progress())
-		}
+		h.releaseIP(c)
 		if c.joined {
-			h.broadcast(c.p.Room, mustJSON(map[string]any{"t": "leave", "id": c.p.ID}), 0)
-			log.Printf("leave #%d %q (%d online)", c.p.ID, c.p.Name, len(h.clients))
+			h.joinedN--
+			if c.uid != 0 {
+				if h.byUID[c.uid]--; h.byUID[c.uid] <= 0 {
+					delete(h.byUID, c.uid)
+				}
+				acct.saveProgress(c.uid, c.progress())
+			}
+			h.dirty = true // neighbours' frames drop this player
+			c.epoch.Add(1)
+			h.broadcastLeave(c)
+			log.Printf("leave #%d %q (%d online)", c.p.ID, c.p.Name, h.joinedN)
 		}
 		h.mu.Unlock()
+		c.kmu.Lock()
+		c.gone = true
 		close(c.send)
+		c.kmu.Unlock()
 		c.conn.Close()
 	}()
 	c.conn.SetReadLimit(2048)
-	c.conn.SetReadDeadline(time.Now().Add(pongTimeout))
+	// until hello, only helloTimeout: pings don't keep a silent socket open
+	c.conn.SetReadDeadline(time.Now().Add(helloTimeout))
 	c.conn.SetPongHandler(func(string) error {
+		if !c.joined {
+			return nil
+		}
 		return c.conn.SetReadDeadline(time.Now().Add(pongTimeout))
 	})
 	for {
@@ -396,7 +597,6 @@ func (c *client) readLoop() {
 			return
 		}
 		now := time.Now()
-		c.conn.SetReadDeadline(now.Add(pongTimeout))
 		if now.Sub(c.msgWindow) > time.Second {
 			c.msgWindow, c.msgCount = now, 0
 		}
@@ -404,25 +604,67 @@ func (c *client) readLoop() {
 			continue // flooding: drop until the next second
 		}
 		c.handle(m)
+		if c.reject != 0 {
+			reason := map[int]string{closeSignIn: "sign in", closeTooMany: "too many connections", closeFull: "server full"}[c.reject]
+			c.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(c.reject, reason), time.Now().Add(writeTimeout))
+			return
+		}
+		if c.joined {
+			c.conn.SetReadDeadline(now.Add(pongTimeout))
+		}
 	}
 }
 
 func (c *client) writeLoop() {
 	ping := time.NewTicker(pingInterval)
 	defer ping.Stop()
+	write := func(msg []byte) bool {
+		c.conn.SetWriteDeadline(time.Now().Add(writeTimeout))
+		kind := websocket.TextMessage
+		if len(msg) > 0 && msg[0] == 'S' {
+			kind = websocket.BinaryMessage // compact position frame
+		}
+		return c.conn.WriteMessage(kind, msg) == nil
+	}
+	// text sends one queued message; false means stop (closed, or the write failed)
+	text := func(msg []byte, ok bool) bool {
+		if !ok {
+			c.conn.SetWriteDeadline(time.Now().Add(writeTimeout))
+			c.conn.WriteMessage(websocket.CloseMessage, nil)
+			return false
+		}
+		return write(msg)
+	}
 	for {
+		// queued messages first, so a welcome or room change always precedes the frames after it
 		select {
 		case msg, ok := <-c.send:
-			c.conn.SetWriteDeadline(time.Now().Add(writeTimeout))
-			if !ok {
-				c.conn.WriteMessage(websocket.CloseMessage, nil)
+			if !text(msg, ok) {
 				return
 			}
-			kind := websocket.TextMessage
-			if len(msg) > 0 && msg[0] == 'S' {
-				kind = websocket.BinaryMessage // compact position frame
+			continue
+		default:
+		}
+		select {
+		case msg, ok := <-c.send:
+			if !text(msg, ok) {
+				return
 			}
-			if err := c.conn.WriteMessage(kind, msg); err != nil {
+		case f := <-c.state:
+			for drained := false; !drained; {
+				select {
+				case msg, ok := <-c.send:
+					if !text(msg, ok) {
+						return
+					}
+				default:
+					drained = true
+				}
+			}
+			if f.epoch != c.epoch.Load() {
+				continue // built for a room this client has since left
+			}
+			if !write(f.b) {
 				return
 			}
 		case <-ping.C:
@@ -447,14 +689,30 @@ func main() {
 	mintFor := flag.String("muse-token", "", "print a connector token for this email (a test account is made if needed) and exit")
 	sessionFor := flag.String("session-for", "", "print a session cookie value for this email's test account and exit (for testing signed-in flows before Google sign-in is on)")
 	devLogin := flag.Bool("dev-login", false, "local testing only: /api/dev/login?email= signs in a test account (localhost requests only)")
+	devTalk := flag.Bool("dev-talk", false, "local testing only: POST /api/talk/encounter {a_uid, b_uid} starts an agent talk (localhost requests only)")
+	talkConfig := flag.String("talk-config", "", "agent talk config file (default: the built-in talkdata/talk_config.json)")
+	perIP := flag.Int("ws-per-ip", maxSocketsPerIP, "most not-yet-joined game sockets one client address may hold (raise only for local load tests)")
+	sim := talkSimFlags()
+	voiceProvision := flag.Bool("voice-provision", false, "create or update the ElevenLabs voice agent ("+voiceAgentName+"), print its id and exit")
+	voiceKey := flag.String("voice-key", "", "with -voice-provision: which ElevenLabs key's account, primary or backup (default: the first that works)")
 	flag.Parse()
-	base := strings.TrimRight(envOr("PUBLIC_URL", "https://gt-campus-quest.vercel.app"), "/")
+	if *voiceProvision {
+		provisionVoice(*voiceKey)
+		return
+	}
+	if sim.on() {
+		os.Exit(runTalkSim(sim, *talkConfig))
+	}
+	base := strings.TrimRight(envOr("PUBLIC_URL", "https://www.fasemash.tech"), "/")
 	if *mintFor != "" {
 		mintTestToken(*mintFor, *keyFile, base)
 		return
 	}
 	if *sessionFor != "" {
 		mintTestSession(*sessionFor, *keyFile)
+		return
+	}
+	if adminCLI(*keyFile) { // -purge-test-accounts (admin.go)
 		return
 	}
 
@@ -489,6 +747,7 @@ func main() {
 	upgrader := websocket.Upgrader{CheckOrigin: originOK}
 
 	hub := newHub()
+	hub.ipCap = *perIP
 	go hub.run()
 
 	mux := http.NewServeMux()
@@ -501,9 +760,12 @@ func main() {
 			clientIDs = append(clientIDs, id)
 		}
 	}
+	// The routes are always mounted: with the database down at boot, connect keeps trying in
+	// the background and gate answers 503 on the routes that need it until it's up.
+	jwks := warmGoogleKeys() // the sign-in keys mountAuth uses, fetched by startWarm (warm.go)
 	acct = openAccounts(*keyFile)
 	if acct == nil {
-		clientIDs = nil // no database: sign-in off, everyone plays as a guest
+		clientIDs = nil // unusable database settings: sign-in off, everyone plays as a guest
 	} else {
 		defer acct.store.Close()
 		go hub.saveLoop()
@@ -511,36 +773,29 @@ func main() {
 	if acct != nil {
 		acct.fast = openMemFast(acct) // MAPI_READ_URL/MAPI_WRITE_URL + a tenant key; nil (off) otherwise
 		acct.jev = openJev(acct)      // JEV_API_KEY(_FILE); nil (off) otherwise
+		acct.voice = openVoice()      // ELEVENLABS_API_KEY(_FILE) + ELEVENLABS_AGENT_ID; nil (off) otherwise
+		acct.connect()
 		mountAuth(mux, clientIDs, acct, originOK)
 		mountMuse(mux, acct, hub, *eventFile, base, originOK)
 		mountJev(mux, acct, acct.jev)
+		acct.talk = openAgentTalk(acct, hubSink{hub}, *talkConfig) // GEMINI_API_KEY(_FILE) + JEV_API_KEY(_FILE)
+		mountTalk(mux, acct, acct.talk, originOK, *devTalk)
+		if acct.talk != nil {
+			acct.talk.watchProximity(hub) // two opted-in players within 3 m for 3 s (talk_config.json)
+		}
+		mountVoice(mux, acct, acct.voice, originOK)
+		mountAdmin(mux, acct, hub) // /api/admin/* for organizers in ADMIN_EMAILS (admin.go)
 		if *devLogin {
 			mountDevLogin(mux, acct)
 		}
+		// Sign-in is required to play (no guests): with Google sign-in on (or -dev-login
+		// locally), hello must carry the ticket /api/me hands a signed-in page.
+		hub.requireTicket = len(clientIDs) > 0 || *devLogin
+		log.Printf("game: ticket required at hello: %v", hub.requireTicket)
 	} else {
 		mountAuth(mux, nil, &accounts{store: newMemStore(), tenant: envOr("TENANT", "hackgt13"), sess: sessions{secret: loadSecret(*keyFile)}}, originOK)
 	}
-	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		hub.mu.Lock()
-		full := len(hub.clients) >= maxPlayers
-		hub.mu.Unlock()
-		if full {
-			http.Error(w, "server full", http.StatusServiceUnavailable)
-			return
-		}
-		conn, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			return
-		}
-		hub.mu.Lock()
-		c := &client{hub: hub, conn: conn, send: make(chan []byte, sendQueueSize)}
-		c.p.ID = hub.nextID
-		hub.nextID++
-		hub.clients[c.p.ID] = c
-		hub.mu.Unlock()
-		go c.writeLoop()
-		c.readLoop()
-	})
+	mux.HandleFunc("/ws", hub.serveWS(upgrader))
 	mux.HandleFunc("/api/event", func(w http.ResponseWriter, r *http.Request) {
 		b, err := os.ReadFile(*eventFile)
 		if err != nil || !json.Valid(b) {
@@ -562,31 +817,7 @@ func main() {
 		w.Write(b)
 	})
 	// Location samples from players in the atrium (for mapping GPS onto the model).
-	// POST appends one JSON object per line; GET returns the file.
-	var samplesMu sync.Mutex
-	mux.HandleFunc("/api/geo/samples", func(w http.ResponseWriter, r *http.Request) {
-		samplesMu.Lock()
-		defer samplesMu.Unlock()
-		if r.Method == http.MethodPost {
-			b, err := io.ReadAll(io.LimitReader(r.Body, 2048))
-			if err != nil || !json.Valid(b) {
-				http.Error(w, "bad sample", http.StatusBadRequest)
-				return
-			}
-			f, err := os.OpenFile(*samplesFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-			if err != nil {
-				http.Error(w, "cannot write", http.StatusInternalServerError)
-				return
-			}
-			defer f.Close()
-			f.Write(append(bytes.TrimSpace(b), '\n'))
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		b, _ := os.ReadFile(*samplesFile)
-		w.Header().Set("Content-Type", "application/x-ndjson")
-		w.Write(b)
-	})
+	mountGeoSamples(mux, acct, *samplesFile, originOK)
 	mux.HandleFunc("/api/online", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(hub.counts())
@@ -610,8 +841,18 @@ func main() {
 		files.ServeHTTP(w, r)
 	})
 
+	var handler http.Handler = mux
+	if acct != nil {
+		handler = acct.gate(mux)
+	}
+	// everything loaded and connected before the first request (warm.go): /api/readyz says when
+	startWarm(mux, hub, acct, jwks, *eventFile)
 	log.Printf("GT campus server on %s (static: %s)", *addr, *static)
-	log.Fatal(http.ListenAndServe(*addr, mux))
+	// Headers must arrive promptly (a connection trickling them in holds a goroutine and a
+	// socket). No whole-request ReadTimeout: it would cut off the game's websockets; request
+	// bodies that matter (memory uploads) set their own deadline and minimum rate.
+	srv := &http.Server{Addr: *addr, Handler: handler, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute, MaxHeaderBytes: 64 << 10}
+	log.Fatal(srv.ListenAndServe())
 }
 
 // gzipFiles compresses text assets on the fly (compressed once per file, then cached).

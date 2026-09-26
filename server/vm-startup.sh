@@ -64,18 +64,48 @@ fi
 # jev (TypeSafe) picks outfits from agent memory: JEV_API_KEY in jev.env (root 0600)
 JEVENV=""
 [ -f /mnt/stateful_partition/gt/jev.env ] && JEVENV="--env-file /mnt/stateful_partition/gt/jev.env"
+# Agent talk (two opted-in attendees within 3 m for 3 s: their agents chat, jev judges, names
+# only after both say yes). Needs jev (jev.env above) and Gemini: the key locked to this VM's
+# IP in gemini-game.key (root 0600), mounted read-only and named by GEMINI_API_KEY_FILE, so it
+# is in no container's environment. Optional talk.env for extra knobs (ADMIN_EMAILS for the
+# admin test trigger, TALK_CONFIG_FILE). Without the key file, agent talk is off and the
+# server behaves as before (the opt-in switch still saves).
+TALKENV=""
+TALKKEY=/mnt/stateful_partition/gt/gemini-game.key
+if [ -f "$TALKKEY" ]; then
+  chown root:root "$TALKKEY" 2>/dev/null; chmod 600 "$TALKKEY" 2>/dev/null
+  TALKENV="-e GEMINI_API_KEY_FILE=/secrets/gemini-game.key --mount type=bind,source=$TALKKEY,target=/secrets/gemini-game.key,readonly"
+fi
+[ -f /mnt/stateful_partition/gt/talk.env ] && TALKENV="$TALKENV --env-file /mnt/stateful_partition/gt/talk.env"
+# Voice onboarding (ElevenLabs): the backup key in elevenlabs-backup.key (root 0600), mounted
+# read-only like the Gemini key; voice.env holds ELEVENLABS_AGENT_ID_BACKUP (and VOICE_MAX_CALLS).
+# Without the key file, voice is off.
+VOICEENV=""
+VOICEKEY=/mnt/stateful_partition/gt/elevenlabs-backup.key
+if [ -f "$VOICEKEY" ]; then
+  chown root:root "$VOICEKEY" 2>/dev/null; chmod 600 "$VOICEKEY" 2>/dev/null
+  VOICEENV="-e ELEVENLABS_API_KEY_BACKUP_FILE=/secrets/elevenlabs-backup.key --mount type=bind,source=$VOICEKEY,target=/secrets/elevenlabs-backup.key,readonly"
+fi
+[ -f /mnt/stateful_partition/gt/voice.env ] && VOICEENV="$VOICEENV --env-file /mnt/stateful_partition/gt/voice.env"
 GOOGLE_CLIENT_ID=$(curl -sf -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/attributes/google-client-id || true)
 # --memory: one big upload can't take the VM (Caddy and dockerd keep theirs); GOMEMLIMIT makes
 # the Go GC work harder well before that limit.
 docker run -d --restart=always --name game --network gt $GUARDMOUNT \
   --memory=1200m -e GOMEMLIMIT=900MiB \
-  -e DIRECT_URL="https://$HOST" -e ALLOWED_ORIGINS='https://gt-campus-quest*.vercel.app,https://fasemash.tech,https://www.fasemash.tech' \
+  -e PUBLIC_URL=https://www.fasemash.tech -e DIRECT_URL="https://$HOST" -e ALLOWED_ORIGINS='https://gt-campus-quest*.vercel.app,https://fasemash.tech,https://www.fasemash.tech' \
   -e GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \
   -e DB_INSTANCE='patchguard-reakon:us-central1:facemash-db' -e DB_NAME=facemash \
-  -e DB_IAM_USER='751583582765-compute@developer' $DBENV $MAPIENV $JEVENV \
+  -e DB_IAM_USER='751583582765-compute@developer' $DBENV $MAPIENV $JEVENV $TALKENV $VOICEENV \
   -e TENANT=hackgt13 -e TENANT_NAME='HackGT 13' \
   -v /mnt/stateful_partition/gt/geo.json:/app/geo.json:ro \
   -v /mnt/stateful_partition/gt/data:/data \
   --ulimit nofile=65536:65536 "$IMAGE" -samples /data/geo_samples.jsonl -session-key /data/session.key
+# Caddy takes traffic once the game is warm (/api/readyz: database connected, keys and upstream
+# connections open), waiting at most 20 s so a slow dependency never keeps the site down.
+GAME_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' game 2>/dev/null)
+for _ in $(seq 1 20); do
+  [ -n "$GAME_IP" ] && curl -sf -m 2 -o /dev/null "http://$GAME_IP:8080/api/readyz" && break
+  sleep 1
+done
 docker run -d --restart=always --name caddy --network gt $GUARDMOUNT -p 80:80 -p 443:443 \
   -v caddy_data:/data caddy:2 caddy reverse-proxy --from "$HOST" --to game:8080

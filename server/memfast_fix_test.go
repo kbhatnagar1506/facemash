@@ -413,14 +413,14 @@ type slowSave struct {
 	saved, release chan struct{}
 }
 
-func (s *slowSave) SaveMemory(ctx context.Context, tenant string, id int64, body []byte, exp *time.Time) error {
-	err := s.memStore.SaveMemory(ctx, tenant, id, body, exp)
+func (s *slowSave) SaveMemory(ctx context.Context, tenant string, id int64, body []byte, exp *time.Time) (time.Time, error) {
+	at, err := s.memStore.SaveMemory(ctx, tenant, id, body, exp)
 	if s.saved != nil {
 		close(s.saved)
 		<-s.release
 		s.saved = nil
 	}
-	return err
+	return at, err
 }
 
 func TestFastDeleteRacingUploadStaysDeleted(t *testing.T) {

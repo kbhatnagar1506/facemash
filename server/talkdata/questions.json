@@ -1,0 +1,3192 @@
+{
+  "version": "2026-09-26.1",
+  "sources": [
+    {
+      "citation": "Aron, A., Melinat, E., Aron, E. N., Vallone, R. D., & Bator, R. J. (1997). The experimental generation of interpersonal closeness: A procedure and some preliminary findings. Personality and Social Psychology Bulletin, 23(4), 363-377.",
+      "used_for": "Sustained, escalating, reciprocal self-disclosure builds closeness; the bank climbs from depth 1 to depth 3 and agents take turns."
+    },
+    {
+      "citation": "Kardas, M., Kumar, A., & Epley, N. (2022). Overly shallow?: Miscalibrated expectations create a barrier to deeper conversation. Journal of Personality and Social Psychology, 122(3), 367-398 (online first 2021).",
+      "used_for": "People overestimate how awkward deep talk will be and underestimate how connected it makes them feel; the bank reserves about 20% for deep questions."
+    },
+    {
+      "citation": "Alves, H. (2018). Sharing rare attitudes attracts. Personality and Social Psychology Bulletin, 44(8), 1270-1283.",
+      "used_for": "Overlap on uncommon attitudes and interests produces more attraction than overlap on common ones; many questions ask for the niche, specific thing ('rare')."
+    },
+    {
+      "citation": "Montoya, R. M., Horton, R. S., & Kirchner, J. (2008). Is actual similarity necessary for attraction? A meta-analysis of actual and perceived similarity. Journal of Social and Personal Relationships, 25(6), 889-922.",
+      "used_for": "Perceived similarity predicts attraction in real interactions, so questions ask for named specifics (the exact game, bug, or band), never a category."
+    },
+    {
+      "citation": "Hall, J. A. (2019). How many hours does it take to make a friend? Journal of Social and Personal Relationships, 36(4), 1278-1296.",
+      "used_for": "Friendship takes repeated contact (roughly 50 hours to casual friend), so future_and_followup questions surface reasons and times to meet again."
+    },
+    {
+      "citation": "Huang, K., Yeomans, M., Brooks, A. W., Minson, J., & Gino, F. (2017). It doesn't hurt to ask: Question-asking increases liking. Journal of Personality and Social Psychology, 113(3), 430-452.",
+      "used_for": "Follow-up questions in particular increase liking; followup_ok marks questions that build on the previous answer."
+    },
+    {
+      "citation": "Sprecher, S., Treger, S., Wondra, J. D., Hilaire, N., & Wallpe, K. (2013). Taking turns: Reciprocal self-disclosure promotes liking in initial interactions. Journal of Experimental Social Psychology, 49(5), 860-866.",
+      "used_for": "Back-and-forth disclosure beats one-sided disclosure; agents alternate asking and answering."
+    },
+    {
+      "citation": "Festinger, L., Schachter, S., & Back, K. (1950). Social Pressures in Informal Groups: A Study of Human Factors in Housing. Harper.",
+      "used_for": "Proximity and easy chances to interact drive tie formation; now_at_hackgt questions find a reason to talk during the event ('soon')."
+    },
+    {
+      "citation": "Rajkumar, K., Saint-Jacques, G., Bojinov, I., Brynjolfsson, E., & Aral, S. (2022). A causal test of the strength of weak ties. Science, 377(6612), 1304-1310.",
+      "used_for": "Moderately weak ties carry outsized career value; career and stuck/solved questions look for mutual value (one can fix what the other is stuck on)."
+    }
+  ],
+  "types": {
+    "now_at_hackgt": "What the human is building, needing, and feeling at HackGT 13 right now: a reason to talk during the event.",
+    "building_and_craft": "How the human builds: tools, stacks, taste, and the specific things they have made.",
+    "stuck_and_solved": "Problems the human is stuck on and problems they have already solved, to find who can unblock whom.",
+    "career_and_path": "Where the human's work and studies are heading, and what help or experience they can trade.",
+    "where_from": "The human's origins: how they grew up, got into making things, and got here.",
+    "interests_and_rare": "Specific, niche interests outside work, where rare overlap sparks the strongest connection.",
+    "values_and_beliefs": "What the human believes, cares about, and will not compromise on.",
+    "life_and_personal": "The human's life outside the hackathon: routines, what they are going through, and who matters to them.",
+    "fun_and_play": "Playful, low-stakes questions that get both humans laughing.",
+    "future_and_followup": "Follow-ups that deepen the last answer, plus reasons and times to meet again after HackGT."
+  },
+  "questions": [
+    {
+      "id": "q001",
+      "type": "now_at_hackgt",
+      "text": "What is your human building at HackGT 13, in the one sentence they would actually say out loud?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "team",
+        "same_problem",
+        "soon"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q002",
+      "type": "now_at_hackgt",
+      "text": "Which workshop, talk, or activity at HackGT 13 is your human most excited not to miss?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "soon",
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q003",
+      "type": "now_at_hackgt",
+      "text": "Which sponsor challenge or prize track is your human quietly aiming for this weekend?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "same_problem",
+        "team",
+        "soon"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q004",
+      "type": "now_at_hackgt",
+      "text": "What skill is your human's team missing right now that someone else here could fill?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "team",
+        "one_sided",
+        "soon"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q005",
+      "type": "now_at_hackgt",
+      "text": "What part of their HackGT project would your human happily hand off to someone tonight?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "team",
+        "busy",
+        "soon"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q006",
+      "type": "now_at_hackgt",
+      "text": "Which tool or API did your human discover at HackGT that they want to show someone?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "value",
+        "soon"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q007",
+      "type": "now_at_hackgt",
+      "text": "What is your human hoping to prove to themselves this weekend?",
+      "depth": 3,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q008",
+      "type": "now_at_hackgt",
+      "text": "What snack, drink, or ritual is keeping your human going through the hackathon night?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "soon",
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q009",
+      "type": "now_at_hackgt",
+      "text": "When is your human planning to take a real break this weekend, and what will they do?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "busy",
+        "soon"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q010",
+      "type": "now_at_hackgt",
+      "text": "Beyond winning, what would make this HackGT weekend feel worth it to your human?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth",
+        "value"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q011",
+      "type": "now_at_hackgt",
+      "text": "What conversation at HackGT so far has stuck with your human, and why?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth",
+        "soon"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q012",
+      "type": "now_at_hackgt",
+      "text": "What is your human's team debating right now, technically or otherwise?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "same_problem",
+        "team"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q013",
+      "type": "now_at_hackgt",
+      "text": "What demo-day moment is your human bracing for, and how are they preparing?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "going_through",
+        "soon"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q014",
+      "type": "now_at_hackgt",
+      "text": "How did your human's team come together for HackGT 13?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "team"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q015",
+      "type": "now_at_hackgt",
+      "text": "What would your human want a fresh pair of eyes to test or break before demos?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "value",
+        "soon",
+        "one_sided"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q016",
+      "type": "now_at_hackgt",
+      "text": "Which hour of the hackathon has been hardest for your human so far, and what happened?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "going_through",
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q017",
+      "type": "now_at_hackgt",
+      "text": "What is your human trying at HackGT that they have never tried before?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "rare",
+        "soon"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q018",
+      "type": "now_at_hackgt",
+      "text": "If your human had one extra teammate for the next six hours, what would that person do?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "team",
+        "one_sided"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q019",
+      "type": "now_at_hackgt",
+      "text": "What does your human want to learn from someone at HackGT before the weekend ends?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "value",
+        "soon",
+        "b_fixed_a"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q020",
+      "type": "now_at_hackgt",
+      "text": "What did your human almost build instead of their current HackGT idea?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "same_problem"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q021",
+      "type": "now_at_hackgt",
+      "text": "What moment this weekend made your human feel like they belonged here, or like they didn't?",
+      "depth": 3,
+      "consent": "okay_to_share",
+      "informs": [
+        "depth",
+        "going_through"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q022",
+      "type": "now_at_hackgt",
+      "text": "What is your human privately worried about going into judging, if they are comfortable saying?",
+      "depth": 3,
+      "consent": "okay_to_share",
+      "informs": [
+        "going_through",
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q023",
+      "type": "now_at_hackgt",
+      "text": "What mentor question has your human been holding back because it felt too basic?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "b_fixed_a",
+        "a_fixed_b",
+        "soon"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q024",
+      "type": "now_at_hackgt",
+      "text": "What kind of help would your human gladly offer other hackers this weekend?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "one_sided",
+        "value",
+        "soon"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q025",
+      "type": "now_at_hackgt",
+      "text": "What could your human and another hacker do together at HackGT in the next hour?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "soon",
+        "talk_again"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q026",
+      "type": "building_and_craft",
+      "text": "What is the most satisfying thing your human has ever built, and who ended up using it?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "rare",
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q027",
+      "type": "building_and_craft",
+      "text": "Which language or framework does your human reach for first, and what makes it their default?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "same_problem",
+        "team"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q028",
+      "type": "building_and_craft",
+      "text": "What part of the stack does your human secretly enjoy that most people find boring?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q029",
+      "type": "building_and_craft",
+      "text": "What abandoned side project does your human still think about, and what stopped it?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "talk_again",
+        "team"
+      ],
+      "horizon": "someday",
+      "followup_ok": true
+    },
+    {
+      "id": "q030",
+      "type": "building_and_craft",
+      "text": "What tool has your human built just for themselves that almost nobody else has seen?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare",
+        "value"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q031",
+      "type": "building_and_craft",
+      "text": "What does your human's ideal development setup look like, down to editor and keyboard?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q032",
+      "type": "building_and_craft",
+      "text": "What design decision in a past project does your human now regret, and what would they change?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "a_fixed_b",
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q033",
+      "type": "building_and_craft",
+      "text": "What piece of code is your human proudest of writing, and why does it still feel good?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q034",
+      "type": "building_and_craft",
+      "text": "What does your human know deeply enough to teach someone in fifteen minutes?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "a_fixed_b",
+        "one_sided",
+        "value"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q035",
+      "type": "building_and_craft",
+      "text": "Which open-source project would your human most like to contribute to, and why that one?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "team",
+        "rare"
+      ],
+      "horizon": "someday",
+      "followup_ok": false
+    },
+    {
+      "id": "q036",
+      "type": "building_and_craft",
+      "text": "What part of building software does your human find hardest to get right, and why?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "same_problem"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q037",
+      "type": "building_and_craft",
+      "text": "What hardware, data, or domain does your human work with that few other hackers touch?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q038",
+      "type": "building_and_craft",
+      "text": "When has building something made your human feel most like themselves?",
+      "depth": 3,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q039",
+      "type": "building_and_craft",
+      "text": "What technique did your human learn the hard way that they wish someone had taught them earlier?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "a_fixed_b",
+        "b_fixed_a",
+        "value"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q040",
+      "type": "building_and_craft",
+      "text": "What kind of project would your human love to build with someone they just met?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "team",
+        "soon",
+        "talk_again"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q041",
+      "type": "building_and_craft",
+      "text": "Which piece of their current project is your human proudest of, even if judges never see it?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q042",
+      "type": "building_and_craft",
+      "text": "How does your human decide that something they built is good enough to ship?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q043",
+      "type": "building_and_craft",
+      "text": "What does your human build when nobody is grading, judging, or paying for it?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "rare",
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q044",
+      "type": "building_and_craft",
+      "text": "What non-software craft, like woodworking or cooking, shapes how your human builds things?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q045",
+      "type": "building_and_craft",
+      "text": "Which technology is your human excited about that they think most people are sleeping on?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare",
+        "value"
+      ],
+      "horizon": "someday",
+      "followup_ok": false
+    },
+    {
+      "id": "q046",
+      "type": "building_and_craft",
+      "text": "What skill is your human actively leveling up right now, and how are they practicing it?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "value",
+        "a_fixed_b"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q047",
+      "type": "building_and_craft",
+      "text": "What codebase or system does your human know inside out that others find intimidating?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "a_fixed_b",
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q048",
+      "type": "building_and_craft",
+      "text": "What has your human built that failed publicly, and what did they take away from it?",
+      "depth": 3,
+      "consent": "okay_to_share",
+      "informs": [
+        "going_through",
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q049",
+      "type": "building_and_craft",
+      "text": "What would your human build with a full year, a great team, and no deadline pressure?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "team",
+        "talk_again"
+      ],
+      "horizon": "someday",
+      "followup_ok": false
+    },
+    {
+      "id": "q050",
+      "type": "building_and_craft",
+      "text": "What does your human feel insecure about as a builder, even when others can't tell?",
+      "depth": 3,
+      "consent": "okay_to_share",
+      "informs": [
+        "depth",
+        "going_through"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q051",
+      "type": "stuck_and_solved",
+      "text": "What is the one bug your human would pay someone to fix right now?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "b_fixed_a",
+        "a_fixed_b",
+        "same_problem",
+        "soon"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q052",
+      "type": "stuck_and_solved",
+      "text": "What problem has your human been stuck on this week, described in specific technical terms?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "same_problem",
+        "a_fixed_b",
+        "b_fixed_a"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q053",
+      "type": "stuck_and_solved",
+      "text": "What error message has your human stared at the longest this weekend?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "same_problem",
+        "soon"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q054",
+      "type": "stuck_and_solved",
+      "text": "What did your human finally figure out recently that took way longer than it should have?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "a_fixed_b",
+        "value"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q055",
+      "type": "stuck_and_solved",
+      "text": "What deployment, auth, or infrastructure headache has your human already solved and could explain?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "a_fixed_b",
+        "value",
+        "one_sided"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q056",
+      "type": "stuck_and_solved",
+      "text": "Which API, library, or SDK has been fighting your human, and how is it misbehaving?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "same_problem"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q057",
+      "type": "stuck_and_solved",
+      "text": "What question would your human ask an expert if they had five uninterrupted minutes?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "b_fixed_a",
+        "value"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q058",
+      "type": "stuck_and_solved",
+      "text": "What concept is your human nodding along to that they would love to have explained properly?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "b_fixed_a",
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q059",
+      "type": "stuck_and_solved",
+      "text": "What is your human's go-to move after being stuck on something for over an hour?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "value"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q060",
+      "type": "stuck_and_solved",
+      "text": "What non-technical problem, like scope or team dynamics, is blocking your human's project?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "same_problem",
+        "going_through"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q061",
+      "type": "stuck_and_solved",
+      "text": "What workaround is your human using right now that they know is a hack?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "same_problem",
+        "a_fixed_b"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q062",
+      "type": "stuck_and_solved",
+      "text": "What did your human solve this year that they are quietly proud of?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q063",
+      "type": "stuck_and_solved",
+      "text": "Which dataset, model, or integration has your human wrestled into shape recently?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "a_fixed_b",
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q064",
+      "type": "stuck_and_solved",
+      "text": "What problem keeps showing up across your human's projects that nobody seems to solve well?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "same_problem",
+        "team",
+        "talk_again"
+      ],
+      "horizon": "someday",
+      "followup_ok": true
+    },
+    {
+      "id": "q065",
+      "type": "stuck_and_solved",
+      "text": "What would unblock your human's project in the next two hours?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "soon",
+        "b_fixed_a"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q066",
+      "type": "stuck_and_solved",
+      "text": "What part of their setup would your human happily screen-share and walk someone through?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "a_fixed_b",
+        "value",
+        "soon"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q067",
+      "type": "stuck_and_solved",
+      "text": "What is the dumbest bug that ever cost your human an entire day?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "same_problem"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q068",
+      "type": "stuck_and_solved",
+      "text": "What problem is your human avoiding because it feels too big to start?",
+      "depth": 3,
+      "consent": "none",
+      "informs": [
+        "depth",
+        "going_through"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q069",
+      "type": "stuck_and_solved",
+      "text": "What piece of advice actually unstuck your human once, and what did they do differently after?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "value",
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q070",
+      "type": "stuck_and_solved",
+      "text": "What problem outside of code has your human been stuck on lately, if they want to share?",
+      "depth": 3,
+      "consent": "okay_to_share",
+      "informs": [
+        "going_through",
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q071",
+      "type": "stuck_and_solved",
+      "text": "When your human is stuck, what do they need from others: answers, a rubber duck, or space?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "value",
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q072",
+      "type": "stuck_and_solved",
+      "text": "What problem would your human love to pair on with someone who has already solved it?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "b_fixed_a",
+        "soon"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q073",
+      "type": "stuck_and_solved",
+      "text": "What mistake did your human make that others could avoid with a two-minute warning?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "a_fixed_b",
+        "one_sided"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q074",
+      "type": "stuck_and_solved",
+      "text": "What problem did your human solve that turned out to matter more than they expected?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q075",
+      "type": "stuck_and_solved",
+      "text": "What setback hit your human hardest this year, and how did they get through it?",
+      "depth": 3,
+      "consent": "okay_to_share",
+      "informs": [
+        "going_through",
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q076",
+      "type": "career_and_path",
+      "text": "What role or kind of work is your human hoping to land next?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "value",
+        "one_sided"
+      ],
+      "horizon": "someday",
+      "followup_ok": false
+    },
+    {
+      "id": "q077",
+      "type": "career_and_path",
+      "text": "What is your human studying or working on day to day, in specific terms?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "same_problem"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q078",
+      "type": "career_and_path",
+      "text": "Which company, lab, or team does your human dream of working with, and why that one?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "value",
+        "rare"
+      ],
+      "horizon": "someday",
+      "followup_ok": false
+    },
+    {
+      "id": "q079",
+      "type": "career_and_path",
+      "text": "What internship, job, or research role taught your human the most, and what was the lesson?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth",
+        "a_fixed_b"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q080",
+      "type": "career_and_path",
+      "text": "What career decision is your human weighing right now, and what are the options?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "going_through"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q081",
+      "type": "career_and_path",
+      "text": "What kind of mentor is your human looking for, and what would they ask first?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "b_fixed_a",
+        "talk_again"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q082",
+      "type": "career_and_path",
+      "text": "What could your human offer someone just starting out in their field?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "a_fixed_b",
+        "one_sided",
+        "value"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q083",
+      "type": "career_and_path",
+      "text": "What does your human want to be known for professionally in five years?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "someday",
+      "followup_ok": false
+    },
+    {
+      "id": "q084",
+      "type": "career_and_path",
+      "text": "Which class, book, or teacher changed the direction of your human's path?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q085",
+      "type": "career_and_path",
+      "text": "What path did your human almost take instead of the one they are on now?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q086",
+      "type": "career_and_path",
+      "text": "What recruiting or interview experience taught your human the most about themselves?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "a_fixed_b"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q087",
+      "type": "career_and_path",
+      "text": "What is your human's honest take on startups versus big companies for their own career?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "going_through"
+      ],
+      "horizon": "someday",
+      "followup_ok": false
+    },
+    {
+      "id": "q088",
+      "type": "career_and_path",
+      "text": "What research question would your human happily spend years on, hypothetically?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "someday",
+      "followup_ok": false
+    },
+    {
+      "id": "q089",
+      "type": "career_and_path",
+      "text": "What popular career advice does your human disagree with, and why?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q090",
+      "type": "career_and_path",
+      "text": "What non-technical skill has helped your human's career more than any technical one?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "value",
+        "a_fixed_b"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q091",
+      "type": "career_and_path",
+      "text": "What part of their current path does your human feel unsure about, if they are open to sharing?",
+      "depth": 3,
+      "consent": "okay_to_share",
+      "informs": [
+        "going_through",
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q092",
+      "type": "career_and_path",
+      "text": "What work would your human choose if every job offered the same pay and prestige?",
+      "depth": 3,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "someday",
+      "followup_ok": false
+    },
+    {
+      "id": "q093",
+      "type": "career_and_path",
+      "text": "Who in their field does your human admire, and what specifically do they admire about them?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q094",
+      "type": "career_and_path",
+      "text": "What is your human's plan after graduation or their current role, even if it's tentative?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "talk_again"
+      ],
+      "horizon": "someday",
+      "followup_ok": false
+    },
+    {
+      "id": "q095",
+      "type": "career_and_path",
+      "text": "What company or product would your human start if they had to start one tomorrow?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "team",
+        "talk_again"
+      ],
+      "horizon": "someday",
+      "followup_ok": false
+    },
+    {
+      "id": "q096",
+      "type": "career_and_path",
+      "text": "What does your human need most right now to take the next step in their career?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "b_fixed_a",
+        "value"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q097",
+      "type": "career_and_path",
+      "text": "What club, community, or professional group has shaped your human the most?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q098",
+      "type": "career_and_path",
+      "text": "What pressure does your human feel about their career, and where do they think it comes from?",
+      "depth": 3,
+      "consent": "okay_to_share",
+      "informs": [
+        "depth",
+        "going_through"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q099",
+      "type": "career_and_path",
+      "text": "What career risk has your human taken that they are glad they took?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q100",
+      "type": "career_and_path",
+      "text": "What would your human want to learn from someone a few years ahead on the same path?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "b_fixed_a",
+        "talk_again"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q101",
+      "type": "where_from",
+      "text": "Where did your human grow up, and what is one thing only locals would know about it?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q102",
+      "type": "where_from",
+      "text": "What food from where your human grew up would they defend against any critic?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q103",
+      "type": "where_from",
+      "text": "How did your human first get into computers, code, or making things?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q104",
+      "type": "where_from",
+      "text": "What school or program is your human coming from, and what is its best-kept secret?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "same_problem",
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q105",
+      "type": "where_from",
+      "text": "What languages does your human speak, or wish they could speak?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q106",
+      "type": "where_from",
+      "text": "What place has your human traveled to that changed how they see things?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth",
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q107",
+      "type": "where_from",
+      "text": "What did your human's younger self want to be when they grew up?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q108",
+      "type": "where_from",
+      "text": "What tradition from your human's upbringing do they still keep, if they'd like to share?",
+      "depth": 2,
+      "consent": "okay_to_share",
+      "informs": [
+        "rare",
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q109",
+      "type": "where_from",
+      "text": "What music did your human grow up with, and what do they listen to now?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q110",
+      "type": "where_from",
+      "text": "What was your human completely obsessed with as a kid?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q111",
+      "type": "where_from",
+      "text": "Which place has felt most like home to your human, and why?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q112",
+      "type": "where_from",
+      "text": "Who first believed in your human's ability to build things, and how did they show it?",
+      "depth": 3,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q113",
+      "type": "where_from",
+      "text": "What was your human's first computer, phone, or console, and what did they do on it?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q114",
+      "type": "where_from",
+      "text": "How did your human end up at their current school or job?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "going_through"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q115",
+      "type": "where_from",
+      "text": "What hackathon, club, or competition from your human's past shaped who they are?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q116",
+      "type": "where_from",
+      "text": "What big change in your human's life brought them to where they are now?",
+      "depth": 3,
+      "consent": "okay_to_share",
+      "informs": [
+        "depth",
+        "going_through"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q117",
+      "type": "where_from",
+      "text": "What part of your human's background has shaped their ambitions the most?",
+      "depth": 2,
+      "consent": "okay_to_share",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q118",
+      "type": "where_from",
+      "text": "What does your human miss most about where they come from?",
+      "depth": 3,
+      "consent": "okay_to_share",
+      "informs": [
+        "depth",
+        "going_through"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q119",
+      "type": "where_from",
+      "text": "What was the first project your human ever showed someone, and how did it go?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q120",
+      "type": "where_from",
+      "text": "What online community did your human grow up in: forums, Discord servers, modding scenes?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q121",
+      "type": "where_from",
+      "text": "What is the best advice anyone from back home ever gave your human?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q122",
+      "type": "where_from",
+      "text": "What childhood game or toy explains a surprising amount about your human today?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q123",
+      "type": "where_from",
+      "text": "What weekend activity from back home does your human still crave?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare",
+        "talk_again"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q124",
+      "type": "where_from",
+      "text": "What part of growing up shaped how your human treats other people?",
+      "depth": 3,
+      "consent": "okay_to_share",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q125",
+      "type": "where_from",
+      "text": "How has your human changed since they first started college or their first job?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "going_through",
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q126",
+      "type": "interests_and_rare",
+      "text": "What is the most niche hobby your human has, the one they rarely bring up?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q127",
+      "type": "interests_and_rare",
+      "text": "What obscure topic could your human talk about for an hour without notes?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q128",
+      "type": "interests_and_rare",
+      "text": "Which specific book, game, or show has your human revisited more than three times?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q129",
+      "type": "interests_and_rare",
+      "text": "What subreddit, forum, or newsletter does your human read that almost nobody else does?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q130",
+      "type": "interests_and_rare",
+      "text": "What unusual skill does your human have that never shows up on a resume?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q131",
+      "type": "interests_and_rare",
+      "text": "Which band or artist does your human love that most of their friends have never heard of?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q132",
+      "type": "interests_and_rare",
+      "text": "What rabbit hole did your human fall down most recently, and how deep did it go?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q133",
+      "type": "interests_and_rare",
+      "text": "What sport, game, or competition does your human play, and at what level?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare",
+        "talk_again"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q134",
+      "type": "interests_and_rare",
+      "text": "What does your human collect, physical or digital, and what is the prize piece?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q135",
+      "type": "interests_and_rare",
+      "text": "Which specific video game has your human sunk the most hours into?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q136",
+      "type": "interests_and_rare",
+      "text": "What fandom or community feels like a second home to your human?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "rare",
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q137",
+      "type": "interests_and_rare",
+      "text": "What would your human's ideal Saturday look like with zero obligations?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "talk_again"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q138",
+      "type": "interests_and_rare",
+      "text": "What instrument, art form, or kind of performance does your human practice?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q139",
+      "type": "interests_and_rare",
+      "text": "What hobby did your human drop that they keep meaning to pick back up?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "talk_again"
+      ],
+      "horizon": "someday",
+      "followup_ok": true
+    },
+    {
+      "id": "q140",
+      "type": "interests_and_rare",
+      "text": "What podcast, channel, or creator has genuinely changed how your human thinks?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "rare",
+        "value"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q141",
+      "type": "interests_and_rare",
+      "text": "What dish or recipe is your human known for making?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q142",
+      "type": "interests_and_rare",
+      "text": "What does your human love doing outdoors: hiking, climbing, biking, or something weirder?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "talk_again",
+        "soon"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q143",
+      "type": "interests_and_rare",
+      "text": "What hobby would your human love a buddy for, because doing it alone is harder?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "talk_again",
+        "team"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q144",
+      "type": "interests_and_rare",
+      "text": "What is your human reading or watching right now that they would recommend by name?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "value"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q145",
+      "type": "interests_and_rare",
+      "text": "What interest does your human keep quiet about because people find it strange?",
+      "depth": 3,
+      "consent": "okay_to_share",
+      "informs": [
+        "rare",
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q146",
+      "type": "interests_and_rare",
+      "text": "Which piece of media changed your human's mind about something, and what changed?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q147",
+      "type": "interests_and_rare",
+      "text": "What historical era, place, or event is your human weirdly fascinated by?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q148",
+      "type": "interests_and_rare",
+      "text": "What interest has quietly carried your human through a hard stretch, if they would share?",
+      "depth": 3,
+      "consent": "okay_to_share",
+      "informs": [
+        "going_through",
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q149",
+      "type": "interests_and_rare",
+      "text": "What interest of your human's started as a joke and became real?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q150",
+      "type": "interests_and_rare",
+      "text": "What event or meetup does your human attend regularly outside of school or work?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare",
+        "talk_again"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q151",
+      "type": "values_and_beliefs",
+      "text": "What does your human believe that most people in tech would disagree with?",
+      "depth": 3,
+      "consent": "none",
+      "informs": [
+        "depth",
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q152",
+      "type": "values_and_beliefs",
+      "text": "What principle does your human refuse to compromise on when building something?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q153",
+      "type": "values_and_beliefs",
+      "text": "What problem in the world does your human most want technology to fix?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "value",
+        "team"
+      ],
+      "horizon": "someday",
+      "followup_ok": false
+    },
+    {
+      "id": "q154",
+      "type": "values_and_beliefs",
+      "text": "What does a genuinely good day look like to your human, beyond being productive?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q155",
+      "type": "values_and_beliefs",
+      "text": "What opinion has your human changed in the last year, and what changed it?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q156",
+      "type": "values_and_beliefs",
+      "text": "What kind of person does your human most enjoy working with, and why?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "team"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q157",
+      "type": "values_and_beliefs",
+      "text": "What does your human think the tech industry gets most wrong?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q158",
+      "type": "values_and_beliefs",
+      "text": "How does your human define success for themselves right now?",
+      "depth": 3,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q159",
+      "type": "values_and_beliefs",
+      "text": "What small technical hill will your human die on, like tabs, frameworks, or naming?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q160",
+      "type": "values_and_beliefs",
+      "text": "What trait does your human admire most in other people?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q161",
+      "type": "values_and_beliefs",
+      "text": "What cause or community does your human care about enough to give their time to?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "rare",
+        "team"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q162",
+      "type": "values_and_beliefs",
+      "text": "What does your human think AI should never be used for?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "someday",
+      "followup_ok": false
+    },
+    {
+      "id": "q163",
+      "type": "values_and_beliefs",
+      "text": "What does your human do when their values clash with what their team wants?",
+      "depth": 3,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q164",
+      "type": "values_and_beliefs",
+      "text": "What kind of impact does your human want their work to have on real people?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth",
+        "value"
+      ],
+      "horizon": "someday",
+      "followup_ok": false
+    },
+    {
+      "id": "q165",
+      "type": "values_and_beliefs",
+      "text": "What does your human think makes someone a great teammate at 3 a.m.?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "team"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q166",
+      "type": "values_and_beliefs",
+      "text": "What rule does your human live by that they came up with themselves?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "rare",
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q167",
+      "type": "values_and_beliefs",
+      "text": "What is your human most grateful for this year?",
+      "depth": 3,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q168",
+      "type": "values_and_beliefs",
+      "text": "What does your human believe about failure that took them years to learn?",
+      "depth": 3,
+      "consent": "none",
+      "informs": [
+        "depth",
+        "going_through"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q169",
+      "type": "values_and_beliefs",
+      "text": "What does your human think people owe each other in a community like HackGT?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q170",
+      "type": "values_and_beliefs",
+      "text": "What ethical line would make your human walk away from a job or project?",
+      "depth": 3,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q171",
+      "type": "values_and_beliefs",
+      "text": "What does your human value in a friendship, and how do they show it?",
+      "depth": 3,
+      "consent": "none",
+      "informs": [
+        "depth",
+        "talk_again"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q172",
+      "type": "values_and_beliefs",
+      "text": "Which belief about themselves has your human had to unlearn, if they want to share?",
+      "depth": 3,
+      "consent": "okay_to_share",
+      "informs": [
+        "depth",
+        "going_through"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q173",
+      "type": "values_and_beliefs",
+      "text": "What does your human think is underrated about being a beginner?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q174",
+      "type": "values_and_beliefs",
+      "text": "How does your human decide what is worth their time?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "busy",
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q175",
+      "type": "values_and_beliefs",
+      "text": "What role does faith, philosophy, or spirituality play in your human's life, if they choose to share?",
+      "depth": 3,
+      "consent": "okay_to_share",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q176",
+      "type": "life_and_personal",
+      "text": "What was the highlight of your human's past month outside of school or work?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q177",
+      "type": "life_and_personal",
+      "text": "What is your human looking forward to most in the next few weeks?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "soon",
+        "talk_again"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q178",
+      "type": "life_and_personal",
+      "text": "What does your human do to recharge after an intense week?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "value"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q179",
+      "type": "life_and_personal",
+      "text": "What small habit has made your human's life noticeably better?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "value"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q180",
+      "type": "life_and_personal",
+      "text": "What is your human learning right now purely for fun?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q181",
+      "type": "life_and_personal",
+      "text": "What is your human going through right now that others might relate to, if they want to share?",
+      "depth": 3,
+      "consent": "okay_to_share",
+      "informs": [
+        "going_through",
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q182",
+      "type": "life_and_personal",
+      "text": "How does your human keep their energy up when school or work gets overwhelming?",
+      "depth": 2,
+      "consent": "okay_to_share",
+      "informs": [
+        "going_through",
+        "value"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q183",
+      "type": "life_and_personal",
+      "text": "Who does your human most want to make proud, and why them?",
+      "depth": 3,
+      "consent": "okay_to_share",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q184",
+      "type": "life_and_personal",
+      "text": "What part of adult life is your human still figuring out?",
+      "depth": 3,
+      "consent": "okay_to_share",
+      "informs": [
+        "going_through"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q185",
+      "type": "life_and_personal",
+      "text": "What is the best thing that has happened to your human this year?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q186",
+      "type": "life_and_personal",
+      "text": "How does your human balance sleep, health, and hackathon habits, if they are comfortable sharing?",
+      "depth": 2,
+      "consent": "okay_to_share",
+      "informs": [
+        "going_through"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q187",
+      "type": "life_and_personal",
+      "text": "What change is your human actively trying to make in their life right now?",
+      "depth": 3,
+      "consent": "okay_to_share",
+      "informs": [
+        "going_through"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q188",
+      "type": "life_and_personal",
+      "text": "What reliably makes your human laugh, no matter what kind of day it has been?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q189",
+      "type": "life_and_personal",
+      "text": "What does a normal weekday look like for your human, from first coffee to last commit?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q190",
+      "type": "life_and_personal",
+      "text": "What would your human's closest friends say is their best quality?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q191",
+      "type": "life_and_personal",
+      "text": "What does your human wish people understood about them sooner?",
+      "depth": 3,
+      "consent": "okay_to_share",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q192",
+      "type": "life_and_personal",
+      "text": "How does your human's family feel about their tech ambitions, if they would like to share?",
+      "depth": 3,
+      "consent": "okay_to_share",
+      "informs": [
+        "depth",
+        "going_through"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q193",
+      "type": "life_and_personal",
+      "text": "What has your human been dealing with lately that makes weekends like this harder?",
+      "depth": 3,
+      "consent": "okay_to_share",
+      "informs": [
+        "going_through",
+        "busy"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q194",
+      "type": "life_and_personal",
+      "text": "How is your human looking after their mental health during a busy semester, if they want to share?",
+      "depth": 3,
+      "consent": "okay_to_share",
+      "informs": [
+        "going_through",
+        "busy"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q195",
+      "type": "life_and_personal",
+      "text": "What does your human do for other people that most folks never see?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q196",
+      "type": "life_and_personal",
+      "text": "What bucket-list item is actually within reach for your human this year?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "talk_again"
+      ],
+      "horizon": "someday",
+      "followup_ok": false
+    },
+    {
+      "id": "q197",
+      "type": "life_and_personal",
+      "text": "What does everyday life look like for your human: roommates, pets, a chaotic apartment?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q198",
+      "type": "life_and_personal",
+      "text": "What is taking up most of your human's time and headspace this month?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "busy",
+        "talk_again"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q199",
+      "type": "life_and_personal",
+      "text": "What life advice would your human give their first-year self?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "a_fixed_b",
+        "one_sided"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q200",
+      "type": "life_and_personal",
+      "text": "What feels lonely to your human about school, work, or tech, if they're comfortable sharing?",
+      "depth": 3,
+      "consent": "okay_to_share",
+      "informs": [
+        "going_through",
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q201",
+      "type": "fun_and_play",
+      "text": "What would your human's hackathon superpower be, and what is its embarrassing weakness?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q202",
+      "type": "fun_and_play",
+      "text": "What is the most chaotic thing your human has ever shipped at 4 a.m.?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "same_problem"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q203",
+      "type": "fun_and_play",
+      "text": "If your human's project were a food, what food would it be and why?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q204",
+      "type": "fun_and_play",
+      "text": "What does your human do to celebrate when something finally works?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q205",
+      "type": "fun_and_play",
+      "text": "Which fictional character would your human recruit as a teammate this weekend?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "team"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q206",
+      "type": "fun_and_play",
+      "text": "What is the worst variable name your human has ever committed?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "same_problem"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q207",
+      "type": "fun_and_play",
+      "text": "What pet does your human have, or dream of having, and what is its personality?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q208",
+      "type": "fun_and_play",
+      "text": "What tech conspiracy theory does your human half-believe as a joke?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q209",
+      "type": "fun_and_play",
+      "text": "Which emoji best sums up your human's weekend so far, and why?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "soon"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q210",
+      "type": "fun_and_play",
+      "text": "What would your human name a startup that does absolutely nothing useful?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q211",
+      "type": "fun_and_play",
+      "text": "What game would your human challenge someone to during a HackGT break?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "soon",
+        "talk_again"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q212",
+      "type": "fun_and_play",
+      "text": "What is your human's most controversial food opinion?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q213",
+      "type": "fun_and_play",
+      "text": "If your human could master any non-tech skill overnight, which one would they pick?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q214",
+      "type": "fun_and_play",
+      "text": "What is the funniest thing that has ever happened to your human at a hackathon?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q215",
+      "type": "fun_and_play",
+      "text": "Which board game, card game, or theme park ride best describes your human's coding style?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q216",
+      "type": "fun_and_play",
+      "text": "What is the weirdest spot your human has ever written code in?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q217",
+      "type": "fun_and_play",
+      "text": "What absurd side quest would your human go on if HackGT had no judging?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "soon"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q218",
+      "type": "fun_and_play",
+      "text": "Which sticker on your human's laptop has the best story behind it?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q219",
+      "type": "fun_and_play",
+      "text": "What is your human's go-to karaoke song, or the one they would never admit to?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q220",
+      "type": "fun_and_play",
+      "text": "What inside joke or meme does your human's team keep repeating this weekend?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "soon"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q221",
+      "type": "fun_and_play",
+      "text": "What would your human build with unlimited GPUs and zero practical purpose?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q222",
+      "type": "fun_and_play",
+      "text": "What is the most unexpected thing sitting in your human's browser bookmarks?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q223",
+      "type": "fun_and_play",
+      "text": "What would your human's walk-up song be as they head on stage to demo?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "rare"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q224",
+      "type": "fun_and_play",
+      "text": "What once-embarrassing moment can your human now laugh about?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q225",
+      "type": "fun_and_play",
+      "text": "What small, silly thing could your human do with another hacker here in ten minutes?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "soon",
+        "talk_again"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q226",
+      "type": "future_and_followup",
+      "text": "What would your human want to keep working on after HackGT if the project clicks?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "talk_again",
+        "team"
+      ],
+      "horizon": "someday",
+      "followup_ok": false
+    },
+    {
+      "id": "q227",
+      "type": "future_and_followup",
+      "text": "What would make your human want to meet someone again after this weekend?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "talk_again",
+        "depth"
+      ],
+      "horizon": "someday",
+      "followup_ok": false
+    },
+    {
+      "id": "q228",
+      "type": "future_and_followup",
+      "text": "What event, hackathon, or conference is your human heading to next?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "talk_again"
+      ],
+      "horizon": "someday",
+      "followup_ok": false
+    },
+    {
+      "id": "q229",
+      "type": "future_and_followup",
+      "text": "What is your human hoping to have figured out by this time next year?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "someday",
+      "followup_ok": false
+    },
+    {
+      "id": "q230",
+      "type": "future_and_followup",
+      "text": "What kind of collaboration is your human open to after HackGT: side project, study group, or startup?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "team",
+        "talk_again"
+      ],
+      "horizon": "someday",
+      "followup_ok": false
+    },
+    {
+      "id": "q231",
+      "type": "future_and_followup",
+      "text": "What goal is your human chasing this semester that a friend could help them stick to?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "talk_again",
+        "value"
+      ],
+      "horizon": "someday",
+      "followup_ok": true
+    },
+    {
+      "id": "q232",
+      "type": "future_and_followup",
+      "text": "What topic would your human happily grab coffee to keep talking about?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "talk_again"
+      ],
+      "horizon": "someday",
+      "followup_ok": false
+    },
+    {
+      "id": "q233",
+      "type": "future_and_followup",
+      "text": "What would your human want to show someone the next time they meet?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "talk_again"
+      ],
+      "horizon": "someday",
+      "followup_ok": true
+    },
+    {
+      "id": "q234",
+      "type": "future_and_followup",
+      "text": "What is the biggest thing your human wants to build in the next five years?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "someday",
+      "followup_ok": false
+    },
+    {
+      "id": "q235",
+      "type": "future_and_followup",
+      "text": "What kinds of people does your human want more of in their life?",
+      "depth": 3,
+      "consent": "none",
+      "informs": [
+        "depth",
+        "talk_again"
+      ],
+      "horizon": "someday",
+      "followup_ok": false
+    },
+    {
+      "id": "q236",
+      "type": "future_and_followup",
+      "text": "What does your human hope people remember about them after this weekend?",
+      "depth": 3,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q237",
+      "type": "future_and_followup",
+      "text": "What recurring thing, like a weekly build night, could your human invite someone into?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "talk_again"
+      ],
+      "horizon": "someday",
+      "followup_ok": false
+    },
+    {
+      "id": "q238",
+      "type": "future_and_followup",
+      "text": "What would your human like to learn alongside someone over the next few months?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "team",
+        "talk_again"
+      ],
+      "horizon": "someday",
+      "followup_ok": false
+    },
+    {
+      "id": "q239",
+      "type": "future_and_followup",
+      "text": "What deadline or launch is coming up for your human that they would welcome support on?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "busy",
+        "soon",
+        "value"
+      ],
+      "horizon": "someday",
+      "followup_ok": false
+    },
+    {
+      "id": "q240",
+      "type": "future_and_followup",
+      "text": "What from that last answer would your human most want to go deeper on?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q241",
+      "type": "future_and_followup",
+      "text": "Which part of what your human just shared would they most like a second opinion on?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth",
+        "value"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q242",
+      "type": "future_and_followup",
+      "text": "What is the story behind what your human just shared?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q243",
+      "type": "future_and_followup",
+      "text": "What happened next, after the moment your human just described?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q244",
+      "type": "future_and_followup",
+      "text": "What made that moment matter so much to your human?",
+      "depth": 3,
+      "consent": "none",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "now",
+      "followup_ok": true
+    },
+    {
+      "id": "q245",
+      "type": "future_and_followup",
+      "text": "What one thing would your human ask the other human right now, given the chance?",
+      "depth": 2,
+      "consent": "none",
+      "informs": [
+        "depth",
+        "soon"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    },
+    {
+      "id": "q246",
+      "type": "future_and_followup",
+      "text": "What future version of themselves is your human most excited, or nervous, to become?",
+      "depth": 3,
+      "consent": "okay_to_share",
+      "informs": [
+        "depth",
+        "going_through"
+      ],
+      "horizon": "someday",
+      "followup_ok": true
+    },
+    {
+      "id": "q247",
+      "type": "future_and_followup",
+      "text": "What dream is your human holding onto that they rarely say out loud?",
+      "depth": 3,
+      "consent": "okay_to_share",
+      "informs": [
+        "depth"
+      ],
+      "horizon": "someday",
+      "followup_ok": true
+    },
+    {
+      "id": "q248",
+      "type": "future_and_followup",
+      "text": "What would your human need from a friend in tech over the next year?",
+      "depth": 3,
+      "consent": "none",
+      "informs": [
+        "depth",
+        "talk_again"
+      ],
+      "horizon": "someday",
+      "followup_ok": true
+    },
+    {
+      "id": "q249",
+      "type": "future_and_followup",
+      "text": "What would your human most want to be different about their life a year from now?",
+      "depth": 3,
+      "consent": "okay_to_share",
+      "informs": [
+        "going_through",
+        "depth"
+      ],
+      "horizon": "someday",
+      "followup_ok": true
+    },
+    {
+      "id": "q250",
+      "type": "future_and_followup",
+      "text": "Roughly when is your human free to continue a conversation after HackGT: this week, this month, or later?",
+      "depth": 1,
+      "consent": "none",
+      "informs": [
+        "busy",
+        "talk_again",
+        "soon"
+      ],
+      "horizon": "now",
+      "followup_ok": false
+    }
+  ]
+}

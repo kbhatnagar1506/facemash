@@ -56,6 +56,10 @@ type Store interface {
 	Account(ctx context.Context, tenant string, id int64) (Account, error)
 	SaveProfile(ctx context.Context, tenant string, id int64, p Profile) error
 	SaveProgress(ctx context.Context, tenant string, id int64, p Progress) error
+	// SaveProgresses and SaveProfiles write many players at once (one statement), for the
+	// hub's periodic saves: one connection however many people are playing.
+	SaveProgresses(ctx context.Context, tenant string, ps map[int64]Progress) error
+	SaveProfiles(ctx context.Context, tenant string, ps map[int64]Profile) error
 	// API tokens (e.g. for someone's Muse): only a hash is stored. Creating one replaces
 	// any earlier token with the same label; TokenOwner also records the use.
 	CreateToken(ctx context.Context, tenant string, id int64, label string, hash []byte) error
@@ -65,7 +69,8 @@ type Store interface {
 	TokenStatus(ctx context.Context, tenant string, id int64, label string) (map[string]any, error)
 	// What someone's own agent remembers about them (sent by the agent, by their choice):
 	// the latest copy per person per tenant, as JSON. MemoryInfo never returns the content.
-	SaveMemory(ctx context.Context, tenant string, id int64, data []byte, exportedAt *time.Time) error
+	// SaveMemory returns the copy's received_at (the memory index compares it, memfast.go).
+	SaveMemory(ctx context.Context, tenant string, id int64, data []byte, exportedAt *time.Time) (time.Time, error)
 	MemoryInfo(ctx context.Context, tenant string, id int64) (map[string]any, error)
 	DeleteMemory(ctx context.Context, tenant string, id int64) error
 	Close()
@@ -115,9 +120,16 @@ CREATE TABLE IF NOT EXISTS progress (
 );
 CREATE INDEX IF NOT EXISTS memberships_user ON memberships(user_id);
 -- the email is the account's key; the Google subject is kept for reference only
-ALTER TABLE users DROP CONSTRAINT IF EXISTS users_google_sub_key;
+-- (checked first, so a boot never takes the table's exclusive lock when there's nothing to drop)
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'users'::regclass AND conname = 'users_google_sub_key') THEN
+    ALTER TABLE users DROP CONSTRAINT users_google_sub_key;
+  END IF;
+END $$;
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_key ON users (lower(email));
 CREATE INDEX IF NOT EXISTS users_google_sub ON users (google_sub);
+-- signing out ends sessions and game tickets issued before this (sessions_after.go)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS sessions_after timestamptz;
 CREATE TABLE IF NOT EXISTS api_tokens (
   id         bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   tenant_id  text   NOT NULL,
@@ -144,7 +156,8 @@ CREATE TABLE IF NOT EXISTS agent_memory (
 
 type pgStore struct {
 	pool   *pgxpool.Pool
-	dialer *cloudsqlconn.Dialer // nil for a direct connection
+	dialMu sync.Mutex
+	dialer *cloudsqlconn.Dialer // nil for a direct connection (or before the first dial)
 }
 
 // dbTarget says how to reach Postgres: through the Cloud SQL connector as an IAM user
@@ -155,8 +168,13 @@ type dbTarget struct {
 	Host, User, Password, DB string
 }
 
-// openPostgres connects, creates the tables if needed, and registers the tenant.
-func openPostgres(ctx context.Context, t dbTarget, tenant, tenantName string) (*pgStore, error) {
+// dbMaxConns: the pool's size. Cloud SQL's max_connections is 100 on the 3.75 GB tier this
+// runs on (db-custom-1-3840) and only this server connects, so 20 leaves plenty of room.
+const dbMaxConns = 20
+
+// newPostgres makes the pool without touching the network: connections (and the Cloud SQL
+// dialer) are made on first use, so a database that is down at boot can come up later.
+func newPostgres(t dbTarget) (*pgStore, error) {
 	s := &pgStore{}
 	var cfg *pgxpool.Config
 	var err error
@@ -167,42 +185,56 @@ func openPostgres(ctx context.Context, t dbTarget, tenant, tenantName string) (*
 		}
 		cfg.ConnConfig.Password = t.Password
 	} else {
+		cfg, err = pgxpool.ParseConfig(fmt.Sprintf("user=%s database=%s sslmode=disable connect_timeout=10", t.IAMUser, t.DB))
+		if err != nil {
+			return nil, err
+		}
+		cfg.ConnConfig.DialFunc = func(ctx context.Context, _, _ string) (net.Conn, error) {
+			d, err := s.cloudDialer(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return d.Dial(ctx, t.Instance)
+		}
+	}
+	cfg.MaxConns = dbMaxConns
+	pool, err := pgxpool.NewWithConfig(context.Background(), cfg)
+	if err != nil {
+		return nil, err
+	}
+	s.pool = pool
+	return s, nil
+}
+
+// cloudDialer makes the Cloud SQL dialer the first time it's needed (and again after a failure).
+func (s *pgStore) cloudDialer(ctx context.Context) (*cloudsqlconn.Dialer, error) {
+	s.dialMu.Lock()
+	defer s.dialMu.Unlock()
+	if s.dialer == nil {
 		d, err := cloudsqlconn.NewDialer(ctx, cloudsqlconn.WithIAMAuthN())
 		if err != nil {
 			return nil, fmt.Errorf("cloud sql dialer: %w", err)
 		}
 		s.dialer = d
-		cfg, err = pgxpool.ParseConfig(fmt.Sprintf("user=%s database=%s sslmode=disable", t.IAMUser, t.DB))
-		if err != nil {
-			d.Close()
-			return nil, err
-		}
-		cfg.ConnConfig.DialFunc = func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return d.Dial(ctx, t.Instance)
-		}
 	}
-	cfg.MaxConns = 8
-	pool, err := pgxpool.NewWithConfig(ctx, cfg)
-	if err != nil {
-		if s.dialer != nil {
-			s.dialer.Close()
-		}
-		return nil, err
+	return s.dialer, nil
+}
+
+// bootstrap creates the tables if needed and registers the tenant (safe to repeat).
+func (s *pgStore) bootstrap(ctx context.Context, tenant, tenantName string) error {
+	if _, err := s.pool.Exec(ctx, schema); err != nil {
+		return fmt.Errorf("schema: %w", err)
 	}
-	s.pool = pool
-	if _, err := pool.Exec(ctx, schema); err != nil {
-		s.Close()
-		return nil, fmt.Errorf("schema: %w", err)
+	if _, err := s.pool.Exec(ctx, `INSERT INTO tenants (id, name) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`, tenant, tenantName); err != nil {
+		return fmt.Errorf("tenant: %w", err)
 	}
-	if _, err := pool.Exec(ctx, `INSERT INTO tenants (id, name) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`, tenant, tenantName); err != nil {
-		s.Close()
-		return nil, fmt.Errorf("tenant: %w", err)
-	}
-	return s, nil
+	return nil
 }
 
 func (s *pgStore) Close() {
 	s.pool.Close()
+	s.dialMu.Lock()
+	defer s.dialMu.Unlock()
 	if s.dialer != nil {
 		s.dialer.Close()
 	}
@@ -266,6 +298,45 @@ func (s *pgStore) SaveProgress(ctx context.Context, tenant string, id int64, p P
 	return err
 }
 
+// SaveProgresses: one upsert for everyone, through unnest.
+func (s *pgStore) SaveProgresses(ctx context.Context, tenant string, ps map[int64]Progress) error {
+	if len(ps) == 0 {
+		return nil
+	}
+	ids := make([]int64, 0, len(ps))
+	rooms := make([]string, 0, len(ps))
+	var xs, zs, ys, rs []float64
+	for id, p := range ps {
+		ids, rooms = append(ids, id), append(rooms, p.Room)
+		xs, zs, ys, rs = append(xs, p.X), append(zs, p.Z), append(ys, p.Y), append(rs, p.R)
+	}
+	// only members' rows: someone removed meanwhile would fail the whole batch on the foreign key
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO progress (tenant_id, user_id, room, x, z, y, r, updated_at)
+		SELECT $1, u.id, u.room, u.x, u.z, u.y, u.r, now()
+		FROM unnest($2::bigint[], $3::text[], $4::float8[], $5::float8[], $6::float8[], $7::float8[]) AS u(id, room, x, z, y, r)
+		WHERE EXISTS (SELECT 1 FROM memberships m WHERE m.tenant_id = $1 AND m.user_id = u.id)
+		ON CONFLICT (tenant_id, user_id) DO UPDATE SET room = EXCLUDED.room, x = EXCLUDED.x, z = EXCLUDED.z,
+		  y = EXCLUDED.y, r = EXCLUDED.r, updated_at = now()`, tenant, ids, rooms, xs, zs, ys, rs)
+	return err
+}
+
+func (s *pgStore) SaveProfiles(ctx context.Context, tenant string, ps map[int64]Profile) error {
+	if len(ps) == 0 {
+		return nil
+	}
+	ids := make([]int64, 0, len(ps))
+	var names, colors, looks []string
+	for id, p := range ps {
+		ids, names, colors, looks = append(ids, id), append(names, p.Name), append(colors, p.Color), append(looks, p.Look)
+	}
+	_, err := s.pool.Exec(ctx, `
+		UPDATE memberships m SET display_name = u.name, color = u.color, look = u.look, updated_at = now()
+		FROM unnest($2::bigint[], $3::text[], $4::text[], $5::text[]) AS u(id, name, color, look)
+		WHERE m.tenant_id = $1 AND m.user_id = u.id`, tenant, ids, names, colors, looks)
+	return err
+}
+
 func (s *pgStore) CreateToken(ctx context.Context, tenant string, id int64, label string, hash []byte) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -297,12 +368,14 @@ func (s *pgStore) RevokeTokens(ctx context.Context, tenant string, id int64, lab
 	return err
 }
 
-func (s *pgStore) SaveMemory(ctx context.Context, tenant string, id int64, data []byte, exportedAt *time.Time) error {
-	_, err := s.pool.Exec(ctx, `
+func (s *pgStore) SaveMemory(ctx context.Context, tenant string, id int64, data []byte, exportedAt *time.Time) (time.Time, error) {
+	var received time.Time
+	err := s.pool.QueryRow(ctx, `
 		INSERT INTO agent_memory (tenant_id, user_id, data, bytes, exported_at, received_at) VALUES ($1, $2, $3::jsonb, $4, $5, now())
 		ON CONFLICT (tenant_id, user_id) DO UPDATE SET data = EXCLUDED.data, bytes = EXCLUDED.bytes,
-		  exported_at = EXCLUDED.exported_at, received_at = now()`, tenant, id, string(data), len(data), exportedAt)
-	return err
+		  exported_at = EXCLUDED.exported_at, received_at = now()
+		RETURNING received_at`, tenant, id, json.RawMessage(data), len(data), exportedAt).Scan(&received)
+	return received, err
 }
 
 func (s *pgStore) MemoryInfo(ctx context.Context, tenant string, id int64) (map[string]any, error) {
@@ -369,6 +442,8 @@ type memStore struct {
 	tokens  map[string]memToken   // hash → owner
 	memory  map[string]memMemory  // "<tenant>/<id>"
 	fast    *memFastTables        // the mapi_* tables (memfast_store.go), made on first use
+	talk    *memTalkTables        // agent talk's tables (agenttalk_store.go), made on first use
+	after   map[int64]time.Time   // users.sessions_after (sessions_after.go)
 }
 
 type memMemory struct {
@@ -451,6 +526,20 @@ func (m *memStore) SaveProgress(_ context.Context, tenant string, id int64, p Pr
 	return errNoAccount
 }
 
+func (m *memStore) SaveProgresses(ctx context.Context, tenant string, ps map[int64]Progress) error {
+	for id, p := range ps {
+		m.SaveProgress(ctx, tenant, id, p) // like Postgres: non-members are skipped, not an error
+	}
+	return nil
+}
+
+func (m *memStore) SaveProfiles(ctx context.Context, tenant string, ps map[int64]Profile) error {
+	for id, p := range ps {
+		m.SaveProfile(ctx, tenant, id, p)
+	}
+	return nil
+}
+
 func (m *memStore) CreateToken(_ context.Context, tenant string, id int64, label string, hash []byte) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -505,14 +594,15 @@ func (m *memStore) TokenStatus(_ context.Context, tenant string, id int64, label
 	return map[string]any{"connected": false}, nil
 }
 
-func (m *memStore) SaveMemory(_ context.Context, tenant string, id int64, data []byte, exportedAt *time.Time) error {
+func (m *memStore) SaveMemory(_ context.Context, tenant string, id int64, data []byte, exportedAt *time.Time) (time.Time, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.members[memKey(tenant, id)] == nil {
-		return errNoAccount
+		return time.Time{}, errNoAccount
 	}
-	m.memory[memKey(tenant, id)] = memMemory{append([]byte(nil), data...), exportedAt, time.Now().UTC()}
-	return nil
+	now := time.Now().UTC()
+	m.memory[memKey(tenant, id)] = memMemory{append([]byte(nil), data...), exportedAt, now}
+	return now, nil
 }
 
 func (m *memStore) MemoryInfo(_ context.Context, tenant string, id int64) (map[string]any, error) {

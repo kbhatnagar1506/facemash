@@ -25,6 +25,45 @@ cd server && go run . -addr :8080     # serves ../client/dist + /ws + /api
 
 Set `ALLOWED_ORIGINS=https://your.domain` if the page and server are on different origins.
 
+## Agent talk
+
+Two signed-in players who both switched on "Let my agent talk to people nearby" (game HUD,
+`POST /api/talk/optin {"on":true}`, off by default, only from the app with the session
+cookie) and stand within 3 m in the same room for 3 s: their agents chat, jev judges, and
+names come out only if both tap "Meet them". At most 5 talks per person per event day, and a
+pair talks once per event. Knobs: `server/talkdata/talk_config.json` (`proximity`, `limits`).
+
+What the game VM needs (`server/vm-startup.sh` wires it; everything under
+`/mnt/stateful_partition/gt/`, root 0600):
+
+| File | What | How the container gets it |
+|---|---|---|
+| `gemini-game.key` | Gemini API key locked to the VM's IP (just the key) | mounted read-only at `/secrets/gemini-game.key`, `GEMINI_API_KEY_FILE` points there |
+| `jev.env` (exists) | `JEV_API_KEY=...` | `--env-file` |
+| `talk.env` (optional) | `ADMIN_EMAILS=a@x,b@y` (admin-only test trigger), `TALK_CONFIG_FILE` | `--env-file` when present |
+
+Without `gemini-game.key` (or jev) agent talk is off and the game is unchanged; the switch
+still saves. Accounts (Cloud SQL, `db.env`) are required: the talks, prefs and briefs live in
+the same database (tables created at start). Briefs come from each person's uploaded memory,
+plus their MAPI space when `mapi-client.env` is set.
+
+Local: `GEMINI_API_KEY_FILE=... JEV_API_KEY_FILE=... go run . -dev-login -dev-talk -static ../client/dist`
+(`-talk-sim` runs a whole talk between fictional people with the live models and prints the timeline).
+
+## Organizer admin API
+
+`/api/admin/*` (see `server/admin.go`) is for organizers only: a signed-in account whose email is listed in
+`ADMIN_EMAILS` (comma-separated, case-insensitive), e.g. `ADMIN_EMAILS=krishna@profitwise.app`. Unset or empty: every
+admin request is refused (403). The same list lets an organizer start a test agent talk (`/api/talk/encounter`).
+Accounts with `@facemash.test` emails are hidden from the admin views unless `?include_test=true`.
+
+Clearing test accounts (dry run by default; only emails ending in `@facemash.test` are ever touched):
+
+```bash
+docker exec game /app/server -purge-test-accounts -session-key /data/session.key                 # counts only
+docker exec game /app/server -purge-test-accounts -dry-run=false -session-key /data/session.key   # deletes
+```
+
 ## Edit the HackGT card
 
 `server/event.json` is re-read on every request. Update `when`, `schedule`, etc. without restarting.
