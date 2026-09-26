@@ -26,9 +26,10 @@ function patternTexture(body: string, accent: string, pattern: Pattern) {
   else if (pattern === 'dots')
     for (let y = 18; y < S; y += 36)
       for (let x = (y / 36) % 2 ? 18 : 0; x < S + 20; x += 36) {
-        if (y < S * 0.46 && x > S * 0.3 && x < S * 0.7) continue // keep the face clear
+        if (y < S * 0.46 && (x < S * 0.2 || x > S * 0.8)) continue // keep the face clear
+        // the texture wraps ~1.5× wider than it is tall, so squash to land round
         g.beginPath()
-        g.arc(x, y, 9, 0, Math.PI * 2)
+        g.ellipse(x, y, 7, 10.5, 0, 0, Math.PI * 2)
         g.fill()
       }
   else if (pattern === 'zigzag') {
@@ -45,7 +46,14 @@ function patternTexture(body: string, accent: string, pattern: Pattern) {
       g.bezierCurveTo(x + r * 0.6, y - r * 1.2, x + r * 1.4, y - r * 0.2, x, y + r * 0.9)
       g.fill()
     }
-    for (let y = S * 0.55; y < S; y += 40) for (let x = ((y / 40) % 2) * 20; x < S + 20; x += 40) heart(x, y, 10)
+    for (let y = S * 0.55; y < S; y += 40)
+      for (let x = ((y / 40) % 2) * 20; x < S + 20; x += 40) {
+        g.save()
+        g.translate(x, y)
+        g.scale(0.66, 1) // pre-squash: the wrap stretches it back to a proper heart
+        heart(0, 0, 12)
+        g.restore()
+      }
   }
   const t = new THREE.CanvasTexture(c)
   t.colorSpace = THREE.SRGBColorSpace
@@ -67,29 +75,56 @@ function limb(len: number, r: number) {
   return g
 }
 
-const BODY_R = 0.62
-const BODY_L = 0.78
-const BODY_Y = 0.32 + BODY_R + BODY_L / 2 // centre of the capsule
-const TOP = BODY_Y + BODY_L / 2 + BODY_R // crown of the head
-const FACE_Y = BODY_Y + 0.42
-const FACE_Z = 0.47
+// The body is an egg: a rounder, wider bottom, a slightly smaller dome on top.
+const RB = 0.68 // bottom radius
+const RT = 0.6 // top (head) radius
+const Y0 = 0.3 + RB // centre of the bottom curve
+const Y1 = Y0 + 0.66 // centre of the head dome
+const BODY_Y = (Y0 + Y1) / 2
+const TOP = Y1 + RT // crown of the head
+const FACE_Y = Y1 + 0.02
+const FACE_Z = 0.43
+
+let eggGeo: THREE.BufferGeometry | null = null
+function eggGeometry() {
+  if (eggGeo) return eggGeo
+  const pts: THREE.Vector2[] = []
+  for (let i = 0; i <= 16; i++) {
+    const t = -Math.PI / 2 + (i / 16) * (Math.PI / 2)
+    pts.push(new THREE.Vector2(Math.max(0.0001, RB * Math.cos(t)), Y0 + RB * Math.sin(t)))
+  }
+  for (let i = 1; i <= 16; i++) {
+    const t = (i / 16) * (Math.PI / 2)
+    pts.push(new THREE.Vector2(Math.max(0.0001, RT * Math.cos(t)), Y1 + RT * Math.sin(t)))
+  }
+  eggGeo = new THREE.LatheGeometry(pts, 40)
+  eggGeo.computeVertexNormals()
+  return eggGeo
+}
 
 function Eyes({ look }: { look: Look }) {
   const ink = <meshBasicMaterial color="#15161c" />
   const dot = (x: number) => (
-    <mesh key={`d${x}`} position={[x, FACE_Y + 0.02, FACE_Z + 0.19]}>
-      <capsuleGeometry args={[0.042, 0.08, 4, 8]} />
-      {ink}
-    </mesh>
+    <group key={`d${x}`}>
+      <mesh position={[x, FACE_Y + 0.02, FACE_Z + 0.218]}>
+        <capsuleGeometry args={[0.052, 0.1, 4, 10]} />
+        {ink}
+      </mesh>
+      {/* sparkle */}
+      <mesh position={[x + 0.02, FACE_Y + 0.07, FACE_Z + 0.276]}>
+        <circleGeometry args={[0.018, 10]} />
+        <meshBasicMaterial color="#ffffff" />
+      </mesh>
+    </group>
   )
   const arc = (x: number) => (
-    <mesh key={`a${x}`} position={[x, FACE_Y, FACE_Z + 0.19]}>
+    <mesh key={`a${x}`} position={[x, FACE_Y, FACE_Z + 0.218]}>
       <torusGeometry args={[0.055, 0.018, 6, 14, Math.PI]} />
       {ink}
     </mesh>
   )
   const line = (x: number) => (
-    <mesh key={`l${x}`} position={[x, FACE_Y, FACE_Z + 0.19]}>
+    <mesh key={`l${x}`} position={[x, FACE_Y, FACE_Z + 0.218]}>
       <boxGeometry args={[0.11, 0.022, 0.01]} />
       {ink}
     </mesh>
@@ -112,12 +147,12 @@ function Eyes({ look }: { look: Look }) {
           {[-0.13, 0.13].map((x) => (
             <group key={x}>
               {dot(x)}
-              <mesh position={[x + 0.018, FACE_Y + 0.06, FACE_Z + 0.215]}>
+              <mesh position={[x + 0.018, FACE_Y + 0.06, FACE_Z + 0.276]}>
                 <circleGeometry args={[0.016, 10]} />
                 <meshBasicMaterial color="#ffffff" />
               </mesh>
               {/* rosy cheeks */}
-              <mesh position={[x * 1.75, FACE_Y - 0.09, FACE_Z + 0.16]}>
+              <mesh position={[x * 1.75, FACE_Y - 0.09, FACE_Z + 0.185]}>
                 <circleGeometry args={[0.045, 14]} />
                 <meshBasicMaterial color="#ff9eb5" transparent opacity={0.8} />
               </mesh>
@@ -127,7 +162,7 @@ function Eyes({ look }: { look: Look }) {
       )
     case 'shades':
       return (
-        <group position={[0, FACE_Y + 0.02, FACE_Z + 0.2]}>
+        <group position={[0, FACE_Y + 0.02, FACE_Z + 0.228]}>
           {[-0.13, 0.13].map((x) => (
             <mesh key={x} position={[x, 0, 0]} scale={[1, 0.7, 0.4]}>
               <sphereGeometry args={[0.1, 14, 10]} />
@@ -154,15 +189,15 @@ function HatMesh({ look, spin }: { look: Look; spin: React.RefObject<THREE.Group
         <group position={[0, y - 0.14, 0]}>
           <mesh castShadow>
             <sphereGeometry args={[0.5, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2]} />
-            <meshToonMaterial color={a} />
+            <meshStandardMaterial roughness={0.42} color={a} />
           </mesh>
           <mesh position={[0, 0.02, 0.42]} rotation-x={0.14}>
             <cylinderGeometry args={[0.34, 0.34, 0.05, 16, 1, false, -Math.PI / 2, Math.PI]} />
-            <meshToonMaterial color={a} />
+            <meshStandardMaterial roughness={0.42} color={a} />
           </mesh>
           <mesh position={[0, 0.48, 0]}>
             <sphereGeometry args={[0.06, 10, 8]} />
-            <meshToonMaterial color={look.body} />
+            <meshStandardMaterial roughness={0.42} color={look.body} />
           </mesh>
         </group>
       )
@@ -195,11 +230,11 @@ function HatMesh({ look, spin }: { look: Look; spin: React.RefObject<THREE.Group
             <group key={s} position={[s * 0.2, 0, 0]} rotation-z={-s * 0.18}>
               <mesh position={[0, 0.3, 0]} scale={[1, 1, 0.55]} castShadow>
                 <capsuleGeometry args={[0.1, 0.42, 4, 10]} />
-                <meshToonMaterial color={a} />
+                <meshStandardMaterial roughness={0.42} color={a} />
               </mesh>
               <mesh position={[0, 0.3, 0.05]} scale={[0.55, 0.8, 0.3]}>
                 <capsuleGeometry args={[0.1, 0.42, 4, 10]} />
-                <meshToonMaterial color="#ffb3c6" />
+                <meshStandardMaterial roughness={0.42} color="#ffb3c6" />
               </mesh>
             </group>
           ))}
@@ -210,15 +245,15 @@ function HatMesh({ look, spin }: { look: Look; spin: React.RefObject<THREE.Group
         <group position={[0, y - 0.1, 0]}>
           <mesh castShadow>
             <cylinderGeometry args={[0.36, 0.44, 0.3, 20]} />
-            <meshToonMaterial color={a} />
+            <meshStandardMaterial roughness={0.42} color={a} />
           </mesh>
           <mesh position={[0, -0.13, 0]} rotation-x={0}>
             <cylinderGeometry args={[0.66, 0.7, 0.05, 24]} />
-            <meshToonMaterial color={a} />
+            <meshStandardMaterial roughness={0.42} color={a} />
           </mesh>
           <mesh position={[0, -0.05, 0]}>
             <cylinderGeometry args={[0.445, 0.445, 0.07, 20]} />
-            <meshToonMaterial color={look.body} />
+            <meshStandardMaterial roughness={0.42} color={look.body} />
           </mesh>
         </group>
       )
@@ -228,18 +263,18 @@ function HatMesh({ look, spin }: { look: Look; spin: React.RefObject<THREE.Group
           {[0, 1, 2, 3].map((i) => (
             <mesh key={i} rotation-y={(i * Math.PI) / 2}>
               <sphereGeometry args={[0.48, 12, 8, 0, Math.PI / 2, 0, Math.PI / 2]} />
-              <meshToonMaterial color={['#ff5d6c', '#ffc93c', '#3fc5f0', '#7ad36b'][i]} />
+              <meshStandardMaterial roughness={0.42} color={['#ff5d6c', '#ffc93c', '#3fc5f0', '#7ad36b'][i]} />
             </mesh>
           ))}
           <mesh position={[0, 0.55, 0]}>
             <cylinderGeometry args={[0.02, 0.02, 0.16, 6]} />
-            <meshToonMaterial color="#555" />
+            <meshStandardMaterial roughness={0.42} color="#555" />
           </mesh>
           <group ref={spin} position={[0, 0.63, 0]}>
             {[0, 1].map((i) => (
               <mesh key={i} rotation-y={i * Math.PI} position={[Math.cos(i * Math.PI) * 0.16, 0, 0]} rotation-x={0.3}>
                 <boxGeometry args={[0.3, 0.015, 0.08]} />
-                <meshToonMaterial color={a} />
+                <meshStandardMaterial roughness={0.42} color={a} />
               </mesh>
             ))}
           </group>
@@ -256,20 +291,21 @@ function HatMesh({ look, spin }: { look: Look; spin: React.RefObject<THREE.Group
       )
     case 'headphones':
       return (
-        <group position={[0, BODY_Y + 0.52, 0]}>
-          <mesh rotation-z={Math.PI / 2} rotation-y={Math.PI / 2}>
+        <group position={[0, Y1 - 0.02, 0]}>
+          {/* band arcs over the top of the head, ear to ear */}
+          <mesh>
             <torusGeometry args={[0.66, 0.05, 8, 28, Math.PI]} />
-            <meshToonMaterial color="#2a2c33" />
+            <meshStandardMaterial roughness={0.42} color="#2a2c33" />
           </mesh>
           {[-1, 1].map((s) => (
             <group key={s} position={[s * 0.64, 0, 0]}>
               <mesh rotation-z={Math.PI / 2} scale={[1, 0.55, 1]}>
                 <cylinderGeometry args={[0.2, 0.2, 0.16, 20]} />
-                <meshToonMaterial color={a} />
+                <meshStandardMaterial roughness={0.42} color={a} />
               </mesh>
               <mesh position={[s * 0.085, 0, 0]} rotation-z={Math.PI / 2} scale={[1, 0.3, 1]}>
                 <cylinderGeometry args={[0.13, 0.13, 0.05, 16]} />
-                <meshToonMaterial color="#2a2c33" />
+                <meshStandardMaterial roughness={0.42} color="#2a2c33" />
               </mesh>
             </group>
           ))}
@@ -280,17 +316,17 @@ function HatMesh({ look, spin }: { look: Look; spin: React.RefObject<THREE.Group
         <group position={[0, y + 0.22, 0]} rotation-z={0.12}>
           <mesh castShadow>
             <coneGeometry args={[0.24, 0.55, 18]} />
-            <meshToonMaterial color={a} />
+            <meshStandardMaterial roughness={0.42} color={a} />
           </mesh>
           {[-0.1, 0.06].map((yy) => (
             <mesh key={yy} position={[0, yy, 0]}>
               <cylinderGeometry args={[0.24 * (0.5 - yy / 0.55 * 0.9), 0.24 * (0.5 - yy / 0.55 * 0.9) + 0.02, 0.05, 18]} />
-              <meshToonMaterial color={look.body} />
+              <meshStandardMaterial roughness={0.42} color={look.body} />
             </mesh>
           ))}
           <mesh position={[0, 0.3, 0]}>
             <sphereGeometry args={[0.07, 10, 8]} />
-            <meshToonMaterial color="#ffffff" />
+            <meshStandardMaterial roughness={0.42} color="#ffffff" />
           </mesh>
         </group>
       )
@@ -328,17 +364,17 @@ function Laptop({ look }: { look: Look }) {
     <group position={[0, BODY_Y - 0.22, 0.78]} rotation-x={0.25}>
       <mesh castShadow>
         <boxGeometry args={[0.66, 0.035, 0.44]} />
-        <meshToonMaterial color="#c9ccd2" />
+        <meshStandardMaterial roughness={0.42} color="#c9ccd2" />
       </mesh>
       <mesh position={[0, 0.02, -0.02]}>
         <boxGeometry args={[0.56, 0.005, 0.26]} />
-        <meshToonMaterial color="#3a3d45" />
+        <meshStandardMaterial roughness={0.42} color="#3a3d45" />
       </mesh>
       {/* lid stands up at the front edge: screen toward the bean, stickers toward everyone else */}
       <group position={[0, 0.02, 0.21]} rotation-x={-0.3}>
         <mesh position={[0, 0.22, 0]} castShadow>
           <boxGeometry args={[0.66, 0.44, 0.025]} />
-          <meshToonMaterial color="#c9ccd2" />
+          <meshStandardMaterial roughness={0.42} color="#c9ccd2" />
         </mesh>
         <mesh position={[0, 0.22, 0.0135]}>
           <planeGeometry args={[0.58, 0.38]} />
@@ -362,15 +398,15 @@ function HandItem({ look }: { look: Look }) {
         <group position={[0, -0.7, 0.14]}>
           <mesh castShadow>
             <cylinderGeometry args={[0.1, 0.08, 0.24, 16]} />
-            <meshToonMaterial color="#f5f1e6" />
+            <meshStandardMaterial roughness={0.42} color="#f5f1e6" />
           </mesh>
           <mesh>
             <cylinderGeometry args={[0.101, 0.09, 0.09, 16]} />
-            <meshToonMaterial color="#b88a5a" />
+            <meshStandardMaterial roughness={0.42} color="#b88a5a" />
           </mesh>
           <mesh position={[0, 0.13, 0]}>
             <cylinderGeometry args={[0.105, 0.105, 0.03, 16]} />
-            <meshToonMaterial color="#4e3627" />
+            <meshStandardMaterial roughness={0.42} color="#4e3627" />
           </mesh>
         </group>
       )
@@ -379,21 +415,21 @@ function HandItem({ look }: { look: Look }) {
         <group position={[0, -0.7, 0.14]}>
           <mesh castShadow>
             <cylinderGeometry args={[0.1, 0.08, 0.28, 16]} />
-            <meshToonMaterial color="#e8c9a2" />
+            <meshStandardMaterial roughness={0.42} color="#e8c9a2" />
           </mesh>
           {[0, 1, 2, 3, 4].map((i) => (
             <mesh key={i} position={[Math.cos(i * 1.3) * 0.05, -0.1, Math.sin(i * 1.3) * 0.05]}>
               <sphereGeometry args={[0.025, 8, 6]} />
-              <meshToonMaterial color="#2a1a14" />
+              <meshStandardMaterial roughness={0.42} color="#2a1a14" />
             </mesh>
           ))}
           <mesh position={[0.03, 0.22, 0]} rotation-z={-0.2}>
             <cylinderGeometry args={[0.018, 0.018, 0.22, 8]} />
-            <meshToonMaterial color={a} />
+            <meshStandardMaterial roughness={0.42} color={a} />
           </mesh>
           <mesh position={[0, 0.15, 0]}>
             <sphereGeometry args={[0.1, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2]} />
-            <meshToonMaterial color="#ffffff" transparent opacity={0.6} />
+            <meshStandardMaterial roughness={0.42} color="#ffffff" transparent opacity={0.6} />
           </mesh>
         </group>
       )
@@ -402,7 +438,7 @@ function HandItem({ look }: { look: Look }) {
         <group position={[0, -0.66, 0.14]} rotation-x={-0.5}>
           <mesh castShadow>
             <boxGeometry args={[0.12, 0.22, 0.02]} />
-            <meshToonMaterial color="#1f2430" />
+            <meshStandardMaterial roughness={0.42} color="#1f2430" />
           </mesh>
           <mesh position={[0, 0, 0.011]}>
             <planeGeometry args={[0.1, 0.19]} />
@@ -415,15 +451,15 @@ function HandItem({ look }: { look: Look }) {
         <group position={[0, -0.74, 0.16]}>
           <mesh castShadow scale={[1, 0.8, 1.2]}>
             <sphereGeometry args={[0.12, 14, 10]} />
-            <meshToonMaterial color="#ffd23f" />
+            <meshStandardMaterial roughness={0.42} color="#ffd23f" />
           </mesh>
           <mesh position={[0, 0.12, 0.05]}>
             <sphereGeometry args={[0.08, 12, 10]} />
-            <meshToonMaterial color="#ffd23f" />
+            <meshStandardMaterial roughness={0.42} color="#ffd23f" />
           </mesh>
           <mesh position={[0, 0.11, 0.14]} rotation-x={Math.PI / 2}>
             <coneGeometry args={[0.035, 0.07, 8]} />
-            <meshToonMaterial color="#ff8a3d" />
+            <meshStandardMaterial roughness={0.42} color="#ff8a3d" />
           </mesh>
           {[-1, 1].map((s) => (
             <mesh key={s} position={[s * 0.035, 0.15, 0.115]}>
@@ -438,15 +474,15 @@ function HandItem({ look }: { look: Look }) {
         <group position={[0, -0.7, 0.14]}>
           <mesh castShadow>
             <cylinderGeometry args={[0.065, 0.065, 0.24, 16]} />
-            <meshToonMaterial color="#1f2430" />
+            <meshStandardMaterial roughness={0.42} color="#1f2430" />
           </mesh>
           <mesh>
             <cylinderGeometry args={[0.066, 0.066, 0.08, 16]} />
-            <meshToonMaterial color={a} />
+            <meshStandardMaterial roughness={0.42} color={a} />
           </mesh>
           <mesh position={[0, 0.125, 0]}>
             <cylinderGeometry args={[0.06, 0.06, 0.01, 16]} />
-            <meshToonMaterial color="#c9ccd2" />
+            <meshStandardMaterial roughness={0.42} color="#c9ccd2" />
           </mesh>
         </group>
       )
@@ -469,7 +505,7 @@ function HandItem({ look }: { look: Look }) {
           </mesh>
           <mesh position={[0, -0.08, 0]}>
             <boxGeometry args={[0.14, 0.05, 0.1]} />
-            <meshToonMaterial color="#5a3a22" />
+            <meshStandardMaterial roughness={0.42} color="#5a3a22" />
           </mesh>
         </group>
       )
@@ -483,20 +519,20 @@ function CheerFace() {
   const ink = <meshBasicMaterial color="#15161c" />
   return (
     <group>
-      <mesh position={[-0.13, FACE_Y + 0.03, FACE_Z + 0.19]}>
+      <mesh position={[-0.13, FACE_Y + 0.03, FACE_Z + 0.218]}>
         <capsuleGeometry args={[0.042, 0.08, 4, 8]} />
         {ink}
       </mesh>
-      <mesh position={[0.13, FACE_Y + 0.02, FACE_Z + 0.19]}>
+      <mesh position={[0.13, FACE_Y + 0.02, FACE_Z + 0.218]}>
         <torusGeometry args={[0.055, 0.018, 6, 14, Math.PI]} />
         {ink}
       </mesh>
-      <mesh position={[0, FACE_Y - 0.08, FACE_Z + 0.2]} rotation-z={Math.PI}>
+      <mesh position={[0, FACE_Y - 0.08, FACE_Z + 0.228]} rotation-z={Math.PI}>
         <torusGeometry args={[0.08, 0.018, 6, 16, Math.PI]} />
         {ink}
       </mesh>
       {[-1, 1].map((s) => (
-        <mesh key={s} position={[s * 0.23, FACE_Y - 0.07, FACE_Z + 0.15]}>
+        <mesh key={s} position={[s * 0.23, FACE_Y - 0.07, FACE_Z + 0.182]}>
           <circleGeometry args={[0.045, 14]} />
           <meshBasicMaterial color="#ff9eb5" transparent opacity={0.85} />
         </mesh>
@@ -573,27 +609,33 @@ export function BeanBody({ look, state, shadows = true }: { look: Look; state: R
     <group ref={body}>
       {/* legs */}
       {[-1, 1].map((s) => (
-        <mesh key={s} ref={s < 0 ? legL : legR} position={[s * 0.24, 0.44, 0]} geometry={limb(0.44, 0.15)} castShadow={shadows}>
-          <meshToonMaterial color={look.pattern === 'solid' ? look.body : look.accent} />
+        <mesh key={s} ref={s < 0 ? legL : legR} position={[s * 0.26, 0.4, 0]} geometry={limb(0.4, 0.17)} castShadow={shadows}>
+          <meshStandardMaterial roughness={0.42} color={look.pattern === 'solid' ? look.body : look.accent} />
         </mesh>
       ))}
       {/* the bean */}
-      <mesh position={[0, BODY_Y, 0]} scale={[1, 1, 0.9]} castShadow={shadows}>
-        <capsuleGeometry args={[BODY_R, BODY_L, 8, 24]} />
-        <meshToonMaterial map={map} />
+      <mesh geometry={eggGeometry()} scale={[1, 1, 0.9]} castShadow={shadows}>
+        <meshStandardMaterial roughness={0.42} map={map} />
       </mesh>
       {/* the seam around the middle, like the vinyl figure */}
-      <mesh position={[0, BODY_Y - 0.2, 0]} rotation-x={Math.PI / 2} scale={[1, 0.9, 1]}>
-        <torusGeometry args={[BODY_R + 0.002, 0.012, 6, 36]} />
-        <meshToonMaterial color={new THREE.Color(look.body).multiplyScalar(0.8).getStyle()} />
+      <mesh position={[0, Y0 + 0.12, 0]} rotation-x={Math.PI / 2} scale={[1, 0.9, 1]}>
+        <torusGeometry args={[RB + (RT - RB) * (0.12 / 0.66) + 0.003, 0.012, 6, 40]} />
+        <meshStandardMaterial roughness={0.42} color={new THREE.Color(look.body).multiplyScalar(0.8).getStyle()} />
       </mesh>
       {/* face visor */}
-      <mesh position={[0, FACE_Y, FACE_Z]} scale={[0.42, 0.34, 0.2]}>
+      <mesh position={[0, FACE_Y, FACE_Z]} scale={[0.46, 0.37, 0.21]}>
         <sphereGeometry args={[1, 24, 16]} />
-        <meshToonMaterial color="#fbfbf7" emissive="#c9c9c2" />
+        <meshStandardMaterial roughness={0.28} color="#ffffff" emissive="#d8d8d2" />
       </mesh>
       <group ref={eyes}>
         <Eyes look={look} />
+        {look.eyes !== 'star' &&
+          [-1, 1].map((s) => (
+            <mesh key={s} position={[s * 0.25, FACE_Y - 0.1, FACE_Z + 0.178]} rotation-y={s * 0.35}>
+              <circleGeometry args={[0.05, 16]} />
+              <meshBasicMaterial color="#ff9eb5" transparent opacity={0.55} />
+            </mesh>
+          ))}
       </group>
       <group ref={cheerFace} visible={false}>
         <CheerFace />
@@ -601,15 +643,22 @@ export function BeanBody({ look, state, shadows = true }: { look: Look; state: R
       {holdsLaptop && <Laptop look={look} />}
       {/* stubby arms with round hands */}
       {[-1, 1].map((s) => (
-        <group key={s} ref={s < 0 ? armL : armR} position={[s * 0.58, BODY_Y + 0.2, 0]}>
-          <mesh geometry={limb(0.7, 0.13)} castShadow={shadows}>
-            <meshToonMaterial color={look.body} />
+        <group key={s} ref={s < 0 ? armL : armR} position={[s * 0.6, BODY_Y + 0.14, 0]}>
+          <mesh geometry={limb(0.64, 0.14)} castShadow={shadows}>
+            <meshStandardMaterial roughness={0.42} color={look.body} />
           </mesh>
-          <mesh position={[0, -0.64, 0.02]}>
-            <sphereGeometry args={[0.13, 12, 10]} />
-            <meshToonMaterial color={look.body} />
+          <mesh position={[0, -0.6, 0.02]}>
+            <sphereGeometry args={[0.15, 14, 12]} />
+            <meshStandardMaterial roughness={0.42} color={look.body} />
           </mesh>
-          {s > 0 && !holdsLaptop && <HandItem look={look} />}
+          {s > 0 && !holdsLaptop && (
+            // held items a bit chunkier than life so they read at a glance
+            <group position={[0, -0.6, 0]} scale={1.35}>
+              <group position={[0, 0.64, 0]}>
+                <HandItem look={look} />
+              </group>
+            </group>
+          )}
         </group>
       ))}
       <HatMesh look={look} spin={spin} />

@@ -27,7 +27,7 @@ const HEX = /^#[0-9a-fA-F]{6}$/
 
 /** A cheerful default look built from a cap colour (for people who never visited /avatar). */
 export function defaultLook(color = '#ff8a3d'): Look {
-  return { body: HEX.test(color) ? color : '#ff8a3d', accent: '#ffffff', pattern: 'split', eyes: 'dots', hat: 'none', item: 'laptop' }
+  return { body: HEX.test(color) ? color : '#ff8a3d', accent: '#ffffff', pattern: 'solid', eyes: 'dots', hat: 'none', item: 'laptop' }
 }
 
 export function encodeLook(l: Look) {
