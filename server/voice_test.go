@@ -4,8 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -23,12 +27,19 @@ type fakeEleven struct {
 	next    int
 	convs   map[string]map[string]any // conversation id → GET body
 	polls   map[string]int
+
+	deleted    map[string]string // conversation id → key that deleted it
+	deleteFail int               // the next DELETEs that fail with 503
+	deletes    int               // DELETE requests, failed or not
+	pageSize   int               // list page size (0: whatever was asked)
+	lists      int
+	start      int64 // start time for addConv (0: now)
 }
 
 var fakeAgents = map[string]string{"xk_primary_1": "agent_a", "xk_backup_2": "agent_b", "xk_broken_3": "agent_a"}
 
 func newFakeEleven(t *testing.T) (*fakeEleven, *httptest.Server) {
-	f := &fakeEleven{keyErr: map[string]int{}, mints: map[string]int{}, convs: map[string]map[string]any{}, polls: map[string]int{}}
+	f := &fakeEleven{keyErr: map[string]int{}, mints: map[string]int{}, convs: map[string]map[string]any{}, polls: map[string]int{}, deleted: map[string]string{}}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
@@ -61,6 +72,53 @@ func newFakeEleven(t *testing.T) (*fakeEleven, *httptest.Server) {
 				u += fmt.Sprintf("&conversation_id=conv_%d", f.next)
 			}
 			json.NewEncoder(w).Encode(map[string]string{"signed_url": u})
+		case r.URL.Path == "/v1/convai/conversations" && r.Method == http.MethodGet:
+			// the account's conversations for one agent, started before a time, oldest first
+			f.lists++
+			q := r.URL.Query()
+			before, _ := strconv.ParseInt(q.Get("call_start_before_unix"), 10, 64)
+			var ids []string
+			for id, c := range f.convs {
+				st := c["metadata"].(map[string]any)["start_time_unix_secs"].(int64)
+				if c["agent_id"] == fakeAgents[k] && c["agent_id"] == q.Get("agent_id") && (before == 0 || st < before) {
+					ids = append(ids, id)
+				}
+			}
+			sort.Strings(ids)
+			from, _ := strconv.Atoi(q.Get("cursor"))
+			size, _ := strconv.Atoi(q.Get("page_size"))
+			if f.pageSize > 0 {
+				size = f.pageSize
+			}
+			to := min(len(ids), from+size)
+			var page []map[string]any
+			for _, id := range ids[min(from, to):to] {
+				c := f.convs[id]
+				page = append(page, map[string]any{"conversation_id": id, "agent_id": c["agent_id"], "status": c["status"],
+					"start_time_unix_secs": c["metadata"].(map[string]any)["start_time_unix_secs"]})
+			}
+			out := map[string]any{"conversations": page, "has_more": to < len(ids)}
+			if to < len(ids) {
+				out["next_cursor"] = strconv.Itoa(to)
+			}
+			json.NewEncoder(w).Encode(out)
+		case strings.HasPrefix(r.URL.Path, "/v1/convai/conversations/") && r.Method == http.MethodDelete:
+			f.deletes++
+			if f.deleteFail > 0 {
+				f.deleteFail--
+				w.WriteHeader(503)
+				fmt.Fprint(w, `{"detail":"try later, hunter2"}`)
+				return
+			}
+			id := strings.TrimPrefix(r.URL.Path, "/v1/convai/conversations/")
+			c, ok := f.convs[id]
+			if !ok || c["agent_id"] != fakeAgents[k] {
+				w.WriteHeader(404)
+				return
+			}
+			delete(f.convs, id)
+			f.deleted[id] = k
+			fmt.Fprint(w, `{}`)
 		case strings.HasPrefix(r.URL.Path, "/v1/convai/conversations/"):
 			f.fetches++
 			id := strings.TrimPrefix(r.URL.Path, "/v1/convai/conversations/")
@@ -86,6 +144,14 @@ func newFakeEleven(t *testing.T) (*fakeEleven, *httptest.Server) {
 	return f, srv
 }
 
+// startAt: when the next added conversation started (now, unless a test set f.start).
+func (f *fakeEleven) startAt() int64 {
+	if f.start != 0 {
+		return f.start
+	}
+	return time.Now().Unix()
+}
+
 func (f *fakeEleven) setKeyErr(k string, code int) {
 	f.mu.Lock()
 	f.keyErr[k] = code
@@ -101,7 +167,7 @@ func (f *fakeEleven) addConv(id, agent, session string, lines ...string) {
 	f.mu.Lock()
 	f.convs[id] = map[string]any{
 		"agent_id": agent, "conversation_id": id, "status": "done", "transcript": tr,
-		"metadata":                            map[string]any{"start_time_unix_secs": time.Now().Unix()},
+		"metadata":                            map[string]any{"start_time_unix_secs": f.startAt()},
 		"conversation_initiation_client_data": map[string]any{"dynamic_variables": map[string]any{"fm_session": session, "first_name": "Buzz"}},
 	}
 	f.mu.Unlock()
@@ -381,6 +447,13 @@ func TestVoiceFinishOnBackupAccount(t *testing.T) {
 	if code, out := e.post(t, "/api/voice/finish", e.a, site, `{"conversation_id":"`+conv+`"}`); code != 200 || len(out["answers"].([]any)) != 5 {
 		t.Fatalf("finish: %d %v", code, out)
 	}
+	// and it's deleted there, with the key of the account it lives in
+	e.v.bg.Wait()
+	e.fake.mu.Lock()
+	defer e.fake.mu.Unlock()
+	if e.fake.deleted[conv] != "xk_backup_2" {
+		t.Fatalf("deleted with %q", e.fake.deleted[conv])
+	}
 }
 
 func TestVoiceStillGoing(t *testing.T) {
@@ -441,5 +514,135 @@ func TestVoiceAgentHangsUpOnSilence(t *testing.T) {
 	prompt := cc["agent"].(map[string]any)["prompt"].(map[string]any)["prompt"].(string)
 	if !strings.Contains(prompt, "Don't keep asking") {
 		t.Fatal("the prompt should tell the guide to stop checking in and end the call")
+	}
+	// the backstop behind deleting each transcript ourselves: ElevenLabs keeps none past a day
+	priv := voiceAgentConfig()["platform_settings"].(map[string]any)["privacy"].(map[string]any)
+	if priv["record_voice"] != false || priv["retention_days"] != 1 || priv["delete_transcript_and_pii"] != true {
+		t.Fatalf("privacy: %v", priv)
+	}
+}
+
+// logsTo collects the log for one test.
+type logBuf struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (l *logBuf) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
+func (l *logBuf) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.String()
+}
+
+func logsTo(t *testing.T) *logBuf {
+	l := &logBuf{}
+	log.SetOutput(l)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	return l
+}
+
+// Once the answers are saved, ElevenLabs' copy of the call is deleted: retried when it fails,
+// on the account the call lives in, and the log says only how it went (a status code).
+func TestVoiceForgetsTranscript(t *testing.T) {
+	logs := logsTo(t)
+	e := voiceServer(t, []*voiceKey{{name: "primary", key: "xk_primary_1", agent: "agent_a"}}, 10)
+	e.v.forgetWaits = []time.Duration{time.Millisecond, time.Millisecond, time.Millisecond}
+	_, st := e.post(t, "/api/voice/start", e.a, site, "")
+	conv := strings.Split(strings.Split(st["signed_url"].(string), "conversation_id=")[1], "&")[0]
+	e.fake.addConv(conv, "agent_a", st["session"].(string), transcript...)
+	e.fake.mu.Lock()
+	e.fake.deleteFail = 2 // two blips, then it works
+	e.fake.mu.Unlock()
+
+	code, out := e.post(t, "/api/voice/finish", e.a, site, `{"conversation_id":"`+conv+`"}`)
+	if code != 200 || len(out["answers"].([]any)) != 5 {
+		t.Fatalf("finish: %d %v", code, out)
+	}
+	e.v.bg.Wait()
+	e.fake.mu.Lock()
+	by, left, tries := e.fake.deleted[conv], e.fake.convs[conv], e.fake.deletes
+	e.fake.mu.Unlock()
+	if by != "xk_primary_1" || left != nil || tries != 3 {
+		t.Fatalf("deleted by %q, still there: %v, %d tries", by, left != nil, tries)
+	}
+	// finishing again still works: the answers are remembered here, not fetched again
+	if code, again := e.post(t, "/api/voice/finish", e.a, site, `{"conversation_id":"`+conv+`"}`); code != 200 || fmt.Sprint(again) != fmt.Sprint(out) {
+		t.Fatalf("again after delete: %d %v", code, again)
+	}
+
+	// never works: it gives up after the retries, and the sweep is left to it
+	_, stB := e.post(t, "/api/voice/start", e.b, site, "")
+	convB := strings.Split(strings.Split(stB["signed_url"].(string), "conversation_id=")[1], "&")[0]
+	e.fake.addConv(convB, "agent_a", stB["session"].(string), transcript...)
+	e.fake.mu.Lock()
+	e.fake.deleteFail, e.fake.deletes = 100, 0
+	e.fake.mu.Unlock()
+	if code, _ := e.post(t, "/api/voice/finish", e.b, site, `{"conversation_id":"`+convB+`"}`); code != 200 {
+		t.Fatalf("finish B: %d", code)
+	}
+	e.v.bg.Wait()
+	e.fake.mu.Lock()
+	tries, left = e.fake.deletes, e.fake.convs[convB]
+	e.fake.mu.Unlock()
+	if tries != 4 || left == nil {
+		t.Fatalf("B: %d tries, still there: %v", tries, left != nil)
+	}
+
+	l := logs.String()
+	if !strings.Contains(l, "transcript deleted at ElevenLabs: 200") || !strings.Contains(l, "transcript not deleted at ElevenLabs: 503") {
+		t.Fatalf("log: %s", l)
+	}
+	for _, never := range []string{"hunter2", "xk_primary_1", conv, convB, "drone"} {
+		if strings.Contains(l, never) {
+			t.Fatalf("the log holds %q: %s", never, l)
+		}
+	}
+}
+
+// The sweep deletes old calls nobody finished (a closed tab), in every account, a page at a
+// time; never a new one, one still going, one being saved, or another agent's.
+func TestVoiceSweepTranscripts(t *testing.T) {
+	e := voiceServer(t, []*voiceKey{{name: "primary", key: "xk_primary_1", agent: "agent_a"}, {name: "backup", key: "xk_backup_2", agent: "agent_b"}}, 10)
+	f := e.fake
+	f.mu.Lock()
+	f.pageSize = 2
+	f.start = time.Now().Add(-voiceSweepAge - 5*time.Minute).Unix()
+	f.mu.Unlock()
+	for _, id := range []string{"old_a1", "old_a2", "old_a3", "old_live", "old_saving"} {
+		f.addConv(id, "agent_a", "s", transcript...)
+	}
+	f.addConv("old_b", "agent_b", "s", transcript...)
+	f.addConv("old_other", "agent_x", "s", transcript...)
+	f.mu.Lock()
+	f.convs["old_live"]["status"] = "in-progress"
+	f.start = time.Now().Add(-5 * time.Minute).Unix()
+	f.mu.Unlock()
+	f.addConv("new_a", "agent_a", "s", transcript...)
+	e.v.mu.Lock()
+	e.v.saving["old_saving"] = true
+	e.v.mu.Unlock()
+
+	if n := e.v.sweepTranscripts(context.Background()); n != 4 {
+		t.Fatalf("swept %d, want 4", n)
+	}
+	f.mu.Lock()
+	var left []string
+	for id := range f.convs {
+		left = append(left, id)
+	}
+	sort.Strings(left)
+	byB, lists := f.deleted["old_b"], f.lists
+	f.mu.Unlock()
+	if fmt.Sprint(left) != "[new_a old_live old_other old_saving]" || byB != "xk_backup_2" || lists < 4 {
+		t.Fatalf("left %v, old_b deleted by %q, %d list calls", left, byB, lists)
+	}
+	if n := e.v.sweepTranscripts(context.Background()); n != 0 {
+		t.Fatalf("second sweep: %d", n)
 	}
 }
