@@ -349,6 +349,9 @@ kbd {
   .live-ui { bottom: calc(172px + env(safe-area-inset-bottom)); }
   .minimap.big canvas { width: min(calc(100vw - 32px), calc(100dvh - 140px)) !important; height: min(calc(100vw - 32px), calc(100dvh - 140px)) !important; }
   .dialog { bottom: calc(172px + env(safe-area-inset-bottom)); }
+  /* the dialog sits at 172px here (not 110px), so the switches step above it by its full
+     height: up to three lines (~122px) plus its 7px ink ring and a gap */
+  .hud:has(> .dialog) ~ .live-ui { bottom: calc(316px + env(safe-area-inset-bottom)); }
   .cine-skip { right: calc(24px + env(safe-area-inset-right)); }
 }
 /* landscape phones: smaller map, and the dialog up top, clear of the chat and the stick */
@@ -357,4 +360,6 @@ kbd {
   .minimap-head img { max-width: 90px; }
   /* between the status pill and the map, clear of the chat and the stick */
   .dialog { top: calc(10px + env(safe-area-inset-top)); bottom: auto; width: min(420px, calc(100vw - 440px)); padding: 10px 14px 20px; font-size: 14px; }
+  /* the dialog is up top here, so the switches stay where they are */
+  .hud:has(> .dialog) ~ .live-ui { bottom: calc(172px + env(safe-area-inset-bottom)); }
 }
