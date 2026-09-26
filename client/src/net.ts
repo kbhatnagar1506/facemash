@@ -53,8 +53,13 @@ export class Net {
   }
 
   private open() {
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-    const ws = new WebSocket(`${proto}://${location.host}/ws`)
+    // Production: the game server lives on its own host (VITE_BACKEND, e.g. Cloud Run);
+    // locally it is the same host that served the page.
+    const backend = import.meta.env.VITE_BACKEND as string | undefined
+    const url = backend
+      ? `${backend.replace(/^http/, 'ws').replace(/\/$/, '')}/ws`
+      : `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`
+    const ws = new WebSocket(url)
     this.ws = ws
     ws.onopen = () => {
       ws.send(JSON.stringify({ t: 'hello', ...this.hello }))

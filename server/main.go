@@ -427,11 +427,18 @@ func main() {
 	samplesFile := flag.String("samples", "geo_samples.jsonl", "recorded location samples")
 	flag.Parse()
 
-	// ALLOWED_ORIGINS=https://gt.example.com,https://other.example.com
-	// Unset: same-host requests and localhost dev servers only.
+	// ALLOWED_ORIGINS=https://gt.example.com,https://gt-campus-quest*.vercel.app
+	// (a * matches anything, e.g. Vercel preview deploys). Unset: same-host requests
+	// and localhost dev servers only.
 	allowed := map[string]bool{}
+	var patterns [][2]string
 	for _, o := range strings.Split(os.Getenv("ALLOWED_ORIGINS"), ",") {
-		if o = strings.TrimSpace(o); o != "" {
+		if o = strings.TrimSpace(o); o == "" {
+			continue
+		}
+		if i := strings.Index(o, "*"); i >= 0 {
+			patterns = append(patterns, [2]string{o[:i], o[i+1:]})
+		} else {
 			allowed[o] = true
 		}
 	}
@@ -439,6 +446,11 @@ func main() {
 		origin := r.Header.Get("Origin")
 		if origin == "" || allowed[origin] {
 			return true
+		}
+		for _, p := range patterns {
+			if strings.HasPrefix(origin, p[0]) && strings.HasSuffix(origin, p[1]) && len(origin) >= len(p[0])+len(p[1]) {
+				return true
+			}
 		}
 		host := strings.TrimPrefix(strings.TrimPrefix(origin, "http://"), "https://")
 		return host == r.Host || strings.HasPrefix(host, "localhost:") || strings.HasPrefix(host, "127.0.0.1:")

@@ -5,3 +5,4 @@ server/server
 .claude/
 *.log
 server/geo_samples.jsonl
+.vercel
