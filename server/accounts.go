@@ -21,26 +21,35 @@ func envOr(k, def string) string {
 	return def
 }
 
-// openAccounts connects the account store. With DB_INSTANCE set it's Cloud SQL (and a
-// failure to reach it turns sign-in off rather than keeping the game down); without it,
-// a memory store, which is fine for local dev.
+// openAccounts connects the account store: Cloud SQL through the connector with IAM auth
+// (DB_INSTANCE + DB_IAM_USER), or Postgres directly (DB_HOST + DB_USER + DB_PASSWORD, TLS
+// required). A failure to reach it turns sign-in off rather than keeping the game down.
+// With neither set, a memory store, which is fine for local dev.
 func openAccounts(keyFile string) *accounts {
 	tenant := envOr("TENANT", "hackgt13")
 	a := &accounts{tenant: tenant, sess: sessions{secret: loadSecret(keyFile)}}
-	inst := os.Getenv("DB_INSTANCE")
-	if inst == "" {
+	t := dbTarget{
+		Instance: os.Getenv("DB_INSTANCE"), IAMUser: os.Getenv("DB_IAM_USER"),
+		Host: os.Getenv("DB_HOST"), User: os.Getenv("DB_USER"), Password: os.Getenv("DB_PASSWORD"),
+		DB: envOr("DB_NAME", "facemash"),
+	}
+	where := t.Instance
+	if t.Host != "" {
+		where = t.Host
+	}
+	if where == "" {
 		log.Printf("accounts: in memory (set DB_INSTANCE for Cloud SQL), tenant %s", tenant)
 		a.store = newMemStore()
 		return a
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	s, err := openPostgres(ctx, inst, envOr("DB_NAME", "facemash"), os.Getenv("DB_IAM_USER"), tenant, envOr("TENANT_NAME", "HackGT 13"))
+	s, err := openPostgres(ctx, t, tenant, envOr("TENANT_NAME", "HackGT 13"))
 	if err != nil {
-		log.Printf("accounts: Cloud SQL unavailable, sign-in off: %v", err)
+		log.Printf("accounts: database unavailable, sign-in off: %v", err)
 		return nil
 	}
-	log.Printf("accounts: Cloud SQL %s, tenant %s", inst, tenant)
+	log.Printf("accounts: Postgres at %s, tenant %s", where, tenant)
 	a.store = s
 	return a
 }

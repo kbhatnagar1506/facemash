@@ -100,32 +100,52 @@ CREATE INDEX IF NOT EXISTS memberships_user ON memberships(user_id);
 
 type pgStore struct {
 	pool   *pgxpool.Pool
-	dialer *cloudsqlconn.Dialer
+	dialer *cloudsqlconn.Dialer // nil for a direct connection
 }
 
-// openPostgres connects to instance ("project:region:name") as the IAM user (a service
-// account's email without ".gserviceaccount.com"), creates the tables if needed, and
-// registers the tenant.
-func openPostgres(ctx context.Context, instance, db, iamUser, tenant, tenantName string) (*pgStore, error) {
-	d, err := cloudsqlconn.NewDialer(ctx, cloudsqlconn.WithIAMAuthN())
-	if err != nil {
-		return nil, fmt.Errorf("cloud sql dialer: %w", err)
-	}
-	cfg, err := pgxpool.ParseConfig(fmt.Sprintf("user=%s database=%s sslmode=disable", iamUser, db))
-	if err != nil {
-		d.Close()
-		return nil, err
+// dbTarget says how to reach Postgres: through the Cloud SQL connector as an IAM user
+// (Instance + IAMUser: a service account's email without ".gserviceaccount.com"), or
+// directly (Host + User + Password, TLS required).
+type dbTarget struct {
+	Instance, IAMUser        string
+	Host, User, Password, DB string
+}
+
+// openPostgres connects, creates the tables if needed, and registers the tenant.
+func openPostgres(ctx context.Context, t dbTarget, tenant, tenantName string) (*pgStore, error) {
+	s := &pgStore{}
+	var cfg *pgxpool.Config
+	var err error
+	if t.Host != "" {
+		cfg, err = pgxpool.ParseConfig(fmt.Sprintf("host=%s user=%s database=%s sslmode=require connect_timeout=10", t.Host, t.User, t.DB))
+		if err != nil {
+			return nil, err
+		}
+		cfg.ConnConfig.Password = t.Password
+	} else {
+		d, err := cloudsqlconn.NewDialer(ctx, cloudsqlconn.WithIAMAuthN())
+		if err != nil {
+			return nil, fmt.Errorf("cloud sql dialer: %w", err)
+		}
+		s.dialer = d
+		cfg, err = pgxpool.ParseConfig(fmt.Sprintf("user=%s database=%s sslmode=disable", t.IAMUser, t.DB))
+		if err != nil {
+			d.Close()
+			return nil, err
+		}
+		cfg.ConnConfig.DialFunc = func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return d.Dial(ctx, t.Instance)
+		}
 	}
 	cfg.MaxConns = 8
-	cfg.ConnConfig.DialFunc = func(ctx context.Context, _, _ string) (net.Conn, error) {
-		return d.Dial(ctx, instance)
-	}
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
-		d.Close()
+		if s.dialer != nil {
+			s.dialer.Close()
+		}
 		return nil, err
 	}
-	s := &pgStore{pool: pool, dialer: d}
+	s.pool = pool
 	if _, err := pool.Exec(ctx, schema); err != nil {
 		s.Close()
 		return nil, fmt.Errorf("schema: %w", err)
@@ -139,7 +159,9 @@ func openPostgres(ctx context.Context, instance, db, iamUser, tenant, tenantName
 
 func (s *pgStore) Close() {
 	s.pool.Close()
-	s.dialer.Close()
+	if s.dialer != nil {
+		s.dialer.Close()
+	}
 }
 
 func (s *pgStore) SignIn(ctx context.Context, tenant string, g user) (Account, bool, error) {
