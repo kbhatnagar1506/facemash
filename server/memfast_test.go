@@ -1065,3 +1065,41 @@ func mfOpenPostgres(ctx context.Context, dsn string) (*pgStore, error) {
 	}
 	return s, nil
 }
+
+// A long hit is cut around what the question asks about, not just at its start: a daily
+// note's answer is often its last paragraph.
+func TestFastSnippet(t *testing.T) {
+	var paras []string
+	for i := 0; i < 12; i++ {
+		paras = append(paras, fmt.Sprintf("Paragraph %d: spent the morning at the CULC on the telemetry parser, then lunch with Theo and a long review of item %d.", i, 100+i))
+	}
+	paras = append(paras, "Signed up for the Atlanta half marathon in November. My target finish time is 1:45.")
+	text := strings.Join(paras, "\n\n")
+	if utf8.RuneCountInString(text) <= 1000 {
+		t.Fatalf("fixture too short: %d", utf8.RuneCountInString(text))
+	}
+
+	got := fastSnippet(text, "What finish time am I aiming for in the half marathon?", 1000)
+	if !strings.Contains(got, "1:45") || utf8.RuneCountInString(got) > 1000+8 {
+		t.Fatalf("the answer paragraph should be kept within the cap: %d runes\n%s", utf8.RuneCountInString(got), got)
+	}
+	if !strings.Contains(got, "…") || strings.Index(got, "Paragraph 0") > strings.Index(got, "1:45") {
+		t.Fatalf("kept paragraphs stay in order with … for the gaps:\n%s", got)
+	}
+	// nothing in common with the question: the old cut, from the start
+	if got := fastSnippet(text, "zebra xylophone", 1000); !strings.HasPrefix(got, "Paragraph 0") || strings.Contains(got, "1:45") || !strings.HasSuffix(got, "…") {
+		t.Fatalf("no overlap should keep the start:\n%s", got)
+	}
+	// short text is untouched; stop words alone don't count as overlap
+	if got := fastSnippet("short", "what is the", 1000); got != "short" {
+		t.Fatalf("short text changed: %q", got)
+	}
+	if got := fastSnippet(text, "what is the", 1000); !strings.HasPrefix(got, "Paragraph 0") {
+		t.Fatalf("stop words matched:\n%s", got)
+	}
+	// one huge paragraph that matches: its start still goes in, within the cap
+	huge := strings.Repeat("marathon training log ", 200)
+	if got := fastSnippet(huge, "marathon", 500); utf8.RuneCountInString(got) > 500 || !strings.HasPrefix(got, "marathon") {
+		t.Fatalf("huge paragraph: %d runes", utf8.RuneCountInString(got))
+	}
+}

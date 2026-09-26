@@ -34,6 +34,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -838,10 +839,7 @@ func (f *memFast) askNow(ctx context.Context, tenant string, id int64, q string)
 		if h.MatchedText != "" && !strings.Contains(h.MatchedText, title) {
 			text = h.MatchedText
 		}
-		text = strings.TrimSpace(text)
-		if r := []rune(text); len(r) > fastSnippetRunes {
-			text = string(r[:fastSnippetRunes]) + "…"
-		}
+		text = fastSnippet(strings.TrimSpace(text), q, fastSnippetRunes)
 		section, _ := h.Memory.Metadata["section"].(string)
 		key, _ := h.Memory.Metadata["key"].(string)
 		results = append(results, map[string]any{
@@ -859,6 +857,81 @@ func (f *memFast) askNow(ctx context.Context, tenant string, id int64, q string)
 		return map[string]any{"status": "no_match", "results": results, "count": 0, "note": "Nothing in this person's notes matches that."}
 	}
 	return map[string]any{"status": "ok", "results": results, "count": len(results), "note": fastNote}
+}
+
+// fastSnippet cuts a long hit down to limit runes around what the question asks about: the
+// paragraphs sharing the most words with it, kept in their original order, with "…" where
+// text was left out. A question sharing no words with the text keeps the old cut, the start.
+// (A daily note's answer is often its last paragraph, well past the first 1500 runes.)
+func fastSnippet(text, q string, limit int) string {
+	if utf8.RuneCountInString(text) <= limit {
+		return text
+	}
+	head := func(s string, n int) string {
+		if r := []rune(s); len(r) > n {
+			return strings.TrimSpace(string(r[:n])) + "…"
+		}
+		return s
+	}
+	words := map[string]bool{}
+	for _, w := range strings.FieldsFunc(strings.ToLower(q), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != ':' && r != '-'
+	}) {
+		if w = strings.Trim(w, ":-"); !fastStopWords[w] && (utf8.RuneCountInString(w) > 2 || strings.ContainsAny(w, "0123456789")) {
+			words[w] = true
+		}
+	}
+	paras := strings.Split(text, "\n\n")
+	if len(paras) == 1 {
+		paras = strings.SplitAfter(text, ". ")
+	}
+	score := make([]int, len(paras))
+	order := make([]int, len(paras))
+	best := 0
+	for i, p := range paras {
+		order[i] = i
+		lp := strings.ToLower(p)
+		for w := range words {
+			if strings.Contains(lp, w) {
+				score[i]++
+			}
+		}
+		best = max(best, score[i])
+	}
+	if best == 0 {
+		return head(text, limit)
+	}
+	sort.SliceStable(order, func(a, b int) bool { return score[order[a]] > score[order[b]] })
+	keep := make([]bool, len(paras))
+	left := limit
+	for _, i := range order {
+		n := utf8.RuneCountInString(paras[i]) + 2
+		if n > left {
+			if i == order[0] { // the best paragraph alone is too long: its start still goes in
+				paras[i], keep[i] = head(paras[i], limit-2), true
+			}
+			continue
+		}
+		keep[i], left = true, left-n
+	}
+	var out []string
+	for i, p := range paras {
+		switch {
+		case keep[i]:
+			out = append(out, strings.TrimSpace(p))
+		case len(out) == 0 || out[len(out)-1] != "…":
+			out = append(out, "…")
+		}
+	}
+	return strings.Join(out, "\n\n")
+}
+
+var fastStopWords = map[string]bool{
+	"the": true, "and": true, "for": true, "are": true, "was": true, "did": true, "does": true, "what": true,
+	"when": true, "where": true, "which": true, "who": true, "whom": true, "how": true, "why": true, "you": true,
+	"your": true, "about": true, "that": true, "this": true, "with": true, "from": true, "have": true, "has": true,
+	"had": true, "any": true, "can": true, "tell": true, "know": true, "remember": true, "most": true, "usual": true,
+	"usually": true, "into": true, "there": true, "their": true, "they": true, "them": true, "our": true, "its": true,
 }
 
 // fastQuery reads the question: POST {"q": "..."} (preferred), or ?q=.
