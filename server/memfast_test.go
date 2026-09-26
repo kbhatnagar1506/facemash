@@ -15,8 +15,6 @@ import (
 	"testing"
 	"time"
 	"unicode/utf8"
-
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // ---------- a fake MAPI ----------
@@ -39,6 +37,8 @@ type mfFake struct {
 	block   chan struct{}                                         // bulk writes wait on this when set
 	hang    bool                                                  // searches never answer
 	hostile string                                                // a space whose memories every search also returns
+	nearest bool                                                  // searches also return what shares no word (as real MAPI does)
+	slow    time.Duration                                         // each bulk write takes this long
 	read    *httptest.Server
 	write   *httptest.Server
 }
@@ -70,7 +70,7 @@ func (f *mfFake) serve(side string, w http.ResponseWriter, r *http.Request) {
 	op := fastOp(r.URL.Path)
 	f.mu.Lock()
 	f.calls = append(f.calls, side+" "+r.Method+" "+op)
-	fail, block, hang := f.fail, f.block, f.hang
+	fail, block, hang, nearest, slow := f.fail, f.block, f.hang, f.nearest, f.slow
 	f.mu.Unlock()
 	if r.Header.Get("Authorization") != "Bearer "+f.key {
 		f.problem(w, 401, "unauthorized")
@@ -88,6 +88,9 @@ func (f *mfFake) serve(side string, w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body) // (first: the server only notices a client hanging up once the body is read)
 	if op == "spaces/*/memories/bulk" && block != nil {
 		<-block
+	}
+	if op == "spaces/*/memories/bulk" && slow > 0 {
+		time.Sleep(slow)
 	}
 	if op == "spaces/*/search" && hang {
 		<-r.Context().Done()
@@ -213,6 +216,7 @@ func (f *mfFake) serve(side string, w http.ResponseWriter, r *http.Request) {
 		type hit struct {
 			m     *mfMem
 			score float64
+			words int // the question's words it contains
 		}
 		var hits []hit
 		words := strings.Fields(strings.ToLower(in.Query))
@@ -226,8 +230,8 @@ func (f *mfFake) serve(side string, w http.ResponseWriter, r *http.Request) {
 					n++
 				}
 			}
-			if n > 0 || m.space == f.hostile {
-				hits = append(hits, hit{m, float64(n+1) / float64(len(words)+1)})
+			if n > 0 || m.space == f.hostile || nearest {
+				hits = append(hits, hit{m, float64(n+1) / float64(len(words)+1), n})
 			}
 		}
 		sort.Slice(hits, func(i, j int) bool {
@@ -239,7 +243,11 @@ func (f *mfFake) serve(side string, w http.ResponseWriter, r *http.Request) {
 		var results []map[string]any
 		for _, h := range hits {
 			if len(results) < in.Limit {
-				results = append(results, map[string]any{"memory": f.memJSON(h.m), "score": h.score, "matched_text": ""})
+				r := map[string]any{"memory": f.memJSON(h.m), "score": h.score, "matched_text": "", "vector_score": 0.55, "lexical_score": nil}
+				if h.words > 0 { // like live MAPI: a shared word gives a lexical score, and the meaning is close
+					r["vector_score"], r["lexical_score"] = 0.74, 0.1*float64(h.words)
+				}
+				results = append(results, r)
 			}
 		}
 		reply(200, map[string]any{"query": in.Query, "results": results, "count": len(results)})
@@ -430,9 +438,9 @@ func mfMemory() map[string]any {
 // ---------- tests ----------
 
 func TestFastSplit(t *testing.T) {
-	items, cut := fastSplit(mfMemory())
-	if cut != 0 {
-		t.Fatalf("cut: %d", cut)
+	items, capped := fastSplit(mfMemory())
+	if capped {
+		t.Fatal("capped")
 	}
 	var keys []string
 	for _, it := range items {
@@ -516,17 +524,17 @@ func TestFastSplit(t *testing.T) {
 	for i := 0; i < fastMaxItems+50; i++ {
 		notes = append(notes, map[string]any{"date": fmt.Sprintf("2026-%02d-%02d", 1+i/28%12, 1+i%28), "content": fmt.Sprintf("note %d", i)})
 	}
-	capped, cut := fastSplit(map[string]any{"daily_notes": notes})
-	if len(capped) > fastMaxItems || cut == 0 {
-		t.Fatalf("item cap: %d items, %d cut", len(capped), cut)
+	few, capped := fastSplit(map[string]any{"daily_notes": notes})
+	if len(few) != fastMaxItems || !capped {
+		t.Fatalf("item cap: %d items, capped %v", len(few), capped)
 	}
-	big, cut := fastSplit(map[string]any{"memory_md": strings.Repeat(strings.Repeat("y", 3000)+"\n\n", 3000)})
+	big, capped := fastSplit(map[string]any{"memory_md": strings.Repeat(strings.Repeat("é", 3000)+"\n\n", 3000)})
 	total := 0
 	for _, it := range big {
 		total += len(it.Content)
 	}
-	if total > fastMaxTotalBytes || cut == 0 {
-		t.Fatalf("size cap: %d bytes, %d cut", total, cut)
+	if total > fastMaxTotalBytes || total < fastMaxTotalBytes-fastMaxItemChars*4 || !capped {
+		t.Fatalf("size cap: %d bytes, capped %v", total, capped)
 	}
 }
 
@@ -978,25 +986,18 @@ func TestFastOffWithoutEnv(t *testing.T) {
 		t.Fatalf("POST /api/now while off: %d", res.StatusCode)
 	}
 	var nilFast *memFast
-	nilFast.uploaded("hackgt13", 1, map[string]any{"user_md": "x"})
+	nilFast.uploaded(context.Background(), "hackgt13", 1)
 	if err := nilFast.forget(context.Background(), "hackgt13", 1); err != nil {
 		t.Fatal(err)
 	}
 }
 
-// The Postgres half of the bookkeeping, against a real database when one is given:
-// FASTPG_DSN="host=127.0.0.1 port=... user=... dbname=... sslmode=disable" go test -run TestFastPostgres
+// The Postgres half of the bookkeeping, against a real database when one is given (in a
+// scratch schema, dropped afterwards; see mfScratchPostgres):
+// FASTPG_DSN="host=127.0.0.1 port=... user=... dbname=... sslmode=disable" FASTPG_PWFILE=... go test -run Postgres
 func TestFastPostgres(t *testing.T) {
-	dsn := os.Getenv("FASTPG_DSN")
-	if dsn == "" {
-		t.Skip("FASTPG_DSN not set")
-	}
+	s, _ := mfScratchPostgres(t)
 	ctx := context.Background()
-	s, err := mfOpenPostgres(ctx, dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
 	if err := s.fastEnsureSchema(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -1051,25 +1052,6 @@ func TestFastPostgres(t *testing.T) {
 	if marks, _, _ := s.fastPurges(ctx, "hackgt13", a.ID); len(rows) != 0 || sid != "" || purging || len(marks) != 0 {
 		t.Fatalf("after clear: %v %q %v %v", rows, sid, purging, marks)
 	}
-}
-
-// mfOpenPostgres: a pgStore on a plain DSN (a local test database, no TLS), with the game's
-// schema and the tenant in place, as openPostgres would leave it.
-func mfOpenPostgres(ctx context.Context, dsn string) (*pgStore, error) {
-	pool, err := pgxpool.New(ctx, dsn)
-	if err != nil {
-		return nil, err
-	}
-	s := &pgStore{pool: pool}
-	if _, err := pool.Exec(ctx, schema); err != nil {
-		s.Close()
-		return nil, err
-	}
-	if _, err := pool.Exec(ctx, `INSERT INTO tenants (id, name) VALUES ('hackgt13', 'HackGT 13') ON CONFLICT (id) DO NOTHING`); err != nil {
-		s.Close()
-		return nil, err
-	}
-	return s, nil
 }
 
 // A long hit is cut around what the question asks about, not just at its start: a daily
