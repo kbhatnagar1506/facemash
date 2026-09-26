@@ -40,16 +40,16 @@ function framing() {
     const bays = Math.round(len / 2.3)
     const bw = len / bays
     for (let i = 0; i <= bays; i++) box(m, [0.13, H, 0.2], [i * bw, H / 2, 0.08]) // mullions
-    box(m, [len, 0.32, 0.2], [len / 2, 0.16, 0.08]) // sill band
+    // sill band, broken at each door so the doors run down to the floor
+    for (let i = 0; i < bays; i++) if (!run.doors.includes(i)) box(m, [bw, 0.32, 0.2], [i * bw + bw / 2, 0.16, 0.08])
     box(m, [len, 0.1, 0.18], [len / 2, 2.35, 0.08]) // transoms
     box(m, [len, 0.1, 0.18], [len / 2, 3.45, 0.08])
     box(m, [len, 0.16, 0.2], [len / 2, H - 0.05, 0.08]) // head
     for (const d of run.doors) {
       if (d >= bays) continue
-      const x0 = d * bw + 0.1
-      // door leaf: its own frame inside the bay, full height to the lower transom
-      const dm = m.clone().multiply(new THREE.Matrix4().makeTranslation(x0 + (bw - 0.2) / 2, 0, 0.12))
-      doors.push({ m: dm, w: bw - 0.26 })
+      // door leaf fills the bay between the mullions, floor to the lower transom
+      const dm = m.clone().multiply(new THREE.Matrix4().makeTranslation(d * bw + bw / 2, 0, 0.1))
+      doors.push({ m: dm, w: bw - 0.14 })
     }
   }
   const g = mergeGeometries(parts.map((p) => p.toNonIndexed()))!
@@ -58,46 +58,76 @@ function framing() {
 }
 
 function Door({ m, w }: { m: THREE.Matrix4; w: number }) {
-  const h = 2.3
+  // From the photo: one tall glass leaf in a cream aluminium frame (slim stiles, a deep
+  // kick rail), butt hinges on one side, a satin push bar with its latch box on the
+  // other, an overhead closer on the transom, and a metal threshold on the floor.
+  const h = 2.29
+  const st = 0.12 // stile width
+  const kick = 0.26
+  const hinge = -w / 2
+  const satin = <meshLambertMaterial color="#d9dcdf" />
   return (
     <group matrix={m} matrixAutoUpdate={false}>
-      {/* leaf frame */}
+      {/* frame */}
       {[-1, 1].map((s) => (
-        <mesh key={s} position={[(s * w) / 2, h / 2, 0]} castShadow>
-          <boxGeometry args={[0.1, h, 0.08]} />
+        <mesh key={s} position={[(s * (w - st)) / 2, h / 2, 0]} castShadow>
+          <boxGeometry args={[st, h, 0.07]} />
           <meshLambertMaterial color={CREAM} />
         </mesh>
       ))}
-      <mesh position={[0, 0.12, 0]}>
-        <boxGeometry args={[w, 0.24, 0.08]} />
+      <mesh position={[0, kick / 2, 0]} castShadow>
+        <boxGeometry args={[w - 2 * st, kick, 0.07]} />
         <meshLambertMaterial color={CREAM} />
       </mesh>
-      <mesh position={[0, h - 0.05, 0]}>
-        <boxGeometry args={[w, 0.1, 0.08]} />
+      <mesh position={[0, h - 0.06, 0]}>
+        <boxGeometry args={[w - 2 * st, 0.12, 0.07]} />
         <meshLambertMaterial color={CREAM} />
       </mesh>
-      {/* the push bar across the leaf, with its latch housing */}
-      <mesh position={[0, 1.02, 0.09]} castShadow>
-        <boxGeometry args={[w * 0.82, 0.07, 0.06]} />
-        <meshStandardMaterial color="#c9ccd0" metalness={0.7} roughness={0.35} />
+      {/* the leaf's own glass, a touch darker than the fixed panes */}
+      <mesh position={[0, (kick + h - 0.12) / 2, 0]} renderOrder={2}>
+        <planeGeometry args={[w - 2 * st, h - 0.12 - kick]} />
+        <meshStandardMaterial color="#8fa6a8" roughness={0.08} metalness={0.2} transparent opacity={0.45} depthWrite={false} side={THREE.DoubleSide} />
       </mesh>
-      <mesh position={[w * 0.36, 1.02, 0.11]}>
-        <boxGeometry args={[0.1, 0.16, 0.08]} />
-        <meshStandardMaterial color="#b7babf" metalness={0.7} roughness={0.35} />
+      {/* hinges */}
+      {[0.3, 1.15, 2.0].map((y) => (
+        <mesh key={y} position={[hinge + 0.005, y, 0.045]}>
+          <boxGeometry args={[0.03, 0.12, 0.03]} />
+          {satin}
+        </mesh>
+      ))}
+      {/* push bar on two brackets, latch box on the far side */}
+      <mesh position={[0.02, 1.0, 0.1]} rotation-z={Math.PI / 2} castShadow>
+        <cylinderGeometry args={[0.022, 0.022, w * 0.72, 12]} />
+        {satin}
       </mesh>
-      {/* overhead closer and its arm */}
-      <mesh position={[-w * 0.2, h + 0.12, 0.08]}>
-        <boxGeometry args={[0.38, 0.1, 0.1]} />
-        <meshStandardMaterial color="#b9bcc1" metalness={0.6} roughness={0.4} />
+      {[-w * 0.3, w * 0.28].map((x) => (
+        <mesh key={x} position={[x, 1.0, 0.065]}>
+          <boxGeometry args={[0.04, 0.05, 0.06]} />
+          {satin}
+        </mesh>
+      ))}
+      <mesh position={[w / 2 - st - 0.07, 1.0, 0.075]}>
+        <boxGeometry args={[0.1, 0.17, 0.08]} />
+        {satin}
       </mesh>
-      <mesh position={[-w * 0.02, h + 0.06, 0.14]} rotation-z={0.5}>
-        <boxGeometry args={[0.28, 0.025, 0.025]} />
-        <meshStandardMaterial color="#9ea2a8" metalness={0.6} roughness={0.4} />
+      {/* overhead closer on the transom, arm folded to the leaf */}
+      <mesh position={[hinge + 0.4, h + 0.13, 0.09]}>
+        <boxGeometry args={[0.42, 0.09, 0.09]} />
+        <meshLambertMaterial color="#c9ccd0" />
       </mesh>
-      {/* EXIT ONLY sign on the glass */}
-      <mesh position={[-w * 0.12, 1.55, 0.03]}>
-        <planeGeometry args={[0.2, 0.12]} />
+      <mesh position={[hinge + 0.72, h + 0.07, 0.12]} rotation-z={-0.35}>
+        <boxGeometry args={[0.3, 0.025, 0.025]} />
+        <meshLambertMaterial color="#b3b7bc" />
+      </mesh>
+      {/* EXIT ONLY notice at eye height */}
+      <mesh position={[0, 1.5, 0.004]}>
+        <planeGeometry args={[0.2, 0.11]} />
         <meshBasicMaterial color="#f7f7f4" />
+      </mesh>
+      {/* threshold */}
+      <mesh position={[0, 0.006, 0]}>
+        <boxGeometry args={[w, 0.012, 0.22]} />
+        <meshLambertMaterial color="#b7b9bb" />
       </mesh>
     </group>
   )

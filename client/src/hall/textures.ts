@@ -285,7 +285,7 @@ export function curtain(base = '#2f86d6') {
  * The east window wall as frosted glass: white mullions and transoms, opaque
  * pale blue-green panes with diagonal reflection glints (you can't see outside).
  */
-export function glassPanes(panes: number, h = 4.6) {
+export function glassPanes(panes: number, h = 4.6, framed = true) {
   const P = 128
   const c = document.createElement('canvas')
   c.width = panes * P
@@ -325,6 +325,8 @@ export function glassPanes(panes: number, h = 4.6) {
       g.restore()
     }
   }
+  // (the east wall has real 3D framing and doors now, so it asks for plain glass)
+  if (!framed) return tex(c)
   g.fillStyle = '#ecebe6'
   for (let i = 0; i <= panes; i++) g.fillRect(i * P - 5, 0, 10, c.height)
   g.fillRect(0, 0, c.width, 12)

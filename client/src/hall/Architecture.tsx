@@ -147,8 +147,8 @@ function Walls() {
   const back = useMemo(() => checkerWall(18, 11, [2, 3, 6, 7, 10, 11, 14, 15]), [])
   const leftUpper = useMemo(() => checkerWall(24, 7, [3, 4, 9, 10, 15, 16, 21], 9), [])
   const slantLen = Math.hypot(XB - X1, MEZZ_Z - Z0)
-  const glassR = useMemo(() => glassPanes(12), [])
-  const glassFront = useMemo(() => glassPanes(6), [])
+  const glassR = useMemo(() => glassPanes(12, 4.6, false), [])
+  const glassFront = useMemo(() => glassPanes(6, 4.6, false), [])
   const h = CEIL
   const westUpper = useMemo(() => westStrip(L1, h), [h])
   const westLower = useMemo(() => westStrip(0, L1), [])

@@ -3,7 +3,7 @@ import type { Campus, Collider } from './map'
 import type { Net } from './net'
 import type { PlayerInfo } from './Player'
 import { HackGTWelcome, InfoBoard, type EventInfo } from './HackGTWelcome'
-import { HALL_EXIT, PHOTO_EVENT, nearestSpot, nearestTable, type Spot, type Table } from './HackGTHall'
+import { HALL_EXIT, PHOTO_EVENT, nearestSpot, type Spot, type Table } from './HackGTHall'
 import { nearestShell } from './Shells'
 
 const MAP_PX = 190
@@ -211,12 +211,10 @@ export function Hud({
         return
       }
       const y = info.current.y ?? 0
-      const table = nearestTable(x, z, y)
       const spot = nearestSpot(x, z, y)
       const next: Near =
         Math.hypot(HALL_EXIT[0] - x, HALL_EXIT[1] - z) < 3 ? { kind: 'exit' }
-          : spot ? { kind: 'spot', spot } // booths win over the hack table next to them
-          : table ? { kind: 'table', table }
+          : spot ? { kind: 'spot', spot }
           : null
       // only re-render when what you're next to actually changes
       setNear((cur) => {

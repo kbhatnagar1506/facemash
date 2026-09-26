@@ -77,12 +77,9 @@ export class Net {
         break
       case 'join':
         this.players.set(msg.p.id, msg.p)
-        this.addChat(0, '', `${msg.p.name} ${this.room === 'hackgt' ? 'entered HackGT' : 'arrived on campus'}!`)
         break
       case 'leave': {
-        const p = this.players.get(msg.id)
         this.players.delete(msg.id)
-        if (p) this.addChat(0, '', `${p.name} left.`)
         break
       }
       case 'state':

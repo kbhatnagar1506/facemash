@@ -47,7 +47,7 @@ function Buildings({ campus }: { campus: Campus }) {
   const mats = useMemo(
     () => ({
       body: withCutaway(new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: ramp }), { windows: [WALL, WALL_EVENT] }),
-      line: withCutaway(new THREE.LineBasicMaterial({ color: '#2b2a33' })),
+      line: new THREE.LineBasicMaterial({ color: '#2b2a33' }), // (outlines have no normals, so no shader patch)
     }),
     [ramp],
   )
