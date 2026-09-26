@@ -137,8 +137,8 @@ export function addTerrazzo(mat: THREE.Material) {
         '#include <color_fragment>',
         `#include <color_fragment>
   {
-    vec4 ch = texture2D(uChips, vDW.xz / 1.3);
-    vec4 ch2 = texture2D(uChips, vDW.xz / 0.55 + 0.37);
+    vec4 ch = texture2D(uChips, vDW.xz / 0.7);
+    vec4 ch2 = texture2D(uChips, vDW.xz / 0.3 + 0.37);
     float lum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
     // chips read darker on the light bands and lighter on the dark bands
     vec3 c1 = mix(ch.rgb * 0.85, ch.rgb * 1.2 + 0.05, step(lum, 0.35));

@@ -2,7 +2,6 @@ import { useMemo } from 'react'
 import * as THREE from 'three'
 import { L1, Z1, westSlope, westX } from './layout'
 import { checkerWall, textCard } from './textures'
-import { addTerrazzo } from './detail'
 import { FoldingChair } from './Sponsors'
 
 // Everything on the west wall, entrance end to back, from the on-site photos.
@@ -166,23 +165,9 @@ export function WestWall() {
     () => textCard([{ text: '← BATHROOMS', font: '800 44px Arial', color: '#1d2c3a' }], { bg: '#dcecf7', w: 400, h: 140 }),
     [],
   )
-  const darkFloor = useMemo(() => {
-    // the darker charcoal terrazzo running along under the balcony (photos 4875–4877)
-    const zs = [-18, -12.87, -1.93, 3]
-    const pts = [...zs.map((z) => new THREE.Vector2(westX(z) + 0.1, z)), ...[...zs].reverse().map((z) => new THREE.Vector2(westX(z) + 5.5, z))]
-    const g = new THREE.ShapeGeometry(new THREE.Shape(pts))
-    g.rotateX(Math.PI / 2)
-    g.translate(0, 0.004, 0)
-    return g
-  }, [])
 
   return (
     <group>
-      {/* dark terrazzo zone under the balcony */}
-      <mesh geometry={darkFloor} receiveShadow>
-        <meshStandardMaterial color="#5c5e63" roughness={0.3} side={THREE.DoubleSide} onUpdate={addTerrazzo} />
-      </mesh>
-
       {/* TV in its wall niche, beside the side corridor (south wall near the corner) */}
       <group position={[westX(Z1) + 6.2, 0, Z1 - 0.05]} rotation-y={Math.PI}>
         <Box p={[0, 2.2, 0.06]} s={[1.9, 1.9, 0.12]} color="#eceae5" />

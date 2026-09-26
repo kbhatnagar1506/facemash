@@ -40,27 +40,50 @@ export function terrazzo() {
     g.closePath()
     g.fill()
   }
-  // Base: speckled light grey.
-  rect(X0, Z0, XB, HALL.d / 2, '#cfccc6')
-  // Cream fields on both sides.
-  rect(X0, Z0, -7, HALL.d / 2, '#e9e5dc')
-  rect(10, Z0, XB, HALL.d / 2, '#e9e5dc')
-  // Dark charcoal runner from the doors into the atrium (entrance photo).
-  // Dark on the left half of the doors, curving out into the atrium (door photo).
-  poly([[-4.6, 28], [0.4, 28], [2.4, 21], [8.6, 14], [8.6, -1.5], [1.2, -1.5], [1.2, 12], [-2.4, 19]], '#55575b')
-  // Blue-grey band sweeping towards the photo booth.
-  poly([[-3.4, -1.5], [6.8, -1.5], [7.8, -19], [-1.8, -19]], '#8d99a4')
-  // Cream arc by the stair foot.
-  g.fillStyle = '#e9e5dc'
-  g.beginPath()
-  g.ellipse(m(-11), n(19), 9 * PX, 6 * PX, 0, 0, Math.PI * 2)
-  g.fill()
+  // Big polished terrazzo rectangles (floor photo): rows running across the atrium,
+  // each split into slabs of different widths, so seams line up one way and stagger
+  // the other. Four tones (light grey, cream, mid grey, charcoal), never the same
+  // tone next to itself, with thin silver divider strips at every seam.
+  void poly
+  const r = rng(29)
+  const tones = ['#d8d7d3', '#e4ddcd', '#b1b1ae', '#76787c']
+  const weights = [0.34, 0.3, 0.22, 0.14]
+  const pickTone = (avoid: Set<number>) => {
+    for (let tries = 0; tries < 20; tries++) {
+      let v = r()
+      let i = 0
+      while (i < 3 && v > weights[i]) v -= weights[i++]
+      if (!avoid.has(i)) return i
+    }
+    return [0, 1, 2, 3].find((i) => !avoid.has(i))!
+  }
+  const seams: [number, number, number, number][] = []
+  let prevRow: { x0: number; x1: number; t: number }[] = []
+  for (let z = Z0; z < Z0 + HALL.d; ) {
+    const h = Math.min(4.6 + r() * 2.4, Z0 + HALL.d - z)
+    const row: { x0: number; x1: number; t: number }[] = []
+    for (let x = X0; x < XB; ) {
+      const w = Math.min(4.2 + r() * 4.2, XB - x)
+      const avoid = new Set<number>()
+      if (row.length) avoid.add(row[row.length - 1].t)
+      for (const p of prevRow) if (p.x1 > x && p.x0 < x + w) avoid.add(p.t)
+      const t = pickTone(avoid)
+      rect(x, z, x + w, z + h, tones[t])
+      row.push({ x0: x, x1: x + w, t })
+      if (x > X0) seams.push([x, z, x, z + h])
+      x += w
+    }
+    if (z > Z0) seams.push([X0, z, XB, z])
+    prevRow = row
+    z += h
+  }
   // (stone chips are added in the floor shader at real scale: see detail.ts addTerrazzo)
-  // Thin brown divider strips.
-  g.fillStyle = '#8b7a64'
-  for (const z of [18.2, -1.5]) g.fillRect(0, n(z) - 4, c.width, 8)
-  g.fillRect(m(-7) - 4, 0, 8, n(18.2))
-  g.fillRect(m(10) - 4, 0, 8, c.height)
+  for (const [x0, z0, x1, z1] of seams) {
+    g.fillStyle = '#9d9b96'
+    g.fillRect(m(x0) - 1.5, n(z0) - 1.5, m(x1) - m(x0) + 3, n(z1) - n(z0) + 3)
+    g.fillStyle = '#eceae4'
+    g.fillRect(m(x0) - 0.5, n(z0) - 0.5, m(x1) - m(x0) + 1, n(z1) - n(z0) + 1)
+  }
   return tex(c)
 }
 

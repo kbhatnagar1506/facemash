@@ -1,6 +1,7 @@
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { BALCONY, CEIL, COLUMNS, CX, CXB, SAG, SLANT, WEST_ZS, XB, ceilY, eastX, wallZ, westX, DOORS_Z, HALL, L1, MEZZ_WEST_Z, MEZZ_X0, MEZZ_Z, STAIR, X0, X1, Z0, Z1 } from './layout'
 import { Entrance } from './Entrance'
 import { addTerrazzo } from './detail'
@@ -58,12 +59,12 @@ function WestSlab({ z0, z1, top, thick = 0.5, east, eastOff }: { z0: number; z1:
 }
 
 /** Railing that follows the west wall line at an offset (e.g. the edge of an upper walkway). */
-function WestRailing({ off, y, z0 = Z0 + 0.3, z1 = Z1 - 0.3 }: { off: number; y: number; z0?: number; z1?: number }) {
+function WestRailing({ off, y, z0 = Z0 + 0.3, z1 = Z1 - 0.3, glass = false }: { off: number; y: number; z0?: number; z1?: number; glass?: boolean }) {
   const zs = westStops(z0, z1)
   return (
     <group>
       {zs.slice(1).map((z, i) => (
-        <Railing key={i} from={[westX(zs[i]) + off, zs[i]]} to={[westX(z) + off, z]} y={y} />
+        <Railing key={i} from={[westX(zs[i]) + off, zs[i]]} to={[westX(z) + off, z]} y={y} glass={glass} />
       ))}
     </group>
   )
@@ -80,7 +81,7 @@ function Floor() {
   return (
     <mesh rotation-x={-Math.PI / 2} position={[CXB, 0, 0]} receiveShadow>
       <planeGeometry args={[XB - X0, HALL.d]} />
-      <meshStandardMaterial map={map} roughness={0.32} metalness={0} onUpdate={addTerrazzo} />
+      <meshStandardMaterial map={map} roughness={0.22} metalness={0} onUpdate={addTerrazzo} />
     </mesh>
   )
 }
@@ -91,19 +92,50 @@ function Railing({ from, to, y, glass = false }: { from: [number, number]; to: [
   const ang = -Math.atan2(to[1] - from[1], to[0] - from[0])
   const mid: [number, number, number] = [(from[0] + to[0]) / 2, y, (from[1] + to[1]) / 2]
   const posts = Math.max(1, Math.round(len / 1.8))
+  if (glass) {
+    const panels = Math.max(1, Math.round(len / 1.5))
+    const pw = len / panels
+    return (
+      <group position={mid} rotation-y={ang}>
+        {/* frameless glass panels in a base channel, a hair apart, with a top sheen */}
+        {Array.from({ length: panels }, (_, i) => (
+          <group key={i} position={[-len / 2 + pw * (i + 0.5), 0, 0]}>
+            <mesh position={[0, 0.6, 0]} renderOrder={2}>
+              <boxGeometry args={[pw - 0.03, 1.02, 0.025]} />
+              <meshStandardMaterial color="#9fb8b6" roughness={0.05} metalness={0.3} transparent opacity={0.3} depthWrite={false} />
+            </mesh>
+            <mesh position={[0, 1.02, 0.014]} renderOrder={3}>
+              <planeGeometry args={[pw - 0.05, 0.14]} />
+              <meshBasicMaterial color="#ffffff" transparent opacity={0.12} depthWrite={false} side={THREE.DoubleSide} />
+            </mesh>
+            {[-1, 1].map((s) => (
+              <mesh key={s} position={[s * (pw / 2 - 0.02), 0.6, 0]}>
+                <boxGeometry args={[0.012, 1.02, 0.035]} />
+                <meshLambertMaterial color="#c9cdd1" transparent opacity={0.6} />
+              </mesh>
+            ))}
+          </group>
+        ))}
+        <mesh position={[0, 0.07, 0]}>
+          <boxGeometry args={[len, 0.14, 0.09]} />
+          <meshLambertMaterial color="#a9adb2" />
+        </mesh>
+        <mesh position={[0, 1.14, 0]}>
+          <boxGeometry args={[len + 0.1, 0.07, 0.12]} />
+          <meshLambertMaterial color={HANDRAIL} />
+        </mesh>
+      </group>
+    )
+  }
   return (
     <group position={mid} rotation-y={ang}>
       <mesh position={[0, 0.55, 0]}>
         <boxGeometry args={[len, 1.0, 0.04]} />
-        {glass ? (
-          <meshLambertMaterial color="#cfe8e2" transparent opacity={0.28} depthWrite={false} />
-        ) : (
-          <meshLambertMaterial color={BRONZE} transparent opacity={0.88} />
-        )}
+        <meshLambertMaterial color={BRONZE} transparent opacity={0.88} />
       </mesh>
       <mesh position={[0, 1.1, 0]}>
         <boxGeometry args={[len + 0.1, 0.08, 0.16]} />
-        <meshLambertMaterial color={glass ? '#b9bec4' : HANDRAIL} />
+        <meshLambertMaterial color={HANDRAIL} />
       </mesh>
       {Array.from({ length: posts + 1 }, (_, i) => (
         <mesh key={i} position={[-len / 2 + (len / posts) * i, 0.55, 0.03]}>
@@ -302,12 +334,38 @@ function Ceiling() {
     g.setAttribute('position', new THREE.Float32BufferAttribute(hi, 3))
     return g
   }, [lights])
+  // Polished terrazzo: every downlight shows up as a soft glint on the floor (floor photo).
+  const glint = useMemo(() => {
+    const c = document.createElement('canvas')
+    c.width = c.height = 64
+    const g = c.getContext('2d')!
+    const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32)
+    grd.addColorStop(0, 'rgba(255,253,245,1)')
+    grd.addColorStop(0.18, 'rgba(255,250,235,.45)')
+    grd.addColorStop(1, 'rgba(255,250,235,0)')
+    g.fillStyle = grd
+    g.fillRect(0, 0, 64, 64)
+    return new THREE.CanvasTexture(c)
+  }, [])
+  const glintGeo = useMemo(() => {
+    const parts = lights.map(([x, y, z]) => {
+      const s = y > L1 + 2 ? 0.7 : 0.45
+      const q = new THREE.PlaneGeometry(s, s)
+      q.rotateX(-Math.PI / 2)
+      q.translate(x, 0.012, z)
+      return q
+    })
+    return mergeGeometries(parts)!
+  }, [lights])
   const starMat = useRef<THREE.PointsMaterial>(null!)
   useFrame(({ clock }) => {
     if (starMat.current) starMat.current.size = 2.2 + Math.sin(clock.elapsedTime * 1.3) * 0.15 // gentle shimmer
   })
   return (
     <group>
+      <mesh geometry={glintGeo}>
+        <meshBasicMaterial map={glint} transparent opacity={0.55} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
+      </mesh>
       <points geometry={starGeo}>
         <pointsMaterial ref={starMat} map={star} size={2.2} sizeAttenuation transparent depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
       </points>
@@ -454,14 +512,14 @@ function UpperFloors() {
           ) : (
             <WestSlab z0={Z0} z1={Z1} top={y} thick={0.6} eastOff={4} />
           )}
-          <WestRailing off={4} y={y} />
+          <WestRailing off={4} y={y} glass />
           {/* right stacked balconies (following the splayed east wall at the back) */}
           <Slab x0={(X1 - 3.4)} x1={X1} z0={MEZZ_Z} z1={Z1} top={y} thick={0.6} />
           <SlantSlab top={y} thick={0.6} />
-          <Railing from={[(X1 - 3.4), MEZZ_Z]} to={[(X1 - 3.4), Z1 - 0.3]} y={y} />
-          <Railing from={[(XB - 3.4), Z0 + 0.3]} to={[(X1 - 3.4), MEZZ_Z]} y={y} />
+          <Railing from={[(X1 - 3.4), MEZZ_Z]} to={[(X1 - 3.4), Z1 - 0.3]} y={y} glass />
+          <Railing from={[(XB - 3.4), Z0 + 0.3]} to={[(X1 - 3.4), MEZZ_Z]} y={y} glass />
           <Slab x0={westX(Z1 - 1.5) + 4} x1={(X1 - 3.4)} z0={Z1 - 3} z1={Z1} top={y} thick={0.6} />
-          <Railing from={[westX(Z1 - 3) + 4, Z1 - 3]} to={[(X1 - 3.4), Z1 - 3]} y={y} />
+          <Railing from={[westX(Z1 - 3) + 4, Z1 - 3]} to={[(X1 - 3.4), Z1 - 3]} y={y} glass />
         </group>
       ))}
       <UpperStair />
@@ -470,7 +528,7 @@ function UpperFloors() {
       <Railing from={[(XB - 3.4), Z0 + 0.3]} to={[(X1 - 3.4), MEZZ_Z - 0.3]} y={L1} />
       {/* bridge across the back at the 3rd floor (seen from the entrance) */}
       <Slab x0={westX(Z0 + 1.6) + 4} x1={(XB - 3.4)} z0={Z0} z1={Z0 + 3.2} top={levels[0]} thick={0.6} />
-      <Railing from={[westX(Z0 + 3.2) + 4, Z0 + 3.2]} to={[(XB - 3.4), Z0 + 3.2]} y={levels[0]} />
+      <Railing from={[westX(Z0 + 3.2) + 4, Z0 + 3.2]} to={[(XB - 3.4), Z0 + 3.2]} y={levels[0]} glass />
       {/* projecting study box on the left upper level (photo 6) */}
       <mesh position={[westX(-10) + 4.2, 11.2, -10]} castShadow>
         <boxGeometry args={[7, 2.6, 6]} />
