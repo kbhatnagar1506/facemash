@@ -11,10 +11,6 @@ export { PHOTO_EVENT } from './hall/Decor'
 export function HackGTHall({ active }: { active: boolean }) {
   return (
     <group visible={active}>
-      {/* warm indoor light from the ceiling downlights */}
-      <pointLight position={[0, 17, -4]} intensity={active ? 120 : 0} distance={60} decay={1.6} color="#fff1d6" />
-      <pointLight position={[-14, 4.2, -6]} intensity={active ? 25 : 0} distance={18} decay={1.6} color="#fff4e0" />
-      <pointLight position={[0, 4.2, 24]} intensity={active ? 25 : 0} distance={16} decay={1.6} color="#fff4e0" />
       <Architecture />
       {active && <Atmosphere />}
       <Decor active={active} />

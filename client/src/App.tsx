@@ -193,7 +193,7 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
         <fog attach="fog" args={['#bfe6ff', 180, 700]} />
         {/* campus: sky + grass bounce; inside Klaus: warm neutral bounce off the terrazzo */}
         <hemisphereLight
-          args={room === 'hackgt' ? ['#fff4e2', '#d8d0c2', 1.15] : ['#e8f2ff', '#7faf65', 1.1]}
+          args={room === 'hackgt' ? ['#fff6ea', '#cfc8ba', 1.6] : ['#e8f2ff', '#7faf65', 1.1]}
           key={room}
         />
         <group visible={room === 'campus'}>
@@ -217,7 +217,7 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
         <Remotes net={net} scale={room === 'hackgt' ? PERSON_SCALE : 1} />
         {/* glow on lights, screens and signs; soft vignette to frame the shot */}
         <EffectComposer multisampling={4}>
-          <Bloom mipmapBlur intensity={room === 'hackgt' ? 0.7 : 0.35} luminanceThreshold={0.88} luminanceSmoothing={0.2} />
+          <Bloom mipmapBlur intensity={room === 'hackgt' ? 0.45 : 0.25} luminanceThreshold={0.96} luminanceSmoothing={0.05} />
           <Vignette offset={0.3} darkness={0.55} />
         </EffectComposer>
       </Canvas>
