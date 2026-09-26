@@ -90,5 +90,12 @@ docker run -d --restart=always --name game --network gt $GUARDMOUNT \
   -v /mnt/stateful_partition/gt/geo.json:/app/geo.json:ro \
   -v /mnt/stateful_partition/gt/data:/data \
   --ulimit nofile=65536:65536 "$IMAGE" -samples /data/geo_samples.jsonl -session-key /data/session.key
+# Caddy takes traffic once the game is warm (/api/readyz: database connected, keys and upstream
+# connections open), waiting at most 20 s so a slow dependency never keeps the site down.
+GAME_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' game 2>/dev/null)
+for _ in $(seq 1 20); do
+  [ -n "$GAME_IP" ] && curl -sf -m 2 -o /dev/null "http://$GAME_IP:8080/api/readyz" && break
+  sleep 1
+done
 docker run -d --restart=always --name caddy --network gt $GUARDMOUNT -p 80:80 -p 443:443 \
   -v caddy_data:/data caddy:2 caddy reverse-proxy --from "$HOST" --to game:8080

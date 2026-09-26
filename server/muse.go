@@ -309,17 +309,11 @@ type schedDay struct {
 }
 
 func schedule(eventFile, when string, now time.Time) (any, error) {
-	b, err := os.ReadFile(eventFile)
+	ev, err := eventSchedule(eventFile) // parsed once, re-read when the file changes (warm.go)
 	if err != nil {
 		return nil, errors.New("schedule unavailable")
 	}
-	var ev struct {
-		Days []schedDay `json:"days"`
-	}
-	if json.Unmarshal(b, &ev) != nil {
-		return nil, errors.New("schedule unavailable")
-	}
-	loc, _ := time.LoadLocation(eventTZ)
+	loc := talkLoc()
 	now = now.In(loc)
 	at := func(date, hm string) (time.Time, bool) {
 		t, err := time.ParseInLocation("2006-01-02 15:04", date+" "+hm, loc)

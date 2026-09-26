@@ -516,6 +516,7 @@ func main() {
 			clientIDs = append(clientIDs, id)
 		}
 	}
+	jwks := warmGoogleKeys() // the sign-in keys mountAuth uses, fetched by startWarm (warm.go)
 	acct = openAccounts(*keyFile)
 	if acct == nil {
 		clientIDs = nil // no database: sign-in off, everyone plays as a guest
@@ -633,6 +634,8 @@ func main() {
 		files.ServeHTTP(w, r)
 	})
 
+	// everything loaded and connected before the first request (warm.go): /api/readyz says when
+	startWarm(mux, hub, acct, jwks, *eventFile)
 	log.Printf("GT campus server on %s (static: %s)", *addr, *static)
 	log.Fatal(http.ListenAndServe(*addr, mux))
 }
