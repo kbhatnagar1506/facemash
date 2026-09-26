@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Conversation } from '@elevenlabs/client'
 import { BEAN_STEP } from './onboarding'
 
-// No Muse? Talk for a minute instead. A short call with our ElevenLabs voice guide, who
+// No Muse? Talk for two minutes instead. A short call with our ElevenLabs voice guide, who
 // asks five questions; what you say becomes your memory here, the same as a Muse upload.
 //  - The key stays on our server: it hands this page a signed URL for one call.
 //  - The SDK is loaded only once this card opens (it's most of the weight).
@@ -224,7 +224,7 @@ export function VoiceCard({ step, onBack }: { step: boolean; onBack: () => void 
   return (
     <section className="muse-card vc">
       {step && <p className="muse-step">Step 2 of 3</p>}
-      <h1>{live || phase === 'saving' ? 'Talking with the guide' : 'Talk for a minute'}</h1>
+      <h1>{live || phase === 'saving' ? 'Talking with the guide' : 'Talk for two minutes'}</h1>
       {!live && phase !== 'saving' && (
         <p className="muse-sub">Our voice guide asks you five quick questions. What you say becomes your memory here, just like a Muse upload.</p>
       )}

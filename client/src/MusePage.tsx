@@ -275,6 +275,8 @@ async function post<T>(path: string): Promise<T> {
 }
 
 const onboarding = () => new URLSearchParams(location.search).has('onboard')
+// the latency test is a tool for us, not for attendees: /muse?debug
+const DEBUG = new URLSearchParams(location.search).has('debug')
 
 /** Onboarding: which step this is, and the way on to the next one. */
 function Step() {
@@ -302,7 +304,7 @@ function VoiceLink({ onVoice }: { onVoice?: () => void }) {
         <rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor" />
         <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       </svg>
-      No Muse? Talk for a minute instead
+      No Muse? Talk for two minutes instead
     </button>
   )
 }
@@ -417,7 +419,7 @@ function Pairing({ onVoice }: { onVoice?: () => void }) {
           </button>
         </div>
         <Memory />
-        <Latency />
+        {DEBUG && <Latency />}
       </section>
     )
 
@@ -434,7 +436,7 @@ function Pairing({ onVoice }: { onVoice?: () => void }) {
         <p className="muse-sub">Now paste it into Muse and send. This turns to connected as soon as Muse checks in.</p>
         <p className="muse-waiting">Waiting for your Muse…</p>
         <Onward connected={false} />
-        <Latency />
+        {DEBUG && <Latency />}
       </section>
     )
 
@@ -489,7 +491,13 @@ export function MusePage() {
             <p className="muse-sub">Sign-in isn't switched on yet. Check back soon.</p>
           )}
         </section>
-        {me.googleClientId && <SignInSheet clientId={me.googleClientId} next={onboarding() ? MUSE_STEP : '/muse'} onClose={() => (location.href = '/')} />}
+        {me.googleClientId && <SignInSheet
+            clientId={me.googleClientId}
+            next={onboarding() ? MUSE_STEP : '/muse'}
+            onClose={() => (location.href = '/')}
+            title="Connect your Muse"
+            sub="Sign in with Google first, so your Muse links to your account."
+          />}
       </Shell>
     )
   return <SignedIn me={me} />
