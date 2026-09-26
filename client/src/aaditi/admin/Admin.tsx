@@ -1,35 +1,321 @@
-import { useLayoutEffect, useRef, useState, type MouseEvent, type PointerEvent as RPointerEvent, type ReactNode } from 'react'
-import { hms, spinner, stamp, useNow } from '../ui/time'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent as RPointerEvent, type ReactNode } from 'react'
+import { SCORE_KEYS, httpApi, ms, type Line, type Overview, type Person, type TalkSummary } from '../api'
+import { ago, hms, spinner, stamp, useNow } from '../ui/time'
 import { Avatar } from './Avatar'
 import { ChatFocus } from './ChatFocus'
-import { CHATS, RADIUS_M, RING, USER, USERS, type Chat } from './data'
-import { LOAD, chatPhase, type Phase } from './timing'
+import { SCORE_LABEL, duration, fmtInt, mmss, phaseOf, pillText, yn } from './format'
+import { AdminStore, matchesFilter, useAdmin, type Filter } from './live'
 import './admin.css'
 
-// Architecture view of the platform: hub in the middle, every lifetime user around it,
-// and for active users, the live agent-to-agent chat between them and whoever their muse is talking to.
+// Architecture view of the platform: hub in the middle (the event's numbers), the people from the
+// most recent agent talks around it, and each talk as a chat panel between its two people. A list
+// view covers everything else. Data comes from /api/admin/*; ?mock=1 runs on a local mock.
 
-const HUB = { w: 440, h: 250 }
+const GRAPH_CAP = 30
+
+const params = new URLSearchParams(location.search)
+const MOCK = params.has('mock') || params.has('demo')
+
+export function Admin() {
+  const [store, setStore] = useState<AdminStore | null>(null)
+  useEffect(() => {
+    let s: AdminStore | null = null
+    let dead = false
+    const boot = MOCK ? import('../mock').then((m) => new AdminStore(m.createMockApi(params), true)) : Promise.resolve(new AdminStore(httpApi))
+    boot.then((st) => {
+      if (dead) return
+      s = st
+      setStore(st)
+      void st.start()
+    })
+    return () => {
+      dead = true
+      s?.stop()
+    }
+  }, [])
+  if (!store) return <Gate kind="loading" />
+  return <Shell store={store} />
+}
+
+function Shell({ store }: { store: AdminStore }) {
+  useAdmin(store)
+  if (store.auth !== 'ok') return <Gate kind={store.auth} detail={store.authError} />
+  return <Console store={store} />
+}
+
+function Gate({ kind, detail }: { kind: 'loading' | 'signin' | 'forbidden' | 'error'; detail?: string }) {
+  return (
+    <div className="adm acc-wrap">
+      <div className="acc">
+        <div className="t">Muse · admin</div>
+        {kind === 'loading' && <p className="dim">{spinner(Date.now())} checking your access…</p>}
+        {kind === 'signin' && (
+          <>
+            <h1>Sign in to continue</h1>
+            <p>The admin portal is for HackGT organizers. Sign in with your Google account first.</p>
+            <a className="btn" href="/?signin">
+              Sign in →
+            </a>
+          </>
+        )}
+        {kind === 'forbidden' && (
+          <>
+            <h1>Organizers only</h1>
+            <p>You're signed in, but this account isn't on the organizer list. Ask an organizer to add your email.</p>
+            <a className="btn ghost" href="/">
+              ← back to facemash
+            </a>
+          </>
+        )}
+        {kind === 'error' && (
+          <>
+            <h1>Admin API unavailable</h1>
+            <p className="dim">{detail || 'The server did not answer.'}</p>
+            <button className="btn" onClick={() => location.reload()}>
+              Try again
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+type ViewMode = 'graph' | 'list'
+const FILTERS: { f: Filter; label: string }[] = [
+  { f: 'all', label: 'all' },
+  { f: 'live', label: 'live' },
+  { f: 'done', label: 'done' },
+  { f: 'matches', label: 'matches' },
+]
+const readPref = (): ViewMode | null => {
+  try {
+    const v = localStorage.getItem('admin.view')
+    return v === 'graph' || v === 'list' ? v : null
+  } catch {
+    return null
+  }
+}
+
+function Console({ store }: { store: AdminStore }) {
+  const version = useAdmin(store)
+  const now = useNow(500)
+  const [view, setView] = useState<ViewMode>(() => (params.get('view') as ViewMode) || readPref() || (innerWidth < 700 ? 'list' : 'graph'))
+  const [filter, setFilter] = useState<Filter>('all')
+  const [q, setQ] = useState('')
+  const [open, setOpen] = useState<{ id: string; origin: { x: number; y: number } } | null>(null)
+
+  const pickView = (v: ViewMode) => {
+    setView(v)
+    try {
+      localStorage.setItem('admin.view', v)
+    } catch {
+      /* private mode */
+    }
+  }
+
+  useEffect(() => {
+    if (!store.pages[filter].started) void store.loadMore(filter)
+  }, [filter, store])
+
+  // every talk we know about that fits the filter and search, newest first
+  const talks = useMemo(() => {
+    const needle = q.trim().toLowerCase()
+    const out: TalkSummary[] = []
+    for (const t of store.talks.values()) {
+      if (!matchesFilter(t, filter)) continue
+      if (needle && !`${t.a.first_name} ${t.b.first_name} ${t.id} #${t.a.id} #${t.b.id} ${t.reason ?? ''}`.toLowerCase().includes(needle)) continue
+      out.push(t)
+    }
+    return out.sort((x, y) => ms(y.started_at) - ms(x.started_at))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [version, filter, q, store])
+
+  const openTalk = useCallback((id: string, x: number, y: number) => setOpen({ id, origin: { x, y } }), [])
+  const ov = store.overview
+  const noTalksAtAll = store.pages.all.started && store.talks.size === 0
+
+  // demo deep-link for screenshots: ?open=first opens the newest talk
+  const autoOpened = useRef(false)
+  useEffect(() => {
+    const want = params.get('open')
+    if (!want || autoOpened.current || !talks.length) return
+    const t = want === 'first' ? talks[0] : want === 'match' ? talks.find((x) => x.match) : talks.find((x) => x.id === want)
+    if (t) {
+      autoOpened.current = true
+      setOpen({ id: t.id, origin: { x: innerWidth / 2, y: innerHeight / 2 } })
+    }
+  }, [talks])
+
+  return (
+    <div className="adm">
+      {view === 'graph' ? (
+        <Graph store={store} talks={talks} ov={ov} now={now} empty={noTalksAtAll} onOpen={openTalk} version={version} filter={filter} q={q} />
+      ) : (
+        <List store={store} talks={talks} ov={ov} now={now} filter={filter} q={q} empty={noTalksAtAll} onOpen={openTalk} />
+      )}
+
+      <div className="overlay toolbar" role="toolbar" aria-label="Admin view options">
+        <span className="tb-title">Muse · admin</span>
+        <div className="seg" role="group" aria-label="View">
+          {(['graph', 'list'] as const).map((v) => (
+            <button key={v} className={view === v ? 'on' : ''} aria-pressed={view === v} onClick={() => pickView(v)}>
+              {v}
+            </button>
+          ))}
+        </div>
+        <div className="seg" role="group" aria-label="Filter talks">
+          {FILTERS.map(({ f, label }) => (
+            <button key={f} className={filter === f ? 'on' : ''} aria-pressed={filter === f} onClick={() => setFilter(f)}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <input className="search" type="search" placeholder="search name, #id, talk id" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search talks" />
+        <span className={`conn ${store.mode}`} title={store.mode === 'poll' ? 'The event stream is unavailable; polling every 3 s' : undefined}>
+          {store.mock ? '◆ mock · ' : ''}{store.mode === 'stream' ? '● live' : store.mode === 'poll' ? '↻ polling 3 s' : `${spinner(now)} connecting`}
+        </span>
+      </div>
+
+      {open && store.talks.has(open.id) && <ChatFocus store={store} id={open.id} now={now} origin={open.origin} onClose={() => setOpen(null)} />}
+      {MOCK && <div className="mock-banner">MOCK DATA · not real attendees · remove ?mock=1 for the live event</div>}
+    </div>
+  )
+}
+
+// ======================================================================== hub numbers
+
+function HubStats({ ov }: { ov: Overview | null }) {
+  const hours = ov?.activity_hours_total
+  return (
+    <div className="hub-stats">
+      <Stat n={1} v={fmtInt(ov?.users_total)} k="lifetime users to date" />
+      <Stat n={2} v={hours == null ? '—' : hours.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} unit={hours == null ? undefined : 'h'} k="hours of activity to date" />
+      <Stat n={3} v={fmtInt(ov?.active_now)} k="active users now" />
+    </div>
+  )
+}
+
+function HubFoot({ ov }: { ov: Overview | null }) {
+  if (!ov) return <div className="hub-foot">loading numbers…</div>
+  return (
+    <div className="hub-foot">
+      <span>
+        <i className={`dot ${ov.talks_live ? 'live' : ''}`} /> {ov.talks_live} agent talks live
+      </span>
+      <span>
+        {fmtInt(ov.talks_total)} talks · {fmtInt(ov.talks_today)} today
+      </span>
+      <span>
+        jev matched {fmtInt(ov.matches_total)} · both approved {fmtInt(ov.approvals_both)} · {fmtInt(ov.reveals_total)} reveals
+      </span>
+      <span>
+        worth it ✓{fmtInt(ov.worth_it_yes)} ✗{fmtInt(ov.worth_it_no)} · {fmtInt(ov.withheld_lines_total)} lines withheld
+      </span>
+      <span>
+        {fmtInt(ov.users_signed_in_today)} signed in today · {fmtInt(ov.in_klaus_now)} in Klaus · {fmtInt(ov.muse_connected)} Muse agents · {fmtInt(ov.voice_onboarded)} voice
+      </span>
+    </div>
+  )
+}
+
+function Stat({ n, v, k, unit }: { n: number; v: string; k: string; unit?: string }) {
+  return (
+    <div className="stat">
+      <span className="stat-n">{n}</span>
+      <div className="stat-v">
+        {v}
+        {unit && <small> {unit}</small>}
+      </div>
+      <div className="stat-k">{k}</div>
+    </div>
+  )
+}
+
+
+// ======================================================================== graph
+
+const HUB = { w: 460, h: 310 }
 const UBOX = { w: 230, h: 138 }
 const CBOX = { w: 390, h: 400 }
-const RING_R = { x: 930, y: 660 }
-const CHAT_R = { x: 1400, y: 1010 }
 
 type Pt = { x: number; y: number }
 type Box = Pt & { w: number; h: number }
+type PNode = { key: string; p: Person; talks: number; matches: number; live: boolean; last: number; box: Box }
+type Layout = { people: PNode[]; chats: { t: TalkSummary; box: Box; a: string; b: string }[]; hub: Box; empty: Box | null }
 
-const angle = (i: number) => (i / RING.length) * Math.PI * 2
-const onEllipse = (a: number, r: Pt, k = 1): Pt => ({ x: Math.sin(a) * r.x * k, y: -Math.cos(a) * r.y * k })
+const pkey = (p: Person) => `p${p.id}`
+const TAU = Math.PI * 2
+const onEllipse = (a: number, rx: number, ry: number): Pt => ({ x: Math.sin(a) * rx, y: -Math.cos(a) * ry })
 
-const userBox: Record<string, Box> = Object.fromEntries(RING.map((id, i) => [id, { ...onEllipse(angle(i), RING_R), ...UBOX }]))
-const chatBox: Record<string, Box> = Object.fromEntries(
-  CHATS.map((c) => {
-    const ia = RING.indexOf(c.a)
-    const ib = RING.indexOf(c.b)
-    return [c.id, { ...onEllipse((angle(ia) + angle(ib)) / 2, CHAT_R, c.out), ...CBOX }]
-  }),
-)
-const hubBox: Box = { x: 0, y: 0, ...HUB }
+function layoutGraph(talks: TalkSummary[], empty: boolean): Layout {
+  const hub: Box = { x: 0, y: 0, ...HUB }
+  // ring order: walk talks newest first, a then b, so partners usually sit side by side
+  const order: string[] = []
+  const nodes = new Map<string, Omit<PNode, 'box'>>()
+  for (const t of talks) {
+    for (const p of [t.a, t.b]) {
+      const k = pkey(p)
+      let n = nodes.get(k)
+      if (!n) {
+        n = { key: k, p, talks: 0, matches: 0, live: false, last: 0 }
+        nodes.set(k, n)
+        order.push(k)
+      }
+      n.talks++
+      if (t.match) n.matches++
+      if (t.status === 'live') n.live = true
+      n.last = Math.max(n.last, ms(t.started_at))
+    }
+  }
+  const n = order.length
+  // grow the ellipses with the number of boxes (Ramanujan-ish perimeter for a 1.41:1 ellipse)
+  const perim = 2 * Math.PI * 1.222
+  const ry = Math.max(660, (n * 262) / perim)
+  const rx = ry * 1.41
+  const angleOf = new Map<string, number>()
+  const people: PNode[] = order.map((k, i) => {
+    const a = (i / Math.max(n, 1)) * TAU
+    angleOf.set(k, a)
+    return { ...nodes.get(k)!, box: { ...onEllipse(a, rx, ry), ...UBOX } }
+  })
+
+  const m = talks.length
+  const cry = Math.max(ry + 350, (m * 450) / perim)
+  const crx = Math.max(rx + 470, cry * 1.39)
+  // each talk sits between its two people, then neighbours are nudged apart so panels don't overlap
+  const mids = talks.map((t, i) => {
+    const a1 = angleOf.get(pkey(t.a))!
+    const a2 = angleOf.get(pkey(t.b))!
+    const x = Math.sin(a1) + Math.sin(a2)
+    const y = Math.cos(a1) + Math.cos(a2)
+    const a = Math.hypot(x, y) < 1e-6 ? a1 + Math.PI / 2 : Math.atan2(x, y)
+    return { i, a: (a + TAU) % TAU }
+  })
+  mids.sort((p, q) => p.a - q.a)
+  const gap = Math.min(TAU / Math.max(m, 1), (CBOX.w + 60) / crx)
+  for (let pass = 0; pass < 40 && m > 1; pass++) {
+    let moved = false
+    for (let j = 0; j < m; j++) {
+      const p = mids[j]
+      const q = mids[(j + 1) % m]
+      let d = q.a - p.a
+      if (j === m - 1) d += TAU
+      if (d < gap - 1e-4) {
+        const push = (gap - d) / 2
+        p.a -= push
+        q.a += push
+        moved = true
+      }
+    }
+    if (!moved) break
+  }
+  const chats = mids.map(({ i, a }) => {
+    const t = talks[i]
+    return { t, a: pkey(t.a), b: pkey(t.b), box: { ...onEllipse(a, crx, cry), ...CBOX } }
+  })
+  return { people, chats, hub, empty: empty || !talks.length ? { x: 0, y: HUB.h / 2 + 110, w: 560, h: 120 } : null }
+}
 
 // where the line from a box's centre towards `to` leaves the box, so arrowheads sit on the border
 function exit(b: Box, to: Pt, pad = 6): Pt {
@@ -41,30 +327,57 @@ function exit(b: Box, to: Pt, pad = 6): Pt {
 
 type Sel = { kind: 'user' | 'chat'; id: string } | null
 type View = { x: number; y: number; k: number }
-const clampK = (k: number) => Math.min(2.5, Math.max(0.12, k))
+const clampK = (k: number) => Math.min(2.5, Math.max(0.04, k))
 
-export function Admin() {
-  const now = useNow(500)
+type GraphProps = { store: AdminStore; talks: TalkSummary[]; ov: Overview | null; now: number; empty: boolean; onOpen: (id: string, x: number, y: number) => void; version: number; filter: Filter; q: string }
+
+function Graph({ store, talks: all, ov, now, empty, onOpen, version, filter, q }: GraphProps) {
   const [sel, setSel] = useState<Sel>(null)
-  const [view, setView] = useState<View>({ x: 0, y: 0, k: 0.3 })
-  const [open, setOpen] = useState<{ id: string; origin: { x: number; y: number } } | null>(null)
-  const openRef = useRef(open)
-  openRef.current = open
   const port = useRef<HTMLDivElement>(null)
+  const world = useRef<HTMLDivElement>(null)
   const drag = useRef<{ x: number; y: number; vx: number; vy: number; moved: boolean } | null>(null)
   const touched = useRef(false)
   const dragged = useRef(false)
 
+  // the graph shows the live talks and then the most recent ones, capped
+  const shown = useMemo(() => {
+    const live = all.filter((t) => t.status === 'live')
+    const rest = all.filter((t) => t.status !== 'live')
+    return [...live, ...rest].slice(0, GRAPH_CAP)
+  }, [all])
+  const shape = shown.map((t) => `${t.id}:${t.a.id}:${t.b.id}`).join('|')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const L = useMemo(() => layoutGraph(shown, empty), [shape, empty])
+  const talkById = useMemo(() => new Map(shown.map((t) => [t.id, t])), [shown])
+  const Lref = useRef(L)
+  Lref.current = L
+
+  // transcripts for the panels on screen, a few requests at a time
+  useEffect(() => {
+    const ids = new Set(shown.map((t) => t.id))
+    store.keepQueued(ids)
+    for (const t of shown) if (store.needsDetail(t.id)) void store.ensureDetail(t.id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shape, version, store])
+
   // Camera: `cur` is what's on screen, `goal` is where it's heading. Every frame eases cur toward
   // goal; zoom eases in log space so each step feels the same, and while zooming at the cursor the
-  // world point under it (`anchor`) stays pinned.
-  const cur = useRef<View>(view)
-  const goal = useRef<View>(view)
+  // world point under it (`anchor`) stays pinned. Frames write the transform straight to the DOM so
+  // panning never re-renders the panels.
+  const cur = useRef<View>({ x: 0, y: 0, k: 0.3 })
+  const goal = useRef<View>(cur.current)
   const anchor = useRef<{ px: number; py: number; wx: number; wy: number } | null>(null)
   const raf = useRef(0)
   const show = (v: View) => {
     cur.current = v
-    setView(v)
+    if (world.current) world.current.style.transform = `translate(${v.x}px, ${v.y}px) scale(${v.k})`
+    if (port.current) {
+      port.current.style.backgroundPosition = `${v.x}px ${v.y}px`
+      // zoomed far out, the dot grid doubles its spacing instead of turning into grey noise
+      let g = 28 * v.k
+      while (g < 10) g *= 2
+      port.current.style.backgroundSize = `${g}px ${g}px`
+    }
   }
   const snap = (v: View) => {
     cancelAnimationFrame(raf.current)
@@ -99,39 +412,20 @@ export function Admin() {
     run()
   }
 
-  const phases = Object.fromEntries(CHATS.map((c) => [c.id, chatPhase(c, now)]))
-  const busy = new Set(CHATS.filter((c) => phases[c.id].phase !== 'matched').flatMap((c) => [c.a, c.b]))
-
-  // stats for the hub
-  const lifetime = USERS.length
-  const active = USERS.filter((u) => u.active).length
-  const liveChats = CHATS.filter((c) => phases[c.id].phase === 'live').length
-  const scored = CHATS.filter((c) => phases[c.id].phase === 'matched').length
-  const withheld = CHATS.reduce((n, c) => n + phases[c.id].visible.filter((m) => !m.src).length, 0)
-  const chatSecs = CHATS.reduce((s, c) => s + Math.min(Math.max(phases[c.id].elapsed, 0), c.msgs.at(-1)!.t) * 2, 0)
-  const hours = USERS.reduce((s, u) => s + u.hours, 0) + (active * (now - LOAD)) / 3_600_000 + chatSecs / 3600
-
-  // what to highlight for the current selection
-  const related = new Set<string>()
-  if (sel?.kind === 'user') {
-    related.add(sel.id).add('hub')
-    for (const c of CHATS) if (c.a === sel.id || c.b === sel.id) related.add(c.id).add(c.a).add(c.b)
-  } else if (sel?.kind === 'chat') {
-    const c = CHATS.find((x) => x.id === sel.id)!
-    related.add(c.id).add(c.a).add(c.b)
-  }
-  const dim = (id: string) => (sel && !related.has(id) ? ' faded' : '')
-
   const fit = (instant = false) => {
     const el = port.current
     if (!el) return
-    const all = [hubBox, ...Object.values(userBox), ...Object.values(chatBox)]
+    const l = Lref.current
+    const all = [l.hub, ...l.people.map((p) => p.box), ...l.chats.map((c) => c.box), ...(l.empty ? [l.empty] : [])]
     const minX = Math.min(...all.map((b) => b.x - b.w / 2)) - 40
     const maxX = Math.max(...all.map((b) => b.x + b.w / 2)) + 40
     const minY = Math.min(...all.map((b) => b.y - b.h / 2)) - 40
     const maxY = Math.max(...all.map((b) => b.y + b.h / 2)) + 40
-    const k = Math.min(el.clientWidth / (maxX - minX), el.clientHeight / (maxY - minY))
-    const v = { k, x: el.clientWidth / 2 - ((minX + maxX) / 2) * k, y: el.clientHeight / 2 - ((minY + maxY) / 2) * k }
+    // leave room for the toolbar at the top
+    const top = el.clientWidth < 700 ? 110 : 70
+    const h = el.clientHeight - top
+    const k = Math.min(1, el.clientWidth / (maxX - minX), h / (maxY - minY))
+    const v = { k, x: el.clientWidth / 2 - ((minX + maxX) / 2) * k, y: top + h / 2 - ((minY + maxY) / 2) * k }
     if (instant) snap(v)
     else glide(v)
   }
@@ -172,7 +466,7 @@ export function Admin() {
       zoomAt(Math.exp(-Math.max(-120, Math.min(120, dy)) * 0.0022), e.clientX - r.left, e.clientY - r.top)
     }
     el.addEventListener('wheel', onWheel, { passive: false })
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !openRef.current && setSel(null)
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !document.querySelector('.focus-scrim') && setSel(null)
     window.addEventListener('keydown', onKey)
     return () => {
       ro.disconnect()
@@ -180,49 +474,94 @@ export function Admin() {
       window.removeEventListener('keydown', onKey)
       cancelAnimationFrame(raf.current)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  // a new set of talks: refit unless the admin has moved the camera
+  useLayoutEffect(() => {
+    if (!touched.current) fit(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [L])
+
+  // pinch to zoom on touch screens
+  const pointers = useRef(new Map<number, Pt>())
+  const pinch = useRef<{ d: number } | null>(null)
 
   const down = (e: RPointerEvent) => {
-    if ((e.target as HTMLElement).closest('.chat-log, button, .overlay')) return
+    if ((e.target as HTMLElement).closest('.chat-log, button, .overlay, input')) return
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (pointers.current.size === 2) {
+      const [p, q] = [...pointers.current.values()]
+      pinch.current = { d: Math.hypot(p.x - q.x, p.y - q.y) }
+      drag.current = null
+      return
+    }
     drag.current = { x: e.clientX, y: e.clientY, vx: cur.current.x, vy: cur.current.y, moved: false }
   }
   const move = (e: RPointerEvent) => {
-    const d = drag.current
-    if (!d) return
-    const dx = e.clientX - d.x
-    const dy = e.clientY - d.y
-    if (!d.moved && Math.hypot(dx, dy) < 4) return
-    if (!d.moved) port.current?.setPointerCapture(e.pointerId)
-    d.moved = true
+    if (pointers.current.has(e.pointerId)) pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (pinch.current && pointers.current.size === 2) {
+      const [p, q] = [...pointers.current.values()]
+      const d = Math.hypot(p.x - q.x, p.y - q.y)
+      const r = port.current!.getBoundingClientRect()
+      touched.current = true
+      zoomAt(d / pinch.current.d, (p.x + q.x) / 2 - r.left, (p.y + q.y) / 2 - r.top)
+      pinch.current.d = d
+      dragged.current = true
+      return
+    }
+    const dr = drag.current
+    if (!dr) return
+    const dx = e.clientX - dr.x
+    const dy = e.clientY - dr.y
+    if (!dr.moved && Math.hypot(dx, dy) < 4) return
+    if (!dr.moved) port.current?.setPointerCapture(e.pointerId)
+    dr.moved = true
     touched.current = true
-    snap({ k: cur.current.k, x: d.vx + dx, y: d.vy + dy })
+    snap({ k: cur.current.k, x: dr.vx + dx, y: dr.vy + dy })
   }
   const up = (e: RPointerEvent) => {
+    pointers.current.delete(e.pointerId)
+    if (pointers.current.size < 2) pinch.current = null
     const d = drag.current
     drag.current = null
     dragged.current = !!d?.moved
     if (d && !d.moved && e.target === e.currentTarget.firstChild) setSel(null)
   }
-  // a click that ended a drag shouldn't select
-  const openChat = (id: string, x: number, y: number) => {
-    if (dragged.current) return
-    setSel({ kind: 'chat', id })
-    setOpen({ id, origin: { x, y } })
-  }
+  const openChat = useCallback(
+    (id: string, x: number, y: number) => {
+      if (dragged.current) return
+      setSel({ kind: 'chat', id })
+      onOpen(id, x, y)
+    },
+    [onOpen],
+  )
+  const focusChat = useCallback((id: string) => {
+    const c = Lref.current.chats.find((x) => x.t.id === id)
+    if (c) focus(c.box)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const pick = (s: Sel) => () => !dragged.current && setSel((cur) => (cur?.kind === s?.kind && cur?.id === s?.id ? null : s))
 
+  // what to highlight for the current selection
+  const related = new Set<string>()
+  if (sel?.kind === 'user') {
+    related.add(sel.id).add('hub')
+    for (const c of L.chats) if (c.a === sel.id || c.b === sel.id) related.add(c.t.id).add(c.a).add(c.b)
+  } else if (sel?.kind === 'chat') {
+    const c = L.chats.find((x) => x.t.id === sel.id)
+    if (c) related.add(c.t.id).add(c.a).add(c.b)
+  }
+  const dim = (id: string) => (sel && !related.has(id) ? ' faded' : '')
+  const pbox = new Map(L.people.map((p) => [p.key, p.box]))
+  // the real total when we know it (the list pages in the rest)
+  const total = Math.max(all.length, !q && filter === 'all' && ov ? ov.talks_total : 0)
+  const hidden = total - shown.length
+
   return (
-    <div className="adm">
-      <div
-        className="port"
-        ref={port}
-        onPointerDown={down}
-        onPointerMove={move}
-        onPointerUp={up}
-        style={{ backgroundPosition: `${view.x}px ${view.y}px`, backgroundSize: `${28 * view.k}px ${28 * view.k}px` }}
-      >
+    <>
+      <div className="port" ref={port} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
         <div className="grid-hit" />
-        <div className="world" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}>
+        <div className="world" ref={world}>
           <svg className="edges" width="1" height="1" aria-hidden>
             <defs>
               {['w', 'g'].map((c) => (
@@ -232,26 +571,27 @@ export function Admin() {
               ))}
             </defs>
 
-            {/* hub to every lifetime user */}
-            {USERS.map((u) => {
-              const b = userBox[u.id]
-              const p1 = exit(hubBox, b, 2)
-              const p2 = exit(b, hubBox, 2)
-              return <line key={u.id} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} className={`e-hub ${u.active ? 'on' : 'off'}${dim(u.id)}`} />
+            {/* hub to every person on screen */}
+            {L.people.map((u) => {
+              const p1 = exit(L.hub, u.box, 2)
+              const p2 = exit(u.box, L.hub, 2)
+              return <line key={u.key} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} className={`e-hub ${u.live ? 'on' : 'off'}${dim(u.key)}`} />
             })}
 
-            {/* active user -> chat -> the account on the other end */}
-            {CHATS.map((c) => {
-              const cb = chatBox[c.id]
-              const ph = phases[c.id].phase
-              const cls = `e-chat ${ph === 'matched' ? 'done' : 'live'}${sel ? (related.has(c.id) ? '' : ' faded') : ''}`
-              const marker = `url(#arrow-${ph === 'matched' ? 'g' : 'w'})`
-              const a1 = exit(userBox[c.a], cb)
-              const a2 = exit(cb, userBox[c.a])
-              const b1 = exit(cb, userBox[c.b])
-              const b2 = exit(userBox[c.b], cb)
+            {/* person -> talk -> the other person */}
+            {L.chats.map(({ t: t0, box: cb, a, b }) => {
+              const t = talkById.get(t0.id) ?? t0
+              const live = t.status === 'live'
+              const cls = `e-chat ${live ? 'live' : 'done'}${sel ? (related.has(t.id) ? '' : ' faded') : ''}`
+              const marker = `url(#arrow-${live ? 'w' : 'g'})`
+              const ab = pbox.get(a)!
+              const bb = pbox.get(b)!
+              const a1 = exit(ab, cb)
+              const a2 = exit(cb, ab)
+              const b1 = exit(cb, bb)
+              const b2 = exit(bb, cb)
               return (
-                <g key={c.id}>
+                <g key={t.id}>
                   <line x1={a1.x} y1={a1.y} x2={a2.x} y2={a2.y} className={cls} markerEnd={marker} />
                   <line x1={b1.x} y1={b1.y} x2={b2.x} y2={b2.y} className={cls} markerEnd={marker} />
                 </g>
@@ -259,84 +599,73 @@ export function Admin() {
             })}
           </svg>
 
-          <Place b={hubBox} className={`hub${sel ? (related.has('hub') ? '' : ' faded') : ''}`}>
+          <Place b={L.hub} className={`hub${sel ? (related.has('hub') ? '' : ' faded') : ''}`}>
             <div className="hub-title">
-              <span>MUSE PLATFORM</span>
-              <span className="dim">admin · all events</span>
+              <span>MUSE · HACKGT 13</span>
+              <span className="dim">admin · {ov ? `as of ${hms(ms(ov.as_of))}` : 'loading'}</span>
             </div>
-            <div className="hub-stats">
-              <Stat n={1} v={lifetime.toLocaleString()} k="lifetime users to date" />
-              <Stat n={2} v={hours.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} unit="h" k="hours of activity to date" />
-              <Stat n={3} v={String(active)} k="active users now" />
-            </div>
-            <div className="hub-foot">
-              <span>
-                <i className="dot live" /> {liveChats} agent chats live
-              </span>
-              <span>OpenClaw monitoring · {withheld} claims withheld</span>
-              <span>jev scored {scored}</span>
-            </div>
+            <HubStats ov={ov} />
+            <HubFoot ov={ov} />
+            {hidden > 0 && <div className="hub-more">showing the {shown.length} most recent of {total.toLocaleString()} talks · the list view has them all</div>}
           </Place>
 
-          {USERS.map((u) => (
-            <Place key={u.id} b={userBox[u.id]} className={`user ${u.active ? 'on' : 'off'}${sel?.id === u.id ? ' selected' : ''}${dim(u.id)}`} onClick={pick({ kind: 'user', id: u.id })}>
-              <div className="u-top">
-                <span className={`u-state ${u.active ? 'on' : 'off'}`}>{u.active ? (busy.has(u.id) ? '● IN AGENT CHAT' : '● ACTIVE') : `○ INACTIVE · ${u.lastSeen}`}</span>
-              </div>
-              <div className="u-name">
-                <Avatar id={u.id} size={26} />
-                {u.name}
-              </div>
-              <div className="u-role">{u.role}</div>
-              <div className="u-row">▸ building {u.building}</div>
-              <div className="u-row">
-                ⌖ {u.active ? '' : 'last: '}
-                {u.event}
-                {u.where && u.active ? ` · ${u.where}` : ''}
-              </div>
-              <div className="u-foot">
-                {u.hours.toFixed(1)} h to date · {CHATS.filter((c) => c.a === u.id || c.b === u.id).length} chats today
-              </div>
+          {L.empty && (
+            <Place b={L.empty} className="empty-card">
+              <b>{empty ? 'No agent talks yet' : 'No talks match'}</b>
+              <span>{empty ? 'They start when two opted-in attendees meet.' : 'Try another filter or clear the search.'}</span>
             </Place>
+          )}
+
+          {L.people.map((u) => (
+            <PersonNode key={u.key} u={u} cls={`${u.live ? 'on' : 'off'}${sel?.id === u.key ? ' selected' : ''}${dim(u.key)}`} now={u.live ? 0 : Math.floor(now / 60_000) * 60_000} onClick={pick({ kind: 'user', id: u.key })} />
           ))}
 
-          {CHATS.map((c) => (
-            <ChatCard key={c.id} c={c} b={chatBox[c.id]} now={now} p={phases[c.id]} cls={`${sel?.id === c.id ? ' selected' : ''}${sel ? (related.has(c.id) ? '' : ' faded') : ''}`} onPick={(x, y) => openChat(c.id, x, y)} onFocus={() => focus(chatBox[c.id])} />
-          ))}
+          {L.chats.map(({ t: t0, box }) => {
+            const t = talkById.get(t0.id) ?? t0
+            const lines = store.lines(t.id)
+            const phase = phaseOf(t, lines)
+            return (
+              <ChatCard
+                key={t.id}
+                t={t}
+                lines={lines}
+                b={box}
+                now={phase === 'live' || phase === 'judging' ? now : 0}
+                cls={`${sel?.id === t.id ? ' selected' : ''}${sel ? (related.has(t.id) ? '' : ' faded') : ''}`}
+                onPick={openChat}
+                onFocus={focusChat}
+              />
+            )
+          })}
         </div>
       </div>
-
-      {open && (() => {
-        const c = CHATS.find((x) => x.id === open.id)!
-        return <ChatFocus c={c} p={phases[c.id]} now={now} origin={open.origin} onClose={() => setOpen(null)} />
-      })()}
 
       <div className="overlay title-card">
         <div className="t">Muse · admin architecture</div>
         <ol className="pipeline">
-          <li>People pass within {RADIUS_M} m at an event</li>
+          <li>Two opted-in attendees meet at HackGT</li>
           <li>Their muse agents talk, several at once</li>
-          <li>OpenClaw monitors and withholds unsourced claims</li>
-          <li>jev classifies the finished chat</li>
-          <li>Match % and a first topic go to both people</li>
+          <li>Lines with no source in memory are withheld</li>
+          <li>jev checks two checkpoints and scores the talk</li>
+          <li>Both approve → reveal and an icebreaker</li>
         </ol>
       </div>
 
       <div className="overlay legend">
         <div>
-          <span className="sw on" /> active user
+          <span className="sw on" /> in a live talk
         </div>
         <div>
-          <span className="sw off" /> inactive user
+          <span className="sw off" /> idle
         </div>
         <div>
-          <span className="ln live" /> live agent chat
+          <span className="ln live" /> live agent talk
         </div>
         <div>
-          <span className="ln done" /> chat scored by jev
+          <span className="ln done" /> talk judged by jev
         </div>
         <div>
-          <span className="ln spoke" /> lifetime link to platform
+          <span className="ln spoke" /> link to platform
         </div>
       </div>
 
@@ -349,7 +678,7 @@ export function Admin() {
           +
         </button>
       </div>
-    </div>
+    </>
   )
 }
 
@@ -362,114 +691,271 @@ function Place({ b, className, children, onClick, title }: PlaceProps) {
   )
 }
 
-function Stat({ n, v, k, unit }: { n: number; v: string; k: string; unit?: string }) {
+const PersonNode = memo(function PersonNode({ u, cls, now, onClick }: { u: PNode; cls: string; now: number; onClick: () => void }) {
   return (
-    <div className="stat">
-      <span className="stat-n">{n}</span>
-      <div className="stat-v">
-        {v}
-        {unit && <small> {unit}</small>}
+    <Place b={u.box} className={`user ${cls}`} onClick={onClick}>
+      <div className="u-top">
+        <span className={`u-state ${u.live ? 'on' : 'off'}`}>{u.live ? '● IN AGENT TALK' : `○ LAST TALK ${ago(u.last, now || Date.now())} AGO`}</span>
       </div>
-      <div className="stat-k">{k}</div>
-    </div>
+      <div className="u-name">
+        <Avatar seed={u.p.id} bean={u.p.bean} size={26} />
+        {u.p.first_name}
+      </div>
+      <div className="u-role">{u.p.source === 'muse' ? 'Muse agent connected' : u.p.source === 'voice' ? 'voice onboarding' : 'attendee'}</div>
+      <div className="u-row">▸ {u.talks} talk{u.talks === 1 ? '' : 's'} here · {u.matches} match{u.matches === 1 ? '' : 'es'}</div>
+      <div className="u-row">⌖ attendee #{u.p.id}</div>
+      <div className="u-foot">last talk {hms(u.last)}</div>
+    </Place>
   )
-}
+}, (a, b) => a.u === b.u && a.cls === b.cls && a.now === b.now)
 
-type ChatProps = { c: Chat; b: Box; now: number; p: Phase; cls: string; onPick: (x: number, y: number) => void; onFocus: () => void }
+type ChatProps = { t: TalkSummary; lines: Line[] | null; b: Box; now: number; cls: string; onPick: (id: string, x: number, y: number) => void; onFocus: (id: string) => void }
 
-function ChatCard({ c, b, now, p, cls, onPick, onFocus }: ChatProps) {
+const CARD_LINES = 14
+
+const ChatCard = memo(function ChatCard({ t, lines, b, now, cls, onPick, onFocus }: ChatProps) {
   const log = useRef<HTMLDivElement>(null)
-  const start = LOAD - c.startedAgo * 1000
-  const A = USER[c.a].name.split(' ')[0]
-  const B = USER[c.b].name.split(' ')[0]
-  const typing = p.phase === 'live' ? c.msgs[p.visible.length] : undefined
-  const withheld = p.visible.filter((m) => !m.src).length
+  const start = ms(t.started_at)
+  const A = t.a.first_name
+  const B = t.b.first_name
+  const phase = phaseOf(t, lines)
+  const shown = lines ? lines.slice(-CARD_LINES) : null
+  const next = phase === 'live' ? (lines?.length ? (lines[lines.length - 1].from === 'a' ? t.b : t.a) : t.a) : null
 
   useLayoutEffect(() => {
     if (log.current) log.current.scrollTop = log.current.scrollHeight
-  }, [p.visible.length, p.phase])
+  }, [lines?.length, phase])
 
   return (
-    <Place b={b} className={`chat ${p.phase}${cls}`} onClick={(e) => onPick(e.clientX, e.clientY)} title="Click to open full screen">
+    <Place b={b} className={`chat ${phase}${cls}`} onClick={(e) => onPick(t.id, e.clientX, e.clientY)} title="Click to open full screen">
       <header className="c-head">
         <div className="c-who">
           muse·{A} <span className="dim">⇄</span> muse·{B}
         </div>
-        <span className={`pill ${p.phase}`}>
-          {p.phase === 'live' ? '● LIVE' : p.phase === 'classifying' ? `${spinner(now)} JEV` : `MATCH ${c.jev.overall}%`}
-        </span>
+        <span className={`pill ${phase}`}>{pillText(phase, t, spinner(now))}</span>
       </header>
       <div className="c-sub">
-        {c.event} · started <time title={stamp(start)}>{hms(start)}</time>
+        {t.id} · started <time title={stamp(start)}>{hms(start)}</time> · {mmss(duration(t, now || Date.now()))}
       </div>
       <div className="c-sub monitor">
-        <i className={`dot ${p.phase === 'live' ? 'live' : ''}`} /> OpenClaw {p.phase === 'live' ? 'monitoring' : 'closed'} · {p.visible.length} replies · {withheld} withheld
-        <button className="c-zoom" onClick={(e) => (e.stopPropagation(), onFocus())} title="zoom to this chat">
+        <i className={`dot ${phase === 'live' ? 'live' : ''}`} /> {t.turns} turns · {t.withheld} withheld
+        {t.match && <span> · ok {yn(t.approvals.a)}{yn(t.approvals.b)}{t.revealed ? ' · revealed' : ''}</span>}
+        <button className="c-zoom" onClick={(e) => (e.stopPropagation(), onFocus(t.id))} title="zoom to this talk">
           ⤢
         </button>
       </div>
 
       <div className="chat-log" ref={log}>
-        {p.visible.map((m, i) => {
-          const at = start + m.t * 1000
-          const who = m.from === 'a' ? A : B
+        {!shown && <div className="m typing">{spinner(Date.now())} loading transcript…</div>}
+        {shown && lines!.length > shown.length && <div className="m-more">… {lines!.length - shown.length} earlier lines</div>}
+        {shown?.map((m, i) => {
+          const at = ms(m.at)
+          const p = m.from === 'a' ? t.a : t.b
           return (
-            <div key={i} className={`m ${m.from}${m.src ? '' : ' struck'}`}>
-              <Avatar id={m.from === 'a' ? c.a : c.b} size={26} />
+            <div key={`${m.at}-${i}`} className={`m ${m.from}${m.withheld ? (m.text.trim() ? ' partial' : ' struck') : ''}`}>
+              <Avatar seed={p.id} bean={p.bean} size={26} />
               <div className="m-body">
                 <div className="m-meta">
-                  <time title={stamp(at)}>[{hms(at)}]</time> muse·{who}
+                  <time title={stamp(at)}>[{hms(at)}]</time> muse·{p.first_name}
                 </div>
-                <div className="m-text">{m.text}</div>
-                <div className="m-src">{m.src ? `↳ from ${m.src}` : `⊘ OpenClaw: no source in ${who}'s history, withheld from scoring`}</div>
+                <div className="m-text">{m.text.trim() || 'withheld line'}</div>
+                {m.withheld ? (
+                  <div className="m-src">
+                    ⊘ {m.text.trim() ? <s>part withheld</s> : 'withheld'} · {m.withheld_reason || 'no reason given'}
+                  </div>
+                ) : m.cites.length ? <div className="m-src">↳ from {m.cites.join(' · ')}</div> : null}
               </div>
             </div>
           )
         })}
-        {typing && (
+        {next && (
           <div className="m typing">
-            <Avatar id={typing.from === 'a' ? c.a : c.b} size={26} />
+            <Avatar seed={next.id} bean={next.bean} size={26} />
             <div className="m-body">
-              {spinner(now)} muse·{typing.from === 'a' ? A : B} is replying…
+              {spinner(now)} muse·{next.first_name} is replying…
             </div>
           </div>
         )}
       </div>
 
       <footer className="c-jev">
-        {p.phase === 'live' && <span className="dim">jev scores this chat when the agents finish</span>}
-        {p.phase === 'classifying' && (
-          <span>
-            {spinner(now)} jev classifying: thoughts, career, building…
-          </span>
-        )}
-        {p.phase === 'matched' && (
+        {phase === 'live' && <span className="dim">jev judges this talk at its checkpoints</span>}
+        {phase === 'judging' && <span>{spinner(now)} jev scoring the talk…</span>}
+        {phase === 'abandoned' && <span className="dim">abandoned before a verdict</span>}
+        {(phase === 'match' || phase === 'nomatch' || phase === 'done') && (
           <>
-            <div className="bars">
-              <Bar k="thoughts" v={c.jev.thoughts} />
-              <Bar k="career" v={c.jev.career} />
-              <Bar k="building" v={c.jev.building} />
-            </div>
-            <div className="topic">
-              <b>first topic</b> {c.jev.topic}
-            </div>
+            {t.scores && (
+              <div className="bars">
+                {SCORE_KEYS.map((k) => (
+                  <div className="bar" key={k}>
+                    <span>{SCORE_LABEL[k]}</span>
+                    <span className="track">
+                      <span style={{ width: `${(t.scores![k] / 5) * 100}%` }} />
+                    </span>
+                    <span>{t.scores![k].toFixed(1)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {t.reason && (
+              <div className="topic">
+                <b>{t.stopped_at === 'checkpoint1' ? 'stopped' : 'why'}</b> {t.reason}
+              </div>
+            )}
           </>
         )}
       </footer>
     </Place>
   )
-}
+})
 
-function Bar({ k, v }: { k: string; v: number }) {
+// ======================================================================== list
+
+type ListProps = { store: AdminStore; talks: TalkSummary[]; ov: Overview | null; now: number; filter: Filter; q: string; empty: boolean; onOpen: (id: string, x: number, y: number) => void }
+
+function List({ store, talks, ov, now, filter, q, empty, onOpen }: ListProps) {
+  const box = useRef<HTMLDivElement>(null)
+  const [scroll, setScroll] = useState({ top: 0, h: 800, w: 1200 })
+  const frame = useRef(0)
+  const narrow = scroll.w < 760
+  const ROW = narrow ? 96 : 60
+  const OVERSCAN = 6
+
+  useLayoutEffect(() => {
+    const el = box.current
+    if (!el) return
+    const measure = () => setScroll({ top: el.scrollTop, h: el.clientHeight, w: el.clientWidth })
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  const onScroll = () => {
+    if (frame.current) return
+    frame.current = requestAnimationFrame(() => {
+      frame.current = 0
+      const el = box.current
+      if (el) setScroll({ top: el.scrollTop, h: el.clientHeight, w: el.clientWidth })
+    })
+  }
+
+  const page = store.pages[filter]
+  const more = store.hasMore(filter)
+  const first = Math.max(0, Math.floor(scroll.top / ROW) - OVERSCAN)
+  const last = Math.min(talks.length, Math.ceil((scroll.top + scroll.h) / ROW) + OVERSCAN)
+
+  // near the end: fetch the next page
+  useEffect(() => {
+    if (more && !page.loading && !page.error && last >= talks.length - 10) void store.loadMore(filter)
+  }, [last, talks.length, more, page.loading, page.error, filter, store])
+
+  const rows = []
+  for (let i = first; i < last; i++) rows.push(<Row key={talks[i].id} t={talks[i]} top={i * ROW} h={ROW} now={talks[i].status === 'live' ? now : 0} onOpen={onOpen} narrow={narrow} />)
+
   return (
-    <div className="bar">
-      <span>{k}</span>
-      <span className="track">
-        <span style={{ width: `${v}%` }} />
-      </span>
-      <span>{v}%</span>
+    <div className="adm-list">
+      <div className="l-inner">
+        <section className="l-hub">
+          <div className="hub-title">
+            <span>MUSE · HACKGT 13</span>
+            <span className="dim">{ov ? `as of ${hms(ms(ov.as_of))}` : 'loading'}</span>
+          </div>
+          <HubStats ov={ov} />
+          <HubFoot ov={ov} />
+        </section>
+        <div className="l-head">
+          <span>
+            {talks.length.toLocaleString()} talk{talks.length === 1 ? '' : 's'}
+            {q ? ` matching “${q}”` : ''}
+            {more ? ' loaded' : ''}
+          </span>
+          {q && more && (
+            <button className="linkish" onClick={() => store.loadMore(filter)}>
+              search covers loaded talks · load more
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="vlist" ref={box} onScroll={onScroll} role="list" aria-label="Agent talks">
+        {!talks.length && !page.loading && (
+          <div className="l-empty">
+            {empty ? (
+              <>
+                <b>No agent talks yet</b>
+                They start when two opted-in attendees meet.
+              </>
+            ) : more ? (
+              'Loading…'
+            ) : (
+              'No talks match. Try another filter or clear the search.'
+            )}
+          </div>
+        )}
+        <div className="vspace" style={{ height: talks.length * ROW + 56 }}>
+          {rows}
+          <div className="l-foot" style={{ top: talks.length * ROW }}>
+            {page.loading ? `${spinner(now)} loading more…` : page.error ? (
+              <button className="linkish" onClick={() => store.loadMore(filter)}>
+                couldn't load ({page.error}) · retry
+              </button>
+            ) : more ? (
+              <button className="linkish" onClick={() => store.loadMore(filter)}>
+                load more
+              </button>
+            ) : talks.length ? (
+              `end · ${talks.length.toLocaleString()} talks`
+            ) : null}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
+
+const Row = memo(function Row({ t, top, h, now, onOpen, narrow }: { t: TalkSummary; top: number; h: number; now: number; onOpen: (id: string, x: number, y: number) => void; narrow: boolean }) {
+  const phase = phaseOf(t)
+  const start = ms(t.started_at)
+  return (
+    <button className={`row ${phase}${narrow ? ' narrow' : ''}`} style={{ top, height: h }} onClick={(e) => onOpen(t.id, e.clientX, e.clientY)} role="listitem">
+      <span className={`pill ${phase}`}>{pillText(phase, t, spinner(now || 0))}</span>
+      <span className="r-who">
+        <Avatar seed={t.a.id} bean={t.a.bean} size={24} />
+        <b>{t.a.first_name}</b>
+        <span className="dim">⇄</span>
+        <Avatar seed={t.b.id} bean={t.b.bean} size={24} />
+        <b>{t.b.first_name}</b>
+      </span>
+      <span className="r-time" title={stamp(start)}>
+        {hms(start)} · {mmss(duration(t, now || Date.now()))}
+      </span>
+      <span className="r-num">
+        {t.turns} turns{t.withheld ? <em> · {t.withheld} withheld</em> : ''}
+      </span>
+      <span className="r-scores" title={t.scores ? SCORE_KEYS.map((k) => `${SCORE_LABEL[k]} ${t.scores![k]}`).join(' · ') : undefined}>
+        {t.scores ? (
+          SCORE_KEYS.map((k) => (
+            <i key={k} className="sq">
+              <i style={{ height: `${(t.scores![k] / 5) * 100}%` }} />
+            </i>
+          ))
+        ) : (
+          <span className="dim">—</span>
+        )}
+      </span>
+      <span className="r-after" title="approved A/B · revealed · worth it A/B">
+        {t.match ? (
+          <>
+            ok {yn(t.approvals.a)}
+            {yn(t.approvals.b)} · {t.revealed ? 'revealed' : 'hidden'}
+            {t.revealed ? ` · worth ${yn(t.worth_it.a)}${yn(t.worth_it.b)}` : ''}
+          </>
+        ) : (
+          <span className="dim">{t.stopped_at ? t.stopped_at.replace('checkpoint', 'cp') : ''}</span>
+        )}
+      </span>
+      <span className="r-reason">{t.reason ?? ''}</span>
+    </button>
+  )
+})
 
 export default Admin
