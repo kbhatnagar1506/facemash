@@ -101,6 +101,10 @@ export function Privacy() {
           indexes (embeddings) so it can be searched by meaning.
         </li>
         <li>
+          <b>TypeSafe</b> (the Jev model) reads a trimmed copy of your saved memory, with credentials already removed, to
+          pick an outfit for your bean.
+        </li>
+        <li>
           <b>Google</b> handles sign-in.
         </li>
         <li>

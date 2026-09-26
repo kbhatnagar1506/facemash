@@ -292,3 +292,4 @@ kbd {
 @keyframes perm-fade { from { opacity: 0; } }
 @keyframes perm-up { from { opacity: 0; transform: translateY(40px); } }
 @media (prefers-reduced-motion: reduce) { .perm-backdrop, .perm-card { animation-duration: 0.01s; } }
+.studio-dressed { font: 800 12px var(--round); font-style: normal; color: var(--ink); background: #fff; border: 2px solid var(--ink); border-radius: 999px; padding: 3px 10px; justify-self: start; margin-top: 4px; }

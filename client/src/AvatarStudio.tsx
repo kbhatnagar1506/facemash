@@ -4,7 +4,7 @@ import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import { BeanBody } from './Bean'
 import type { AvatarState } from './Avatar'
-import { ACCENT_COLORS, BODY_COLORS, EYES, HATS, ITEMS, PATTERNS, SPONSOR_BEANS, defaultLook, encodeLook, loadLook, randomLook, saveLook, type Look } from './look'
+import { ACCENT_COLORS, BODY_COLORS, EYES, HATS, ITEMS, PATTERNS, SPONSOR_BEANS, decodeLook, defaultLook, encodeLook, loadLook, randomLook, saveLook, type Look } from './look'
 import { saveProfile } from './account'
 
 // /avatar: build your jellybean. A turntable preview you can spin, and big friendly
@@ -102,6 +102,25 @@ function Showcase({ look, pose, cheer }: { look: Look; pose: 'idle' | 'wave' | '
 
 export function AvatarStudio() {
   const [look, setLook] = useState<Look>(() => loadLook() ?? defaultLook())
+  // Signed in with memory from your agent: jev picked an outfit from it. Put it on when you
+  // arrive during onboarding or haven't designed a bean yet; you can change anything.
+  const [dressed, setDressed] = useState(false)
+  useEffect(() => {
+    const onboarding = location.search.includes('onboard')
+    if (!onboarding && loadLook()) return
+    let live = true
+    fetch('/api/look/suggested', { credentials: 'same-origin' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { look?: string | null } | null) => {
+        if (!live || !d?.look) return
+        setLook(decodeLook(d.look))
+        setDressed(true)
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [])
   const [pose, setPose] = useState<'idle' | 'wave' | 'walk'>('idle')
   const [name, setName] = useState(() => {
     try {
@@ -145,6 +164,7 @@ export function AvatarStudio() {
         <div className="studio-title">
           <span>{location.search.includes('onboard') ? 'Step 3 of 3 · Make your bean' : 'HackGT 13 · Seaside Market'}</span>
           <strong>Bean Studio</strong>
+          {dressed && <em className="studio-dressed">Dressed from what your Muse remembers about you</em>}
         </div>
         <div className="studio-poses">
           {(['idle', 'wave', 'walk'] as const).map((p) => (
