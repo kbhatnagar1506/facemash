@@ -185,7 +185,7 @@ export function Terms() {
 
       <h2>Accounts</h2>
       <p>
-        You can use the app as a guest, or sign in with Google to save your progress. We may remove content or suspend
+        You sign in with Google to use the app; your account keeps your bean and where you were. We may remove content or suspend
         access that breaks these terms.
       </p>
 

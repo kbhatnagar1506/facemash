@@ -301,7 +301,9 @@ export function Landing() {
           reveal(e.target as HTMLElement)
         }
       },
-      { rootMargin: '0px 0px -18% 0px', threshold: 0 },
+      // phones park each section's copy at the bottom of the screen: a short line (the
+      // "strangers" beat) sits inside the bottom 18% there and would never play
+      { rootMargin: innerWidth < 768 ? '0px 0px -4% 0px' : '0px 0px -18% 0px', threshold: 0 },
     )
     root.current.querySelectorAll('[data-beat]:not([data-beat="hero"]) .copy').forEach((el) => io.observe(el))
     return () => io.disconnect()
@@ -451,8 +453,8 @@ export function Landing() {
       <footer className="about">
         <img src="/facemash-logo-66.png" alt="" width="22" height="22" loading="lazy" decoding="async" />
         <p>
-          <b>facemash</b> helps HackGT 13 attendees find the people they'd be glad to meet. Google sign-in is optional
-          and only used for your account.
+          <b>facemash</b> helps HackGT 13 attendees find the people they'd be glad to meet. You sign in with Google,
+          and we use it only for your account.
         </p>
         <nav aria-label="Legal">
           <a href="/privacy">Privacy</a>
