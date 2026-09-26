@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"math/rand/v2"
 	"net"
 	"net/http"
@@ -44,9 +45,23 @@ const (
 	fastAskLimit     = 8
 	fastSnippetRunes = 1500
 	fastMaxQuery     = 1000 // runes
-	fastBatch        = 50   // items per bulk write
-	fastWorkers      = 2
-	fastSyncTries    = 6
+	// A sync goes one batch at a time, then back to the end of the queue: a 200-section upload
+	// never holds a worker (or makes a 1-section one wait) for minutes. MAPI's write side takes
+	// about 4x the throughput with parallel bulk requests, and has a pool of 6+4 connections.
+	fastBatch   = 20 // items per bulk write, and per turn
+	fastWorkers = 6
+	// Asking: per person, a burst of 20 then 2 a second, at most 4 at once; and at most 16
+	// searches in flight toward MAPI (one read process, sharing facemash-db with the game).
+	fastAskBurst    = 20
+	fastAskEvery    = 500 * time.Millisecond
+	fastAskInFlight = 4
+	fastSearchSlots = 16
+	// A top hit sharing no words with the question (no lexical score) and with a vector score
+	// below this is a guess: MAPI always returns the nearest sections, relevant or not. Live,
+	// on a 91-section memory: 10 questions it can't answer (blood type, a dog's name, "capital
+	// of France", gibberish...) all topped out at 0.48-0.614 with no lexical score; of 45 it
+	// answers (plain, paraphrased, typo'd), 40 were over 0.62 or had a lexical score.
+	fastWeakVector = 0.62
 )
 
 // ---------- the MAPI client ----------
@@ -214,9 +229,11 @@ type fastMemory struct {
 }
 
 type fastHit struct {
-	Memory      fastMemory `json:"memory"`
-	Score       float64    `json:"score"`
-	MatchedText string     `json:"matched_text"`
+	Memory       fastMemory `json:"memory"`
+	Score        float64    `json:"score"`
+	MatchedText  string     `json:"matched_text"`
+	VectorScore  *float64   `json:"vector_score"`  // cosine, when the vector arm found it
+	LexicalScore *float64   `json:"lexical_score"` // when the question's words are in it
 }
 
 type fastWrite struct {
@@ -236,14 +253,17 @@ type fastWho struct {
 	id     int64
 }
 
-// fastJob is what's waiting for one person. Uploads coalesce (only the latest is written);
-// a purge always runs before any sync queued with it.
+// fastJob is what's waiting for one person: a purge always runs before a sync queued with it.
+// A sync carries no data: it reads the person's latest upload from agent_memory, so uploads
+// coalesce, a delete always wins, and a lost job is picked up again from mapi_outbox.
 type fastJob struct {
 	purge bool
 	sync  bool
-	items []fastItem
-	gen   uint64 // which upload (or delete) this sync belongs to
 	tries int
+	// the split of the upload received at `at`, kept between turns of one sync
+	split bool
+	at    time.Time
+	items []fastItem
 }
 
 type memFast struct {
@@ -254,12 +274,14 @@ type memFast struct {
 	retryMax   time.Duration
 	sweepEvery time.Duration // how often open purge markers are picked up (and once at start)
 
+	asks     *keyLimiter
+	searches chan struct{} // a slot per MAPI search in flight
+
 	mu      sync.Mutex
 	cond    *sync.Cond
 	queue   []fastWho // each person at most once, and never while running
 	pending map[fastWho]*fastJob
 	running map[fastWho]bool
-	gen     map[fastWho]uint64
 	closed  bool
 	wg      sync.WaitGroup
 	stop    chan struct{}
@@ -269,7 +291,9 @@ func newMemFast(store fastStore, mapi *fastClient) *memFast {
 	f := &memFast{
 		store: store, mapi: mapi, askTimeout: fastAskTimeout,
 		retryBase: 5 * time.Second, retryMax: 5 * time.Minute, sweepEvery: time.Minute,
-		pending: map[fastWho]*fastJob{}, running: map[fastWho]bool{}, gen: map[fastWho]uint64{},
+		asks:     newKeyLimiter(fastAskBurst, fastAskEvery, fastAskInFlight),
+		searches: make(chan struct{}, fastSearchSlots),
+		pending:  map[fastWho]*fastJob{}, running: map[fastWho]bool{},
 		stop: make(chan struct{}),
 	}
 	f.cond = sync.NewCond(&f.mu)
@@ -429,22 +453,31 @@ func (f *memFast) worker() {
 	}
 }
 
-// sweep picks up open purge markers: at start (a restart mid-erase) and then every so often
-// (a marker whose retry was lost).
+// sweep picks up what the database says is still to do: open purge markers and people whose
+// index is behind their upload (mapi_outbox). At start, that is whatever a restart cut short;
+// later, whatever a retry lost or a backoff deferred.
 func (f *memFast) sweep() {
 	defer f.wg.Done()
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		whos, err := f.store.fastPendingPurges(ctx)
-		cancel()
+		purges, err := f.store.fastPendingPurges(ctx)
 		if err != nil {
 			log.Printf("memfast: pending purges: %v", err)
 		}
-		for _, who := range whos {
-			if f.mapi.key(who.tenant) == "" {
-				continue
+		syncs, err := f.store.fastPendingSyncs(ctx)
+		if err != nil {
+			log.Printf("memfast: pending syncs: %v", err)
+		}
+		cancel()
+		for _, who := range purges {
+			if f.mapi.key(who.tenant) != "" {
+				f.enqueue(who, func(j *fastJob) { j.purge = true })
 			}
-			f.enqueue(who, func(j *fastJob) { j.purge = true })
+		}
+		for _, who := range syncs {
+			if f.mapi.key(who.tenant) != "" {
+				f.enqueueIdle(who)
+			}
 		}
 		t := time.NewTimer(f.sweepEvery)
 		select {
@@ -456,22 +489,36 @@ func (f *memFast) sweep() {
 	}
 }
 
-// later retries a failed job after a backoff, unless something newer has replaced it.
-func (f *memFast) later(who fastWho, job *fastJob) {
-	d := f.retryBase << min(job.tries, 16)
+// enqueueIdle queues a sync for someone nothing is queued or running for (the sweep: a sync
+// already under way carries on in turns by itself).
+func (f *memFast) enqueueIdle(who fastWho) {
+	f.mu.Lock()
+	busy := f.running[who] || f.pending[who] != nil
+	f.mu.Unlock()
+	if !busy {
+		f.enqueue(who, func(j *fastJob) { j.sync = true })
+	}
+}
+
+// backoff: how long to wait after a job's tries-th failure.
+func (f *memFast) backoff(tries int) time.Duration {
+	d := f.retryBase << min(tries, 16)
 	if d > f.retryMax || d <= 0 {
 		d = f.retryMax
 	}
+	return d
+}
+
+// later retries a failed job after a backoff. Nothing is ever dropped for good: a sync's
+// marker stays in mapi_outbox (and a purge's in mapi_purges) until it succeeds.
+func (f *memFast) later(who fastWho, job *fastJob) {
+	d := f.backoff(job.tries)
 	job.tries++
 	time.AfterFunc(d, func() {
 		f.enqueue(who, func(j *fastJob) {
-			if job.purge {
-				j.purge = true
-				j.tries = max(j.tries, job.tries)
-			}
-			if job.sync && !j.sync && job.gen == f.gen[who] {
-				j.sync, j.items, j.gen, j.tries = true, job.items, job.gen, max(j.tries, job.tries)
-			}
+			j.purge = j.purge || job.purge
+			j.sync = j.sync || job.sync
+			j.tries = max(j.tries, job.tries)
 		})
 	})
 }
@@ -492,32 +539,43 @@ func (f *memFast) run(who fastWho, job *fastJob) {
 	if !job.sync {
 		return
 	}
-	if err := f.syncNow(who, job.items); err != nil {
-		if job.tries+1 >= fastSyncTries {
-			log.Printf("memfast: #%d sync failed %d times, giving up until the next upload: %v", who.id, job.tries+1, err)
-			return
+	more, err := f.syncTurn(who, job)
+	if err != nil {
+		wait := f.backoff(job.tries)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if ferr := f.store.fastSyncFailed(ctx, who.tenant, who.id, err.Error(), wait); ferr != nil {
+			log.Printf("memfast: #%d outbox: %v", who.id, ferr)
 		}
-		log.Printf("memfast: #%d sync failed, will retry: %v", who.id, err)
-		f.later(who, &fastJob{sync: true, items: job.items, gen: job.gen, tries: job.tries})
+		cancel()
+		log.Printf("memfast: #%d sync failed (try %d), will retry in %v: %v", who.id, job.tries+1, wait, err)
+		f.later(who, &fastJob{sync: true, tries: job.tries})
+		return
+	}
+	if more { // back of the queue, so others' uploads get their turn in between
+		f.enqueue(who, func(j *fastJob) {
+			if !j.sync {
+				j.sync, j.split, j.at, j.items = true, job.split, job.at, job.items
+			}
+		})
 	}
 }
 
-// uploaded queues a sync of what someone's agent just sent (called after agent_memory has it).
-func (f *memFast) uploaded(tenant string, id int64, obj map[string]any) {
+// uploaded queues a sync of what someone's agent just sent (called once agent_memory has it).
+// It only marks the person as behind; the worker reads and splits the upload itself.
+func (f *memFast) uploaded(ctx context.Context, tenant string, id int64) {
 	if f == nil || id == 0 {
 		return
 	}
-	items, cut := fastSplit(obj)
-	who := fastWho{tenant, id}
-	f.enqueue(who, func(j *fastJob) {
-		f.gen[who]++
-		j.sync, j.items, j.gen, j.tries = true, items, f.gen[who], 0
-	})
-	log.Printf("memfast: #%d upload queued: %d sections, %d cut by the caps", id, len(items), cut)
+	if err := f.store.fastMarkDirty(ctx, tenant, id); err != nil {
+		log.Printf("memfast: #%d outbox: %v (queued in memory only)", id, err)
+	}
+	f.enqueue(fastWho{tenant, id}, func(j *fastJob) { j.sync, j.split, j.items = true, false, nil })
+	log.Printf("memfast: #%d upload queued", id)
 }
 
 // forget records that everything of this person's in MAPI must go, then erases it in the
-// background. When this returns nil, the erase will happen, restarts included.
+// background. When this returns nil, the erase will happen, restarts included, and no
+// upload received before it is ever indexed again.
 func (f *memFast) forget(ctx context.Context, tenant string, id int64) error {
 	if f == nil {
 		return nil
@@ -525,11 +583,7 @@ func (f *memFast) forget(ctx context.Context, tenant string, id int64) error {
 	if err := f.store.fastRequestPurge(ctx, tenant, id); err != nil {
 		return err
 	}
-	who := fastWho{tenant, id}
-	f.enqueue(who, func(j *fastJob) {
-		f.gen[who]++ // an older upload still waiting (or retrying) must not come back
-		j.purge, j.sync, j.items = true, false, nil
-	})
+	f.enqueue(fastWho{tenant, id}, func(j *fastJob) { j.purge, j.split, j.items = true, false, nil })
 	log.Printf("memfast: #%d purge queued", id)
 	return nil
 }
@@ -589,104 +643,160 @@ func (f *memFast) erase(ctx context.Context, tenant, sid, mid string) error {
 	return err
 }
 
-// syncNow makes the person's space match items: unchanged sections cost nothing, a changed
-// one is erased and written again (never left to MAPI's near-duplicate merge, which can keep
-// the old text), and a section that's gone is erased.
-func (f *memFast) syncNow(who fastWho, items []fastItem) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+// syncTurn does one turn of a sync: it reads the person's latest upload (unless the split
+// from the last turn is still current), then syncStep does up to one batch of it. Once
+// nothing is left, the outbox marker is cleared, unless a newer upload has set it since.
+// An upload received before the person's latest delete is never indexed: the delete wins.
+func (f *memFast) syncTurn(who fastWho, job *fastJob) (more bool, err error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
+	st, err := f.store.fastSyncState(ctx, who.tenant, who.id)
+	if err != nil {
+		return false, err
+	}
+	var items []fastItem
+	if st.received != nil && (st.purged == nil || st.received.After(*st.purged)) {
+		if job.split && job.at.Equal(*st.received) {
+			items = job.items
+		} else {
+			start := time.Now()
+			data, err := f.store.fastMemoryData(ctx, who.tenant, who.id, *st.received)
+			if err != nil {
+				return false, err
+			}
+			if data == nil {
+				return true, nil // replaced (or deleted) just now: go again with what's there
+			}
+			var obj map[string]any
+			json.Unmarshal(data, &obj)
+			var capped bool
+			items, capped = fastSplit(obj)
+			job.split, job.at, job.items = true, *st.received, items
+			log.Printf("memfast: #%d split %.1fKB into %d sections (capped %v) in %.1fms", who.id, float64(len(data))/1024, len(items), capped, ms(time.Since(start)))
+		}
+	}
+	if more, err = f.syncStep(ctx, who, items); err != nil || more {
+		return more, err
+	}
+	if st.dirty != nil {
+		return false, f.store.fastSynced(ctx, who.tenant, who.id, *st.dirty)
+	}
+	return false, nil
+}
+
+// syncStep moves the person's space one batch closer to items: unchanged sections cost
+// nothing; a changed one is erased and written again (never left to MAPI's near-duplicate
+// merge, which can keep the old text); new ones are written; and once everything is
+// written, sections that are gone are erased. Every step is recorded in mapi_items as it
+// lands, so a crash anywhere just means the next turn picks up from there.
+func (f *memFast) syncStep(ctx context.Context, who fastWho, items []fastItem) (more bool, err error) {
 	start := time.Now()
 	rows, err := f.store.fastItems(ctx, who.tenant, who.id)
 	if err != nil {
-		return err
+		return false, err
 	}
 	want := map[string]*fastItem{}
 	for i := range items {
 		want[items[i].Key] = &items[i]
 	}
 	inUse := map[string]bool{} // memory ids that unchanged sections still point at
-	var stale []string
+	var gone []string
 	for k, r := range rows {
-		if it := want[k]; it != nil && bytes.Equal(it.SHA, r.SHA) {
+		if it := want[k]; it == nil {
+			gone = append(gone, k)
+		} else if bytes.Equal(it.SHA, r.SHA) {
 			inUse[r.MemID] = true
-		} else {
-			stale = append(stale, k)
 		}
 	}
-	sort.Strings(stale)
+	sort.Strings(gone)
 	var fresh []*fastItem
 	for i := range items {
 		if r, ok := rows[items[i].Key]; !ok || !bytes.Equal(r.SHA, items[i].SHA) {
 			fresh = append(fresh, &items[i])
 		}
 	}
-	if len(stale) == 0 && len(fresh) == 0 {
+	if len(gone) == 0 && len(fresh) == 0 {
 		log.Printf("memfast: #%d sync: %d sections, all unchanged (%.1fms)", who.id, len(items), ms(time.Since(start)))
-		return nil
+		return false, nil
 	}
 	sid, err := f.ensureSpace(ctx, who)
 	if err != nil {
-		return err
+		return false, err
 	}
 	erased := 0
-	for _, k := range stale {
-		mid := rows[k].MemID
+	eraseOld := func(mid string) error {
 		if mid == "" || inUse[mid] {
-			continue
+			return nil
 		}
 		if err := f.erase(ctx, who.tenant, sid, mid); err != nil {
 			return err
 		}
 		inUse[mid] = true // erased once is enough
 		erased++
+		return nil
 	}
-	if err := f.store.fastDropItems(ctx, who.tenant, who.id, stale); err != nil {
-		return err
+	if len(fresh) == 0 {
+		for _, k := range gone {
+			if err := eraseOld(rows[k].MemID); err != nil {
+				return false, err
+			}
+		}
+		if err := f.store.fastDropItems(ctx, who.tenant, who.id, gone); err != nil {
+			return false, err
+		}
+		log.Printf("memfast: #%d sync: %d sections, %d gone, %d erased in %.1fms", who.id, len(items), len(gone), erased, ms(time.Since(start)))
+		return false, nil
 	}
-	for i := 0; i < len(fresh); i += fastBatch {
-		batch := fresh[i:min(i+fastBatch, len(fresh))]
-		req := struct {
-			Items []fastWrite `json:"items"`
-		}{}
-		for _, it := range batch {
-			req.Items = append(req.Items, fastWrite{
-				Content:    it.Content,
-				Metadata:   map[string]any{"key": it.Key, "section": it.Section},
-				Tags:       []string{it.Section},
-				Source:     "muse:" + it.Key,
-				OccurredAt: it.Occurred,
-			})
-		}
-		var res struct {
-			Items []struct {
-				Memory fastMemory `json:"memory"`
-			} `json:"items"`
-		}
-		wctx, wcancel := context.WithTimeout(ctx, 3*time.Minute)
-		err := f.mapi.do(wctx, who.tenant, http.MethodPost, fastSpacePath(sid, "/memories/bulk"), req, &res, true)
-		wcancel()
-		if fastStatus(err) == http.StatusNotFound {
-			// the space is gone on MAPI's side: start this person over with a new one
-			f.store.fastClear(ctx, who.tenant, who.id, nil)
-			return fmt.Errorf("space gone: %w", err)
-		}
-		if err != nil {
-			return err
-		}
-		if len(res.Items) != len(batch) {
-			return fmt.Errorf("bulk write answered %d of %d", len(res.Items), len(batch))
-		}
-		put := make([]fastRow, len(batch))
-		for j, it := range batch {
-			put[j] = fastRow{Key: it.Key, SHA: it.SHA, MemID: res.Items[j].Memory.ID}
-		}
-		if err := f.store.fastPutItems(ctx, who.tenant, who.id, put); err != nil {
-			return err
+	batch := fresh[:min(fastBatch, len(fresh))]
+	for _, it := range batch {
+		if r, ok := rows[it.Key]; ok {
+			if err := eraseOld(r.MemID); err != nil {
+				return false, err
+			}
 		}
 	}
-	log.Printf("memfast: #%d sync: %d sections, %d unchanged, %d erased, %d written in %.1fms",
-		who.id, len(items), len(items)-len(fresh), erased, len(fresh), ms(time.Since(start)))
-	return nil
+	req := struct {
+		Items []fastWrite `json:"items"`
+	}{}
+	for _, it := range batch {
+		req.Items = append(req.Items, fastWrite{
+			Content:    it.Content,
+			Metadata:   map[string]any{"key": it.Key, "section": it.Section},
+			Tags:       []string{it.Section},
+			Source:     "muse:" + it.Key,
+			OccurredAt: it.Occurred,
+		})
+	}
+	var res struct {
+		Items []struct {
+			Memory fastMemory `json:"memory"`
+		} `json:"items"`
+	}
+	wctx, wcancel := context.WithTimeout(ctx, 3*time.Minute)
+	err = f.mapi.do(wctx, who.tenant, http.MethodPost, fastSpacePath(sid, "/memories/bulk"), req, &res, true)
+	wcancel()
+	if fastStatus(err) == http.StatusNotFound {
+		// the space is gone on MAPI's side: start this person over with a new one
+		f.store.fastClear(ctx, who.tenant, who.id, nil)
+		return false, fmt.Errorf("space gone: %w", err)
+	}
+	if err != nil {
+		return false, err
+	}
+	if len(res.Items) != len(batch) {
+		return false, fmt.Errorf("bulk write answered %d of %d", len(res.Items), len(batch))
+	}
+	put := make([]fastRow, len(batch))
+	for j, it := range batch {
+		put[j] = fastRow{Key: it.Key, SHA: it.SHA, MemID: res.Items[j].Memory.ID}
+	}
+	if err := f.store.fastPutItems(ctx, who.tenant, who.id, put); err != nil {
+		return false, err
+	}
+	left := len(fresh) - len(batch)
+	log.Printf("memfast: #%d sync: %d sections, %d erased, %d written in %.1fms; %d still to write, %d gone",
+		who.id, len(items), erased, len(batch), ms(time.Since(start)), left, len(gone))
+	return left > 0 || len(gone) > 0, nil
 }
 
 // purgeNow carries out any open delete for this person: every memory we wrote, and anything
@@ -782,13 +892,25 @@ func (f *memFast) listIDs(ctx context.Context, tenant, sid string) ([]string, er
 const fastNote = "These are snippets of this person's own notes (what their agent sent to HackGT 13), best match first, with where each came from. " +
 	"Answer their question from them; they're private to this person, so don't share them with anyone else."
 
+const fastWeakNote = "Nothing in this person's notes clearly matches that question: these are only the nearest snippets, and they may well not answer it. " +
+	"If they don't, say you don't know rather than guessing. They're private to this person, so don't share them with anyone else."
+
 // ask searches the person's own space, and always answers within askTimeout: after that it
 // says "busy" rather than keep an agent (and its person) waiting.
+// A person asking too often (or too many at once) gets "rate_limited" without any MAPI call.
 func (f *memFast) ask(ctx context.Context, tenant string, id int64, q string) map[string]any {
+	release, wait, ok := f.asks.acquire(fastWho{tenant, id})
+	if !ok {
+		return map[string]any{"status": "rate_limited", "retry_after_s": math.Ceil(wait.Seconds()),
+			"note": "Too many questions at once; ask one at a time, a few seconds apart."}
+	}
 	ctx, cancel := context.WithTimeout(ctx, f.askTimeout)
-	defer cancel()
 	ch := make(chan map[string]any, 1)
-	go func() { ch <- f.askNow(ctx, tenant, id, q) }()
+	go func() {
+		defer release() // when the search is really over, not when we stop waiting for it
+		ch <- f.askNow(ctx, tenant, id, q)
+	}()
+	defer cancel()
 	select {
 	case out := <-ch:
 		return out
@@ -800,6 +922,8 @@ func (f *memFast) ask(ctx context.Context, tenant string, id int64, q string) ma
 func fastBusy() map[string]any {
 	return map[string]any{"status": "busy", "note": "Memory search is busy right now; try again in a moment."}
 }
+
+func fastRound(x float64) float64 { return math.Round(x*10000) / 10000 }
 
 func (f *memFast) askNow(ctx context.Context, tenant string, id int64, q string) map[string]any {
 	start := time.Now()
@@ -822,6 +946,12 @@ func (f *memFast) askNow(ctx context.Context, tenant string, id int64, q string)
 	// include_superseded skips MAPI's per-hit supersession walk (about 0.3 s instead of 0.7 s at
 	// p50): these spaces never hold superseded rows, since a changed section is erased and rewritten.
 	body := map[string]any{"query": q, "limit": fastAskLimit, "coverage": false, "include_superseded": true}
+	select { // a slot toward MAPI, or "busy" once the deadline passes
+	case f.searches <- struct{}{}:
+		defer func() { <-f.searches }()
+	case <-ctx.Done():
+		return fastBusy()
+	}
 	if err := f.mapi.do(ctx, tenant, http.MethodPost, fastSpacePath(sid, "/search"), body, &res, false); err != nil {
 		if ctx.Err() == nil {
 			log.Printf("memfast: #%d ask: %v (%.1fms)", id, err, ms(time.Since(start)))
@@ -830,7 +960,8 @@ func (f *memFast) askNow(ctx context.Context, tenant string, id int64, q string)
 	}
 	results := []map[string]any{}
 	dropped := 0
-	for _, h := range res.Results {
+	var top *fastHit
+	for i, h := range res.Results {
 		if h.Memory.SpaceID != sid { // only ever this person's own space
 			dropped++
 			continue
@@ -846,6 +977,9 @@ func (f *memFast) askNow(ctx context.Context, tenant string, id int64, q string)
 			"from": title, "section": section, "key": strings.TrimPrefix(key, "muse:"),
 			"score": float64(int(h.Score*10000)) / 10000, "text": text,
 		})
+		if top == nil {
+			top = &res.Results[i]
+		}
 		if len(results) == fastAskLimit {
 			break
 		}
@@ -856,7 +990,27 @@ func (f *memFast) askNow(ctx context.Context, tenant string, id int64, q string)
 	if len(results) == 0 {
 		return map[string]any{"status": "no_match", "results": results, "count": 0, "note": "Nothing in this person's notes matches that."}
 	}
-	return map[string]any{"status": "ok", "results": results, "count": len(results), "note": fastNote}
+	out := map[string]any{"status": "ok", "results": results, "count": len(results), "note": fastNote}
+	match := map[string]any{"vector": nil, "lexical": nil} // the top hit's, so an agent (and we) can judge it
+	if top.VectorScore != nil {
+		match["vector"] = fastRound(*top.VectorScore)
+	}
+	if top.LexicalScore != nil {
+		match["lexical"] = fastRound(*top.LexicalScore)
+	}
+	out["top_match"] = match
+	if fastWeak(top) {
+		out["status"], out["note"] = "weak_match", fastWeakNote
+	}
+	return out
+}
+
+// fastWeak: the best hit shares no words with the question and isn't close in meaning either.
+func fastWeak(h *fastHit) bool {
+	if h.LexicalScore != nil && *h.LexicalScore > 0 {
+		return false
+	}
+	return h.VectorScore == nil || *h.VectorScore < fastWeakVector
 }
 
 // fastSnippet cuts a long hit down to limit runes around what the question asks about: the
@@ -908,7 +1062,7 @@ func fastSnippet(text, q string, limit int) string {
 		n := utf8.RuneCountInString(paras[i]) + 2
 		if n > left {
 			if i == order[0] { // the best paragraph alone is too long: its start still goes in
-				paras[i], keep[i] = head(paras[i], limit-2), true
+				paras[i], keep[i], left = head(paras[i], limit-2), true, 0
 			}
 			continue
 		}
@@ -1032,25 +1186,23 @@ func (c *museCaller) tools() []tool {
 	return append(museTools[:len(museTools):len(museTools)], fastTools...)
 }
 
-// prompts adds the memory fast path to what a newly paired agent is told.
+// prompts adds the memory fast path to what a newly paired agent is told: with the upload
+// link (always there), one paste sends the memory and saves every path, the MCP fallback included.
 func (f *memFast) prompts(info map[string]any, base, tok string) {
 	if f == nil {
 		return
 	}
-	ask := base + askKeyPath + tok
-	info["ask_url"] = ask
-	// one paste does everything: send the memory now, then save the fast paths
+	info["ask_url"] = base + askKeyPath + tok
 	if mu, ok := info["memory_url"].(string); ok {
 		info["prompt"] = connectAndSendPrompt(base, tok, mu)
 		delete(info, "memory_prompt")
-		return
 	}
-	info["prompt"] = fastConnectorPrompt(base, tok)
 }
 
 // connectAndSendPrompt is the single thing an attendee pastes into their agent after
 // pairing: it sends what the agent remembers about them (by script, nothing about other
-// people), saves the two fast paths, and stops with a defined reply.
+// people), saves the fast paths (and the MCP fallback for the full schedule), and stops with
+// a defined reply.
 func connectAndSendPrompt(base, tok, memoryURL string) string {
 	return "Connect me to HackGT 13 and send it what you remember about me. The links below contain my private key: keep them secret and never show them in chat.\n" +
 		"Be fast: no narration, no questions, no exploring.\n\n" +
@@ -1058,19 +1210,10 @@ func connectAndSendPrompt(base, tok, memoryURL string) string {
 		"STEP 2, save this as my HackGT 13 skill:\n" +
 		"- HackGT questions: make ONE HTTP GET to " + base + nowKeyPath + tok + " and answer from the JSON it returns (what's on now and next, how many people are here, and my profile).\n" +
 		"- Questions about me (\"what do you know about me\", \"what was I working on\"): make ONE HTTP POST to " + base + askKeyPath + tok +
-		" with the JSON body {\"q\": \"<my question>\"} and answer from the snippets of my own notes it returns.\n" +
+		" with the JSON body {\"q\": \"<my question>\"} and answer from the snippets of my own notes it returns. If its status is no_match, or weak_match and the snippets don't answer it, say you don't know.\n" +
 		"- Don't list tools, don't do an MCP handshake, don't make other calls first.\n" +
+		"- Only if those don't cover the question (say, what's on later today or tomorrow): the MCP server at " + base + mcpKeyPath + tok +
+		" has the full schedule (get_schedule with when=today or when=all) and ask_my_memory.\n" +
 		"- Whenever I say \"update my HackGT memory\", run the STEP 1 script again.\n\n" +
 		"STEP 3: reply with the KB sent, then tell me what's happening at HackGT right now."
-}
-
-func fastConnectorPrompt(base, tok string) string {
-	return "Save this as my HackGT 13 skill. These links contain my private key: keep them secret and never show them in chat.\n" +
-		"FAST PATH for HackGT questions: make ONE HTTP GET to " + base + nowKeyPath + tok +
-		" and answer from the JSON it returns (what's on now and next, how many people are here, and my profile).\n" +
-		"QUESTIONS ABOUT ME (\"what do you know about me\", \"what was I working on\", \"what did I say about X\"): make ONE HTTP POST to " + base + askKeyPath + tok +
-		" with the JSON body {\"q\": \"<my question>\"} and answer from the snippets of my own notes it returns.\n" +
-		"Don't list tools, don't do an MCP handshake, don't make other calls first.\n" +
-		"Only if those don't cover the question: the MCP server at " + base + mcpKeyPath + tok + " has the full schedule (get_schedule with when=all) and ask_my_memory.\n" +
-		"Now tell me what's happening at HackGT right now."
 }

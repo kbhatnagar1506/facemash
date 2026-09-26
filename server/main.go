@@ -510,8 +510,10 @@ func main() {
 	}
 	if acct != nil {
 		acct.fast = openMemFast(acct) // MAPI_READ_URL/MAPI_WRITE_URL + a tenant key; nil (off) otherwise
+		acct.jev = openJev(acct)      // JEV_API_KEY(_FILE); nil (off) otherwise
 		mountAuth(mux, clientIDs, acct, originOK)
 		mountMuse(mux, acct, hub, *eventFile, base, originOK)
+		mountJev(mux, acct, acct.jev)
 		if *devLogin {
 			mountDevLogin(mux, acct)
 		}

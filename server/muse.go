@@ -18,10 +18,12 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net"
 	"net/http"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -29,24 +31,51 @@ import (
 )
 
 const (
-	museLabel    = "muse"
-	tokenPrefix  = "gtq_"
-	pairPrefix   = "gtqp_"
-	mcpKeyPath   = "/api/mcp/t/"    // + token: the connector URL carries its own key
-	nowKeyPath   = "/api/now/t/"    // + token: the one-GET fast path
-	memKeyPath   = "/api/memory/t/" // + token: where an agent sends what it remembers
-	maxMemory    = 25 << 20         // bytes; uploads go straight to this server (Vercel's proxy caps bodies near 4.5 MB)
-	pairTTL      = 10 * time.Minute
-	mcpVersion   = "2025-06-18"
-	eventTZ      = "America/New_York"
-	maxMCPBody   = 64 * 1024
-	serverTitle  = "HackGT 13"
-	serverSlug   = "hackgt13"
-	serverVer    = "1.0.0"
-	instructions = "Tools for a HackGT 13 attendee (Georgia Tech's hackathon at the Klaus Advanced Computing Building, Sept 25-27 2026). " +
+	museLabel   = "muse"
+	tokenPrefix = "gtq_"
+	pairPrefix  = "gtqp_"
+	mcpKeyPath  = "/api/mcp/t/"    // + token: the connector URL carries its own key
+	nowKeyPath  = "/api/now/t/"    // + token: the one-GET fast path
+	memKeyPath  = "/api/memory/t/" // + token: where an agent sends what it remembers
+	maxMemory   = 25 << 20         // bytes; uploads go straight to this server (Vercel's proxy caps bodies near 4.5 MB)
+	pairTTL     = 10 * time.Minute
+	mcpVersion  = "2025-06-18"
+	eventTZ     = "America/New_York"
+	maxMCPBody  = 64 * 1024
+	// one HTTP request runs at most this many tool calls (a JSON-RPC batch can carry hundreds)
+	maxBatchCalls = 4
+	// uploads, per person: one at a time, a burst of 6 then one every 30 s. In all: at most 4
+	// being read at once (each can be 25 MB), and one big one (over 1 MB) being parsed and
+	// redacted at a time, which is ~0.5 s of CPU per MB: the game always keeps a core.
+	uploadBurst      = 6
+	uploadEvery      = 30 * time.Second
+	uploadsAtOnce    = 4
+	bigUploadsAtOnce = 1
+	bigUpload        = 1 << 20
+	maxLabel         = 300 // bytes of an MCP request's log label
+	serverTitle      = "HackGT 13"
+	serverSlug       = "hackgt13"
+	serverVer        = "1.0.0"
+	instructions     = "Tools for a HackGT 13 attendee (Georgia Tech's hackathon at the Klaus Advanced Computing Building, Sept 25-27 2026). " +
 		"Use get_schedule for what's happening and when, get_my_profile for the person you're helping (their name, bean avatar and where they were last in the event's virtual campus), " +
 		"and get_whos_here for how many people are in the virtual campus and the Klaus atrium right now. Times are US Eastern."
 )
+
+// uploadSlotWait: how long an upload waits for a free slot before "busy, try again".
+var uploadSlotWait = 10 * time.Second
+
+// takeSlot waits up to uploadSlotWait for room in ch; false: none came (or the client left).
+func takeSlot(ctx context.Context, ch chan struct{}) bool {
+	t := time.NewTimer(uploadSlotWait)
+	defer t.Stop()
+	select {
+	case ch <- struct{}{}:
+		return true
+	case <-t.C:
+	case <-ctx.Done():
+	}
+	return false
+}
 
 var supportedMCP = []string{"2025-06-18", "2025-03-26", "2024-11-05"}
 
@@ -435,7 +464,20 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 				return
 			}
 			var out []any
+			toolCalls := 0
 			for _, m := range batch {
+				var peek struct {
+					Method string          `json:"method"`
+					ID     json.RawMessage `json:"id"`
+				}
+				if json.Unmarshal(m, &peek) == nil && peek.Method == "tools/call" {
+					if toolCalls++; toolCalls > maxBatchCalls {
+						if len(peek.ID) > 0 && string(peek.ID) != "null" {
+							out = append(out, rpcError(peek.ID, -32600, fmt.Sprintf("at most %d tool calls per request: send the rest separately", maxBatchCalls)))
+						}
+						continue
+					}
+				}
 				if resp := handleRPC(r.Context(), c, m); resp != nil {
 					out = append(out, resp)
 				}
@@ -526,6 +568,13 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 	mux.HandleFunc(nowKeyPath, nowHandler)
 
 	// an agent sends what it remembers about its person (their choice: the page asks first)
+	uploads := newKeyLimiter(uploadBurst, uploadEvery, 1)
+	reading := make(chan struct{}, uploadsAtOnce)
+	parsingBig := make(chan struct{}, bigUploadsAtOnce)
+	busy := func(w http.ResponseWriter) {
+		w.Header().Set("Retry-After", "10")
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "busy: send it again in a few seconds"})
+	}
 	memoryHandler := func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost && r.Method != http.MethodPut {
 			w.Header().Set("Allow", "POST")
@@ -537,6 +586,18 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 			unauthorized(w)
 			return
 		}
+		release, wait, ok := uploads.acquire(fastWho{c.tenant, c.id})
+		if !ok {
+			w.Header().Set("Retry-After", strconv.Itoa(max(1, int(math.Ceil(wait.Seconds())))))
+			writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "you just sent your memory; wait a moment before sending it again"})
+			return
+		}
+		defer release()
+		if !takeSlot(r.Context(), reading) {
+			busy(w)
+			return
+		}
+		defer func() { <-reading }()
 		start := time.Now()
 		body, err := io.ReadAll(io.LimitReader(r.Body, maxMemory+1))
 		label := fmt.Sprintf("POST /api/memory %.1fKB", float64(len(body))/1024)
@@ -548,6 +609,13 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 		if len(body) > maxMemory {
 			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "over 25 MB: send only the memory files, not everything"})
 			return
+		}
+		if len(body) > bigUpload {
+			if !takeSlot(r.Context(), parsingBig) {
+				busy(w)
+				return
+			}
+			defer func() { <-parsingBig }()
 		}
 		var obj map[string]any
 		if json.Unmarshal(body, &obj) != nil || obj == nil {
@@ -579,7 +647,8 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "try again in a moment"})
 			return
 		}
-		acc.fast.uploaded(c.tenant, c.id, obj) // and into their private memory index, in the background
+		acc.fast.uploaded(ctx, c.tenant, c.id) // and into their private memory index, in the background
+		acc.jev.suggest(c.tenant, c.id, obj)   // and an outfit for their bean, picked from it
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "kb": float64(len(body)*10/1024) / 10, "redacted": redacted})
 	}
 	mux.HandleFunc("/api/memory", memoryHandler)
@@ -611,6 +680,7 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 				writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "try again in a moment"})
 				return
 			}
+			acc.jev.forget(ctx, acc.tenant, id)
 			if err := acc.store.DeleteMemory(ctx, acc.tenant, id); err != nil {
 				writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "try again in a moment"})
 				return
@@ -966,10 +1036,15 @@ func handleRPC(ctx context.Context, c *museCaller, raw json.RawMessage) any {
 		json.Unmarshal(m.Params, &p)
 		tool = " " + p.Name
 	}
-	if c.label != "" {
-		c.label += ", "
+	if len(c.label) < maxLabel {
+		if c.label != "" {
+			c.label += ", "
+		}
+		c.label += m.Method + tool
+		if len(c.label) >= maxLabel {
+			c.label = fastHead(c.label, maxLabel) + "…"
+		}
 	}
-	c.label += m.Method + tool
 	if m.Method == "" { // a response to something we never sent
 		return nil
 	}
