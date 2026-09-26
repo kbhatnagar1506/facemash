@@ -1,5 +1,4 @@
 import { Architecture } from './hall/Architecture'
-import { Crowd } from './hall/Crowd'
 import { Decor } from './hall/Decor'
 
 // The HackGT hall is its own multiplayer room: the Klaus atrium, rebuilt from
@@ -17,7 +16,6 @@ export function HackGTHall({ active }: { active: boolean }) {
       <pointLight position={[0, 4.2, 24]} intensity={active ? 25 : 0} distance={16} decay={1.6} color="#fff4e0" />
       <Architecture />
       <Decor active={active} />
-      {active && <Crowd />}
     </group>
   )
 }
