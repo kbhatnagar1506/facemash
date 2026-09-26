@@ -361,13 +361,13 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
     const hall = fix && geoCfg ? toHall(geoCfg, fix.lat, fix.lon) : null
     const k = kf.current
     postSample({
-      name, status, lat: fix?.lat, lon: fix?.lon, acc: fix?.acc, hall,
+      status, lat: fix?.lat, lon: fix?.lon, acc: fix?.acc, hall,
       est: k ? [+k.x.toFixed(2), +k.z.toFixed(2), +Math.sqrt(k.p).toFixed(1)] : null,
       motion: motionStatusRef.current, steps: stepCount.current,
       stride: +learn.current.stride.toFixed(2), bias: +((learn.current.bias * 180) / Math.PI).toFixed(0),
       where,
     })
-  }, [fix, status, live, room, geoCfg, name])
+  }, [fix, status, live, room, geoCfg])
   const calibrating = useMemo(() => new URLSearchParams(location.search).has('calibrate'), [])
 
   // Where to put the player back on campus when they leave the hall.
@@ -516,7 +516,7 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
           <Calibrate
             fix={fix}
             spots={CALIBRATION_SPOTS}
-            onMark={(label) => fix && postSample({ name, label, status, lat: fix.lat, lon: fix.lon, acc: fix.acc })}
+            onMark={(label) => fix && postSample({ label, status, lat: fix.lat, lon: fix.lon, acc: fix.acc })}
             onApply={(c) => {
               save('gt.geo', c)
               setGeoCfg(c)
@@ -582,11 +582,15 @@ export default function App() {
   )
 }
 
+/** Positions only (the server needs your session, and never stores who you are). */
 function postSample(s: Record<string, unknown>) {
+  const sample = { ...s }
+  delete sample.name
   fetch('/api/geo/samples', {
     method: 'POST',
+    credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...s, t: new Date().toISOString(), ua: navigator.userAgent.slice(0, 80) }),
+    body: JSON.stringify({ ...sample, t: new Date().toISOString(), ua: navigator.userAgent.slice(0, 80) }),
   }).catch(() => {})
 }
 
