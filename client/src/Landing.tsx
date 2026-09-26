@@ -337,7 +337,7 @@ export function Landing() {
         <section className="beat beat-hero" data-beat="hero">
           <div className="copy">
             <h1 className="rv">
-              <Ln k="h">Think about your best friend.</Ln>
+              <Ln k="h">Imagine your loved ones.</Ln>
             </h1>
           </div>
           <div className="scroll-cue" aria-hidden="true" ref={(el) => void (shared.cue = el)} />
@@ -346,8 +346,8 @@ export function Landing() {
         <section className="beat beat-story" data-beat="friend">
           <div className="copy">
             <p className="rv">
-              <Ln k="b">{'Chances are you had no intention of meeting them, it was basically an accident. Same for your partner, your co-founder, the person who changed your career –'}</Ln>{' '}
-              <Ln k="d">almost every relationship that matters, you got _by chance_.</Ln>
+              <Ln k="b">{'Your closest friend. Your partner. The co-founder who took the leap with you. The mentor who opened a door –'}</Ln>{' '}
+              <Ln k="d">almost none of them were planned. You met them _by accident_.</Ln>
             </p>
           </div>
         </section>
@@ -355,10 +355,10 @@ export function Landing() {
         <section className="beat beat-story" data-beat="small">
           <div className="copy">
             <p className="rv">
-              <Ln k="b">That used to be fine because _life was small_. You saw the same faces every day and serendipity did the work.</Ln>
+              <Ln k="b">For most of history, accidents were enough. You grew up among the same _few hundred faces_, and chance did the introducing.</Ln>
             </p>
             <p className="rv">
-              <Ln k="d">It doesn’t anymore.</Ln>
+              <Ln k="d">The room got bigger.</Ln>
             </p>
           </div>
         </section>
@@ -366,15 +366,15 @@ export function Landing() {
         <section className="beat beat-story beat-tall" data-beat="crowd">
           <div className="copy">
             <p className="rv">
-              <Ln k="lead">There are</Ln> <Ln k="num">1,000+</Ln>{' '}
+              <Ln k="lead">Right now there are</Ln> <Ln k="num">1,000+</Ln>{' '}
               <Ln k="b">
                 {
-                  'people at HackGT right now, and there’s probably a handful of them who are _exactly who you need_ – someone building the thing you dream about, someone who’d end up being a close friend for the next twenty years.'
+                  'people at HackGT, and a few of them are _exactly who you need_ – someone building the thing you keep dreaming about, someone you’ll still be calling in twenty years.'
                 }
               </Ln>
             </p>
             <p className="rv">
-              <Ln k="b">And honestly you will _walk past every single one of them_, not because they’re hiding but because there’s no way to know they’re there and no natural way to find out.</Ln>
+              <Ln k="b">And you’ll probably _walk right past them_. Not because they’re hiding, but because nothing tells you they’re there.</Ln>
             </p>
           </div>
         </section>
@@ -382,7 +382,7 @@ export function Landing() {
         <section className="beat beat-statement" data-beat="strangers">
           <div className="copy">
             <p className="rv">
-              <Ln k="s">Modern life didn’t really give us more connection, it gave us _more strangers_.</Ln>
+              <Ln k="s">We didn’t get more connected. We got _more strangers_.</Ln>
             </p>
           </div>
         </section>
@@ -390,8 +390,8 @@ export function Landing() {
         <section className="beat beat-story" data-beat="bug">
           <div className="copy">
             <p className="rv">
-              <Ln k="d">{'One of us has been to 33 hackathons and it’s the same story every time –'}</Ln>{' '}
-              <Ln k="b">you find out on the Sunday afternoon that the person who had already fixed the exact bug you were stuck on was sat _two tables away_ all weekend.</Ln>
+              <Ln k="d">{'Every hackathon ends the same way –'}</Ln>{' '}
+              <Ln k="b">on Sunday you find out the person who already fixed your exact bug was sitting _two tables away_ all weekend.</Ln>
             </p>
           </div>
         </section>
@@ -399,10 +399,10 @@ export function Landing() {
         <section className="beat beat-story" data-beat="apps">
           <div className="copy">
             <p className="rv">
-              <Ln k="d">We’ve all tried the event networking apps.</Ln>
+              <Ln k="d">Networking apps tried.</Ln>
             </p>
             <p className="rv">
-              <Ln k="b">{'You get a directory and a percentage match, nobody opens them during the actual event, and {{“87% match”}} doesn’t tell you what to say to someone.'}</Ln>
+              <Ln k="b">{'A directory, a {{“87% match”}}, and nobody opens them once the event starts. A percentage never told anyone what to say.'}</Ln>
             </p>
           </div>
         </section>
@@ -410,8 +410,8 @@ export function Landing() {
         <section className="beat beat-finale" data-beat="finale">
           <div className="copy">
             <p className="rv">
-              <Ln k="lead">We wanted something that works while your phone stays in your pocket and your head stays up, and where the end result is</Ln>{' '}
-              <Ln k="d">two people who’d both be glad to meet actually talking _face to face_,</Ln> <Ln k="b">not yet another chat app.</Ln>
+              <Ln k="lead">So we built something that works while your phone stays in your pocket. Your agents talk first, and when it’s worth it,</Ln>{' '}
+              <Ln k="d">two people meet _face to face_</Ln> <Ln k="b">with something real to say.</Ln>
             </p>
             <div className="ctas" data-ui="">
               <a className="btn btn-primary" href="/avatar">

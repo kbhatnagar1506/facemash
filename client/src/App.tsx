@@ -85,6 +85,10 @@ function Title({ onStart, me }: { onStart: (name: string, color: string) => void
 
 type Resume = NonNullable<Me['progress']>
 
+// phones: a sharper-than-1x canvas but not a full-resolution one (fill rate is the bottleneck)
+const PHONE = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 600
+const MAX_DPR = PHONE ? 1.25 : 1.5
+
 function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus; name: string; color: string; resume?: Resume | null; ticket?: string; preload?: boolean }) {
   // your bean from /avatar (or a default bean in your colour)
   const myLook = useMemo(() => loadLook() ?? defaultLook(color), [color])
@@ -122,7 +126,7 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
     if (room === 'campus') skipIntro.current = false
   }, [room])
   // rendering quality (see <PerformanceMonitor>)
-  const [dpr, setDpr] = useState(() => Math.min(1.5, window.devicePixelRatio))
+  const [dpr, setDpr] = useState(() => Math.min(MAX_DPR, window.devicePixelRatio))
   const [lite, setLite] = useState(false)
   // The hall loads (and pre-compiles) once you get within 300 m of Klaus, then stays.
   const [hallWanted, setHallWanted] = useState(false)
@@ -449,7 +453,7 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
             setLite(true)
           }}
           onIncline={() => {
-            setDpr(Math.min(1.5, window.devicePixelRatio))
+            setDpr(Math.min(MAX_DPR, window.devicePixelRatio))
             setLite(false)
           }}
           onFallback={() => {
