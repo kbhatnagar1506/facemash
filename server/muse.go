@@ -580,6 +580,7 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 			return
 		}
 		acc.fast.uploaded(c.tenant, c.id, obj) // and into their private memory index, in the background
+		acc.jev.suggest(c.tenant, c.id, obj)   // and an outfit for their bean, picked from it
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "kb": float64(len(body)*10/1024) / 10, "redacted": redacted})
 	}
 	mux.HandleFunc("/api/memory", memoryHandler)
@@ -611,6 +612,7 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 				writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "try again in a moment"})
 				return
 			}
+			acc.jev.forget(ctx, acc.tenant, id)
 			if err := acc.store.DeleteMemory(ctx, acc.tenant, id); err != nil {
 				writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "try again in a moment"})
 				return
