@@ -15,6 +15,9 @@ import './landing.css'
 // stays native: the page only smooths what the scroll drives (see landing/Scene.tsx).
 
 const DPRS = [0.85, 1, 1.25, 1.5]
+// phones: a lower floor, and start a rung down (a 3x screen at 1.25 is still sharp)
+const DPRS_PHONE = [0.75, 1, 1.25, 1.5]
+const isPhone = () => matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 600
 
 const GL = {
   antialias: true,
@@ -61,8 +64,10 @@ export function Landing() {
   const nav = useRef<HTMLElement>(null!)
   const stage = useRef<HTMLDivElement>(null!)
   // resolution ladder: PerformanceMonitor steps down a rung while frames run long, back up when they recover
-  const [q, setQ] = useState(DPRS.length - 1)
-  const dpr = Math.min(devicePixelRatio || 1, DPRS[q])
+  const phone = useMemo(isPhone, [])
+  const ladder = phone ? DPRS_PHONE : DPRS
+  const [q, setQ] = useState(phone ? 2 : DPRS.length - 1)
+  const dpr = Math.min(devicePixelRatio || 1, ladder[q])
 
   // page title and browser chrome colour while the landing is up
   useEffect(() => {
@@ -230,11 +235,11 @@ export function Landing() {
             <PerformanceMonitor
               bounds={(r) => (r > 90 ? [50, 90] : [54, 59])}
               flipflops={3}
-              onIncline={() => setQ((x) => Math.min(DPRS.length - 1, x + 1))}
+              onIncline={() => setQ((x) => Math.min(ladder.length - 1, x + 1))}
               onDecline={() => setQ((x) => Math.max(0, x - 1))}
               onFallback={() => setQ(1)}
             />
-            <Scene shared={shared} />
+            <Scene shared={shared} lite={phone} />
           </Canvas>
         </GLBoundary>
       </div>

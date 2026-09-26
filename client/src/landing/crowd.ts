@@ -33,7 +33,7 @@ export interface Crowd {
   up: number
 }
 
-export function makeCrowd(max = 420): Crowd {
+export function makeCrowd(max = 420, latMax = Infinity): Crowd {
   const r = rng(1307)
   const S = 1.45
   const cell = 1.5
@@ -71,6 +71,8 @@ export function makeCrowd(max = 420): Crowd {
     else grid.set(k, [pts.length])
     pts.push({ x: o.x, z: o.z, d, lat })
   }
+  // laid out in full first, so trimming the far sides leaves the rest exactly where it was
+  if (latMax < Infinity) pts.splice(0, pts.length, ...pts.filter((p) => Math.abs(p.lat) <= latMax))
   const n = pts.length
   const f = () => new Float32Array(n)
   const c: Crowd = {

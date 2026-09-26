@@ -115,7 +115,7 @@ const BUMP = 2
 const CHEER = 3
 const TOGETHER = 4
 
-function createWorld() {
+function createWorld(lite: boolean) {
   const o = ps()
   // the friend: just off the path, busy with their boba, facing away from the lane
   sample(BEAT_D.friend - 1.0, o)
@@ -190,7 +190,8 @@ function createWorld() {
     fixer,
     match: Object.assign(match, { md: MATCH_HOME, mv: 0, mdir: -1, midle: 3 }),
     fin: { state: APART, settle: 0, t0: 0, heroT: FIN_D, matchT: MATCH_HOME, armed: true, heroCheered: false, matchCheered: false },
-    crowd: makeCrowd(),
+    // phones: only the part of the crowd a portrait frame can see
+    crowd: makeCrowd(420, lite ? 12 : Infinity),
     crowdOn: false, // the crowd meshes are currently drawn
     thread: { drawn: s1(), sag: s1(), plucked: false, pulse: 0, bugOn: false, fixOn: false, bugPop: s1(), fixPop: s1() },
     card: { mode: 0, on: false, x: s1(), y: s1(2.6), z: s1(), vx: 0, vy: 0, vz: 0, rx: s1(), pop: s1(), dim: s1(1), yaw: 0 },
@@ -743,7 +744,7 @@ function useDirector(w: World, shared: Shared) {
     const sun = w.refs.sun.current
     if (sun) {
       _v.set(P.x, 0, P.z)
-      const texel = 22 / 1024
+      const texel = 22 / (sun.shadow.mapSize.x || 1024)
       const ru = _v.dot(SUN_R)
       const uu = _v.dot(SUN_U)
       _v.addScaledVector(SUN_R, Math.round(ru / texel) * texel - ru).addScaledVector(SUN_U, Math.round(uu / texel) * texel - uu)
@@ -1104,7 +1105,7 @@ function Trees() {
   )
 }
 
-function CrowdMeshes({ w }: { w: World }) {
+function CrowdMeshes({ w, lite }: { w: World; lite: boolean }) {
   const c: Crowd = w.crowd
   const geo = useMemo(() => {
     const b = new THREE.CapsuleGeometry(0.64, 0.66, 4, 12)
@@ -1138,7 +1139,7 @@ function CrowdMeshes({ w }: { w: World }) {
   }, [c, w])
   return (
     <>
-      <instancedMesh ref={w.refs.crowdBody} args={[geo.b, undefined, c.n]} frustumCulled={false} castShadow>
+      <instancedMesh ref={w.refs.crowdBody} args={[geo.b, undefined, c.n]} frustumCulled={false} castShadow={!lite}>
         <meshStandardMaterial roughness={0.5} />
       </instancedMesh>
       <instancedMesh ref={w.refs.crowdVisor} args={[geo.v, undefined, c.n]} frustumCulled={false}>
@@ -1249,9 +1250,10 @@ function MeetRing({ w }: { w: World }) {
   )
 }
 
-function Sun({ w }: { w: World }) {
+function Sun({ w, lite }: { w: World; lite: boolean }) {
   const sun = w.refs.sun
-  const size = 1024
+  // phones: the crowd keeps its soft blobs, so the sun only has a few casters to draw
+  const size = lite ? 768 : 1024
   const target = useMemo(() => new THREE.Object3D(), [])
   useLayoutEffect(() => {
     if (sun.current) sun.current.target = target
@@ -1279,8 +1281,8 @@ function Sun({ w }: { w: World }) {
   )
 }
 
-export function Scene({ shared }: { shared: Shared }) {
-  const w = useMemo(() => createWorld(), [])
+export function Scene({ shared, lite = false }: { shared: Shared; lite?: boolean }) {
+  const w = useMemo(() => createWorld(lite), [lite])
   if (import.meta.env.DEV) (window as unknown as { __world: unknown }).__world = w
   useDirector(w, shared)
   const mt = w.match
@@ -1288,7 +1290,7 @@ export function Scene({ shared }: { shared: Shared }) {
     <>
       <color attach="background" args={[PAPER]} />
       <fog attach="fog" args={[PAPER, FOG_NEAR[0], FOG_FAR[0]]} />
-      <Sun w={w} />
+      <Sun w={w} lite={lite} />
       <Ground />
       <Trees />
       <HeroRig w={w} />
@@ -1296,7 +1298,7 @@ export function Scene({ shared }: { shared: Shared }) {
       {w.ring.map((r, i) => (
         <NpcRig key={i} npc={r} look={SMALL[i]} />
       ))}
-      <CrowdMeshes w={w} />
+      <CrowdMeshes w={w} lite={lite} />
       <Tables w={w} />
       <NpcRig npc={w.stuck} look={STUCK} />
       <NpcRig npc={w.fixer} look={FIXER} />
