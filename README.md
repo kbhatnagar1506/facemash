@@ -25,6 +25,20 @@ cd server && go run . -addr :8080     # serves ../client/dist + /ws + /api
 
 Set `ALLOWED_ORIGINS=https://your.domain` if the page and server are on different origins.
 
+## Organizer admin API
+
+`/api/admin/*` (see `server/admin.go`) is for organizers only: a signed-in account whose email is listed in
+`ADMIN_EMAILS` (comma-separated, case-insensitive), e.g. `ADMIN_EMAILS=krishna@profitwise.app`. Unset or empty: every
+admin request is refused (403). The same list lets an organizer start a test agent talk (`/api/talk/encounter`).
+Accounts with `@facemash.test` emails are hidden from the admin views unless `?include_test=true`.
+
+Clearing test accounts (dry run by default; only emails ending in `@facemash.test` are ever touched):
+
+```bash
+docker exec game /app/server -purge-test-accounts -session-key /data/session.key                 # counts only
+docker exec game /app/server -purge-test-accounts -dry-run=false -session-key /data/session.key   # deletes
+```
+
 ## Edit the HackGT card
 
 `server/event.json` is re-read on every request. Update `when`, `schedule`, etc. without restarting.

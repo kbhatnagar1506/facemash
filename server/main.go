@@ -463,6 +463,9 @@ func main() {
 		mintTestSession(*sessionFor, *keyFile)
 		return
 	}
+	if adminCLI(*keyFile) { // -purge-test-accounts (admin.go)
+		return
+	}
 
 	// ALLOWED_ORIGINS=https://gt.example.com,https://gt-campus-quest*.vercel.app
 	// (a * matches anything, e.g. Vercel preview deploys). Unset: same-host requests
@@ -522,6 +525,7 @@ func main() {
 		mountJev(mux, acct, acct.jev)
 		acct.talk = openAgentTalk(acct, hubSink{hub}, *talkConfig) // GEMINI_API_KEY(_FILE) + JEV_API_KEY(_FILE)
 		mountTalk(mux, acct, acct.talk, originOK, *devTalk)
+		mountAdmin(mux, acct, hub) // /api/admin/* for organizers in ADMIN_EMAILS (admin.go)
 		if *devLogin {
 			mountDevLogin(mux, acct)
 		}
