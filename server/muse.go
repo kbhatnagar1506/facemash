@@ -32,6 +32,7 @@ const (
 	museLabel    = "muse"
 	tokenPrefix  = "gtq_"
 	pairPrefix   = "gtqp_"
+	mcpKeyPath   = "/api/mcp/t/" // + token: the connector URL carries its own key
 	pairTTL      = 10 * time.Minute
 	mcpVersion   = "2025-06-18"
 	eventTZ      = "America/New_York"
@@ -302,9 +303,13 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 	}
 	// who's calling: a bearer token from the app (never a session cookie, which a
 	// cross-site page could ride along on)
+	// The token comes as "Authorization: Bearer gtq_…", or inside the connector URL
+	// (/api/mcp/t/gtq_…) so an agent only has to register one URL: nothing to sign in to.
 	caller := func(r *http.Request) (*museCaller, error) {
-		auth := r.Header.Get("Authorization")
-		tok, ok := strings.CutPrefix(auth, "Bearer ")
+		tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if inURL, found := strings.CutPrefix(r.URL.Path, mcpKeyPath); found {
+			tok, ok = inURL, true
+		}
 		if !ok || !strings.HasPrefix(tok, tokenPrefix) {
 			return nil, errBadToken
 		}
@@ -322,7 +327,7 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 	}
 
 	// --- MCP ---
-	mux.HandleFunc("/api/mcp", func(w http.ResponseWriter, r *http.Request) {
+	mcp := func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost:
 		case http.MethodGet, http.MethodDelete:
@@ -376,7 +381,9 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 		}
 		w.Header().Set("MCP-Protocol-Version", mcpVersion)
 		writeJSON(w, http.StatusOK, resp)
-	})
+	}
+	mux.HandleFunc("/api/mcp", mcp)
+	mux.HandleFunc(mcpKeyPath, mcp)
 
 	// --- REST (the same tools) ---
 	for _, t := range museTools {
@@ -510,7 +517,8 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 		}
 		log.Printf("muse: #%d paired an agent", p.id)
 		info := connectInfo(base, tok)
-		delete(info, "prompt")
+		info["connector_url"] = base + mcpKeyPath + tok
+		info["prompt"] = connectorPrompt(base + mcpKeyPath + tok)
 		info["token_type"] = "Bearer"
 		info["next"] = "Save token as a secret credential (never show it in chat). Use it as \"Authorization: Bearer <token>\" for the MCP server at " + base + "/api/mcp or the REST API described at " + base + "/api/openapi.json."
 		writeJSON(w, http.StatusOK, info)
@@ -634,6 +642,13 @@ func pairPrompt(base, code string, exp time.Time) string {
 		"2. The response contains a token. Save it as a secret credential for HackGT 13 (a bearer token). Don't show it to me or repeat it in chat.\n" +
 		"3. Build a custom integration to HackGT 13: its MCP server URL is " + base + "/api/mcp (OpenAPI document: " + base + "/api/openapi.json), and every request uses that token as \"Authorization: Bearer <token>\".\n" +
 		"4. Then tell me what's happening at HackGT right now."
+}
+
+// connectorPrompt is the one line an agent needs: a URL to register, nothing to fetch first.
+func connectorPrompt(url string) string {
+	return "Add a custom connector for HackGT 13. It's an MCP server at " + url +
+		" (streamable HTTP; the key is part of the URL, so there's no sign-in). " +
+		"Keep the URL private. Then tell me what's happening at HackGT right now."
 }
 
 // connectInfo is what the app shows (and what you'd paste into Muse).

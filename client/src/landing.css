@@ -983,3 +983,9 @@ html.scroll-page #root {
   display: inline-block;
   margin-top: 6px;
 }
+.landing .muse-fine {
+  margin: 16px 0 0;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  line-height: 1.45;
+}

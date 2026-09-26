@@ -10,24 +10,40 @@ import './landing.css'
 //    phone, or a copy button if Muse is on this device. Your agent trades the code for a
 //    real token; this page notices and says you're connected.
 //  - Opened from the QR (the code is in the #fragment, so it never reaches a server log):
-//    the instructions for Muse, ready to copy.
+//    this page redeems the code itself, right away in the phone's own browser, and hands
+//    over one line for Muse: a connector URL with the key inside. Muse only registers a
+//    URL; it never has to browse, POST or sign in (its browser agent is slow).
 
 const MUSE_URL = 'https://muse.ai'
 const PAIR = /^#?(gtqp_[A-Za-z0-9_-]{16,})$/
 
-/** The instructions an agent needs; the same steps the server hands out. */
-function promptFor(code: string, expires?: Date) {
-  const base = location.origin
-  const when = expires
-    ? `It works once and expires at ${expires.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.`
-    : 'It works once and expires 10 minutes after it was made.'
-  return [
-    'Connect to my HackGT 13 account.',
-    `1. Send an HTTP POST to ${base}/api/muse/claim with the JSON body {"code": "${code}"}. ${when}`,
-    "2. The response contains a token. Save it as a secret credential for HackGT 13 (a bearer token). Don't show it to me or repeat it in chat.",
-    `3. Build a custom integration to HackGT 13: its MCP server URL is ${base}/api/mcp (OpenAPI document: ${base}/api/openapi.json), and every request uses that token as "Authorization: Bearer <token>".`,
-    "4. Then tell me what's happening at HackGT right now.",
-  ].join('\n')
+type Claimed = { prompt: string; connector_url: string }
+
+// redeem each code once, even if the page mounts twice; a reload shows the same result
+const claims = new Map<string, Promise<Claimed>>()
+function claim(code: string): Promise<Claimed> {
+  const key = 'gt.muse.' + code.slice(-12)
+  try {
+    const saved = sessionStorage.getItem(key)
+    if (saved) return Promise.resolve(JSON.parse(saved) as Claimed)
+  } catch {
+    /* private mode */
+  }
+  if (!claims.has(code))
+    claims.set(
+      code,
+      fetch('/api/muse/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) }).then(async (r) => {
+        const body = await r.json().catch(() => null)
+        if (!r.ok) throw new Error(body?.error ?? 'Could not connect. Make a new code in the app.')
+        try {
+          sessionStorage.setItem(key, JSON.stringify(body))
+        } catch {
+          /* fine */
+        }
+        return body as Claimed
+      }),
+    )
+  return claims.get(code)!
 }
 
 async function copy(text: string) {
@@ -89,21 +105,38 @@ function Shell({ children }: { children: React.ReactNode }) {
   )
 }
 
-/** Opened from someone's QR: hand the instructions to Muse. */
+/** Opened from your QR: redeem the code here, then one line for Muse. */
 function Scanned({ code }: { code: string }) {
-  const prompt = promptFor(code)
+  const [got, setGot] = useState<Claimed | null>(null)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    claim(code).then(setGot, (e: Error) => setError(e.message))
+    // the code is spent; keep it out of the address bar (and screenshots of it)
+    history.replaceState(null, '', location.pathname)
+  }, [code])
   return (
     <Shell>
       <section className="muse-card">
         <h1>Connect your Muse</h1>
-        <p className="muse-sub">Copy this, open Muse, paste it and send. Muse links itself to your HackGT 13 account; the code inside works once, for 10 minutes.</p>
-        <pre className="muse-prompt">{prompt}</pre>
-        <div className="muse-actions">
-          <CopyButton text={prompt} />
-          <a className="btn btn-secondary muse-wide" href={MUSE_URL} target="_blank" rel="noopener noreferrer">
-            Open Muse
-          </a>
-        </div>
+        {error ? (
+          <p className="muse-error" role="alert">
+            {error}
+          </p>
+        ) : !got ? (
+          <p className="muse-sub">Linking to your account…</p>
+        ) : (
+          <>
+            <p className="muse-sub">Copy this, open Muse, paste it and send. That's all Muse needs.</p>
+            <pre className="muse-prompt">{got.prompt}</pre>
+            <div className="muse-actions">
+              <CopyButton text={got.prompt} />
+              <a className="btn btn-secondary muse-wide" href={MUSE_URL} target="_blank" rel="noopener noreferrer">
+                Open Muse
+              </a>
+            </div>
+            <p className="muse-fine">The link inside is your personal key: keep it to yourself. You can disconnect it any time in the app.</p>
+          </>
+        )}
       </section>
     </Shell>
   )
@@ -179,14 +212,17 @@ function Pairing() {
     return () => clearInterval(t)
   }, [pair])
 
-  // while a code is out, watch for the agent to claim it
+  // while a code is out: first it gets scanned (redeemed), then Muse makes its first call
+  const [scanned, setScanned] = useState(false)
   useEffect(() => {
-    if (!pair || left === 0) return
+    if (!pair || (left === 0 && !scanned)) return
     const t = setInterval(() => {
       fetch('/api/muse/status', { credentials: 'same-origin' })
         .then((r) => (r.ok ? (r.json() as Promise<Status>) : null))
         .then((s) => {
-          if (s?.connected && s.since && new Date(s.since).getTime() >= madeAt.current - 5000) {
+          if (!s?.connected || !s.since || new Date(s.since).getTime() < madeAt.current - 5000) return
+          setScanned(true)
+          if (s.last_used && new Date(s.last_used).getTime() >= new Date(s.since).getTime()) {
             setStatus(s)
             setPair(null)
           }
@@ -194,7 +230,7 @@ function Pairing() {
         .catch(() => {})
     }, 2500)
     return () => clearInterval(t)
-  }, [pair, left === 0]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pair, left === 0, scanned]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (error)
     return (
@@ -245,6 +281,22 @@ function Pairing() {
       </section>
     )
 
+  if (pair && scanned)
+    return (
+      <section className="muse-card">
+        <Step />
+        <div className="muse-ok" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+        <h1>Scanned</h1>
+        <p className="muse-sub">Now paste it into Muse and send. This turns to connected as soon as Muse checks in.</p>
+        <p className="muse-waiting">Waiting for your Muse…</p>
+        <Onward connected={false} />
+      </section>
+    )
+
   const expired = pair && left === 0
   const mm = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`
   return (
@@ -263,9 +315,8 @@ function Pairing() {
       <p className="muse-timer">{!pair ? 'Making your code…' : expired ? 'This code expired.' : `Works once · expires in ${mm}`}</p>
       {pair && !expired && (
         <div className="muse-actions">
-          <CopyButton text={pair.prompt} primary={false} />
-          <a className="btn btn-secondary muse-wide" href={MUSE_URL} target="_blank" rel="noopener noreferrer">
-            Open Muse
+          <a className="btn btn-secondary muse-wide" href={'/muse#' + pair.code}>
+            Muse is on this device
           </a>
         </div>
       )}

@@ -96,6 +96,17 @@ func TestMCP(t *testing.T) {
 	if unk["error"].(map[string]any)["code"] != -32601.0 {
 		t.Fatalf("unknown method: %v", unk)
 	}
+	// the key can ride in the connector URL instead of a header
+	for path, want := range map[string]int{"/api/mcp/t/" + tok: 200, "/api/mcp/t/gtq_wrong": 401, "/api/mcp/t/": 401} {
+		req, _ := http.NewRequest("POST", srv.URL+path, strings.NewReader(`{"jsonrpc":"2.0","id":9,"method":"tools/list"}`))
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.StatusCode != want {
+			t.Fatalf("POST %s: %d, want %d", path[:14], res.StatusCode, want)
+		}
+	}
 	// a page on another site can't drive it through someone's browser
 	req, _ := http.NewRequest("POST", srv.URL+"/api/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`))
 	req.Header.Set("Authorization", "Bearer "+tok)
@@ -262,7 +273,7 @@ func TestMusePairing(t *testing.T) {
 	}
 	code, got := do("POST", "/api/muse/claim", "", `{"code":"`+pc+`"}`, nil)
 	tok, _ := got["token"].(string)
-	if code != 200 || !strings.HasPrefix(tok, tokenPrefix) || got["mcp"] != "https://site.test/api/mcp" {
+	if code != 200 || !strings.HasPrefix(tok, tokenPrefix) || got["mcp"] != "https://site.test/api/mcp" || got["connector_url"] != "https://site.test/api/mcp/t/"+tok || !strings.Contains(got["prompt"].(string), "/api/mcp/t/"+tok) {
 		t.Fatalf("claim: %d %v", code, got)
 	}
 	if code, _ := rpc(t, srv.URL, tok, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_my_profile"}}`); code != 200 {
