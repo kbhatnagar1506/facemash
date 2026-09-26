@@ -97,12 +97,19 @@ function inBox(x: number, z: number, [x0, z0, x1, z1]: Box, r: number) {
 
 const R = 0.32 // player radius (people are scaled down inside Klaus)
 
-function groundOk(x: number, z: number) {
+/** Furniture you can hop over: every ground block except the stair (index 0). */
+const FURNITURE = GROUND_BLOCKS.slice(1)
+export function onFurniture(x: number, z: number) {
+  return FURNITURE.some((b) => inBox(x, z, b, R))
+}
+
+function groundOk(x: number, z: number, hop = false) {
   if (x < X0 + 0.6 + R || z < Z0 + 0.6 + R || z > Z1 - 0.6 - R) return false
   // East wall: only the entrance doorway lets you out to the exit shell.
   if (x > X1 - 0.6 - R && Math.abs(z - DOORS_Z) > 2.3) return false
   if (x > X1 + 1) return false
-  if (GROUND_BLOCKS.some((b) => inBox(x, z, b, R))) return false
+  if (inBox(x, z, GROUND_BLOCKS[0], R)) return false // the stair: never hop it
+  if (!hop && onFurniture(x, z)) return false
   return !COLUMNS.some(([cx, cz, cr]) => Math.hypot(x - cx, z - cz) < cr + R)
 }
 
@@ -136,7 +143,8 @@ function THREE_clamp(v: number, a: number, b: number) {
  * balcony edge acts as a railing and you can't clip onto the stair from the side.
  */
 export class HallCollider {
-  surface(x: number, z: number, y: number): number | null {
+  /** `hop`: tables, chairs and booths don't block (the player jumps over them). */
+  surface(x: number, z: number, y: number, hop = false): number | null {
     let best: number | null = null
     let bestD = 0.75
     const consider = (h: number | null) => {
@@ -147,13 +155,16 @@ export class HallCollider {
         best = h
       }
     }
-    if (groundOk(x, z)) consider(0)
+    if (groundOk(x, z, hop)) consider(0)
     consider(stairHeight(x, z))
     if (balconyOk(x, z)) consider(L1)
     return best
   }
   blocked(x: number, z: number): boolean {
     return this.surface(x, z, 0) === null
+  }
+  furniture(x: number, z: number): boolean {
+    return onFurniture(x, z)
   }
 }
 

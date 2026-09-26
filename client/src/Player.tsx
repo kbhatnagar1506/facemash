@@ -52,7 +52,12 @@ export function Player({
    * `surface`, when present, makes the world multi-level: it returns the floor height
    * the player would stand on at (x, z) coming from height y, or null if they can't go there.
    */
-  collider: { blocked(x: number, z: number, r?: number): boolean; surface?(x: number, z: number, y: number): number | null }
+  collider: {
+    blocked(x: number, z: number, r?: number): boolean
+    surface?(x: number, z: number, y: number, hop?: boolean): number | null
+    /** True over tables/chairs/booths, which the player hops over instead of stopping. */
+    furniture?(x: number, z: number): boolean
+  }
   net: Net
   info: React.MutableRefObject<PlayerInfo>
   zoom: React.MutableRefObject<number>
@@ -62,6 +67,9 @@ export function Player({
   const pos = useRef(new THREE.Vector2(...start))
   const facing = useRef(0)
   const height = useRef(0) // floor height under the player (stairs/balcony)
+  const hop = useRef(0) // 0 = on the ground; (0, 1] = mid-jump over furniture
+  const hopLen = useRef(1) // metres this jump has to cover (sized to the obstacle)
+  const hopDir = useRef<[number, number]>([0, 1]) // direction of travel when the jump started
   const sendAcc = useRef(0)
   const light = useRef<THREE.DirectionalLight>(null!)
   const yaw = useRef(0) // camera heading in 'inside' view; 0 = camera south of player looking north
@@ -129,6 +137,15 @@ export function Player({
     scene.add(light.current.target)
   }, [scene])
 
+  /** Measure how far the furniture ahead runs along the travel direction, and jump that far. */
+  const startHop = (x: number, z: number) => {
+    const [ux, uz] = hopDir.current
+    let d = 0
+    while (d < 12 && collider.furniture?.(x + ux * d, z + uz * d)) d += 0.1
+    hopLen.current = Math.max(0.8, d + 0.5)
+    hop.current = 0.001
+  }
+
   useFrame((_, rawDt) => {
     const dt = Math.min(rawDt, 0.1)
     const p = pos.current
@@ -183,7 +200,7 @@ export function Player({
       dz = -ix * sn + iz * c
     }
     const moving = dx !== 0 || dz !== 0
-    if (moving) {
+    if (moving && hop.current === 0) {
       const len = Math.hypot(dx, dz)
       const k = view.mode === 'inside' ? (view.scale ?? 1) * 0.8 : 1 // indoor pace, relative to your size
       const running = goal ? gpsDist > 6 : keys.has('ShiftLeft') || keys.has('ShiftRight')
@@ -194,7 +211,16 @@ export function Player({
       // Slide along walls: try the full step, then each axis on its own.
       const tryMove = (nx: number, nz: number) => {
         if (collider.surface) {
-          const h = collider.surface(nx, nz, height.current)
+          let h = collider.surface(nx, nz, height.current, hop.current > 0)
+          // Walked into a table/chair/booth on the ground: jump and pass over it.
+          if (h === null && hop.current === 0 && height.current < 0.1 && collider.furniture?.(nx, nz)) {
+            h = collider.surface(nx, nz, height.current, true)
+            if (h !== null) {
+              const L = Math.hypot(nx - p.x, nz - p.y) || 1
+              hopDir.current = [(nx - p.x) / L, (nz - p.y) / L]
+              startHop(nx, nz)
+            }
+          }
           if (h === null) return false
           height.current = h
         } else if (collider.blocked(nx, nz)) return false
@@ -213,7 +239,27 @@ export function Player({
     state.current.bubble = bubble && performance.now() - bubble.at < 6000 ? bubble.text : undefined
 
     if (!collider.surface) height.current = 0
-    group.current.position.set(p.x, height.current, p.y)
+    // Hop arc sized to the obstacle; if we come down still on furniture, jump again.
+    const ps = view.mode === 'inside' ? (view.scale ?? 1) : 1
+    if (hop.current > 0) {
+      const airSpeed = Math.max(RUN * ps * 0.8, 3) // clear it at a brisk pace even if you let go
+      hop.current += (airSpeed * dt) / hopLen.current
+      {
+        // mid-air: carry across along the jump, so one jump clears the whole obstacle
+        const [ux, uz] = hopDir.current
+        const nx = p.x + ux * airSpeed * dt
+        const nz = p.y + uz * airSpeed * dt
+        if (collider.surface?.(nx, nz, height.current, true) != null) p.set(nx, nz)
+        else hop.current = Math.max(hop.current, 0.999) // hit a wall mid-jump: come down
+      }
+      if (hop.current >= 1) {
+        hop.current = 0
+        if (collider.furniture?.(p.x, p.y)) startHop(p.x, p.y)
+      }
+    }
+    const hopHeight = Math.min(2.6, 0.55 + 0.3 * hopLen.current) * ps // bigger obstacle, bigger jump
+    const lift = hop.current > 0 ? Math.sin(hop.current * Math.PI) * hopHeight : 0
+    group.current.position.set(p.x, height.current + lift, p.y)
     group.current.scale.setScalar(view.mode === 'inside' ? (view.scale ?? 1) : 1)
     group.current.rotation.y = facing.current
     cutawayUniforms.uPlayer.value.set(p.x, 0, p.y)
@@ -253,7 +299,7 @@ export function Player({
     sendAcc.current += dt
     if (sendAcc.current >= 1 / SEND_HZ) {
       sendAcc.current = 0
-      net.move(p.x, p.y, facing.current, moving, height.current)
+      net.move(p.x, p.y, facing.current, moving, height.current + lift)
     }
   })
 
