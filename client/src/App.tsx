@@ -148,18 +148,24 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
   // between fixes, and jumps a person couldn't make (indoor multipath) are ignored
   // unless they persist.
   const kf = useRef<{ x: number; z: number; p: number; t: number; rejects: number } | null>(null)
+  const lastMeas = useRef('')
+  const sticky = useRef(new Map<string, { n: number; at: number }>())
   useEffect(() => {
     // Live location is only used inside the Klaus atrium; campus is always keys.
     if (room !== 'hackgt' || !live || !fix || fix.acc > 60 || !geoCfg) {
       gps.current = null
-      kf.current = null
+      if (room !== 'hackgt' || !live) kf.current = null
       setWhere(null)
       return
     }
     // frozen GPS (same position for >10 s): hand control back to the keys until it moves
     if (fix.since && Date.now() - fix.since > 10000) {
-      gps.current = null
-      setWhere('stuck')
+      // steps keep tracking you through a GPS freeze; without them, the keys take over
+      if (motionActive.current && kf.current) setWhere('in')
+      else {
+        gps.current = null
+        setWhere('stuck')
+      }
       return
     }
     let [x, z] = toHall(geoCfg, fix.lat, fix.lon)
@@ -174,7 +180,23 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
     // keep it inside the building: between the (angled) west and east walls, off the end walls
     z = Math.min(b[3] - 1, Math.max(b[1] + 1, z))
     x = Math.min(eastX(z) - 0.9, Math.max(westX(z) + 0.9, x))
-    const r = fix.acc * fix.acc // measurement variance (m²)
+    // A reading identical to the last one carries no new information (iOS replays cached
+    // fixes), and a coordinate that keeps coming back exactly is a cached Wi-Fi location:
+    // ignore it for a minute. With steps + compass on, GPS only nudges (and only good fixes).
+    const key = `${fix.lat},${fix.lon}`
+    const seen = sticky.current
+    seen.set(key, { n: (seen.get(key)?.n ?? 0) + 1, at: Date.now() })
+    for (const [kk, v] of seen) if (Date.now() - v.at > 60000) seen.delete(kk)
+    if (key === lastMeas.current || (seen.get(key)?.n ?? 0) >= 3) {
+      if (kf.current) setWhere('in')
+      return
+    }
+    lastMeas.current = key
+    if (motionActive.current && kf.current && fix.acc > 15) {
+      setWhere('in')
+      return
+    }
+    const r = fix.acc * fix.acc * (motionActive.current ? 2 : 1) // measurement variance (m²)
     const k = kf.current
     if (!k) kf.current = { x, z, p: r, t: fix.at, rejects: 0 }
     else {
@@ -206,6 +228,8 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
   // fly by comparing the step path with the GPS path over the last ~15 m.
   const [motionOn, setMotionOn] = useState(() => load('gt.motion', false))
   const motionActive = useRef(false)
+  const motionStatusRef = useRef('off')
+  const stepCount = useRef(0)
   const learn = useRef({
     bias: 0, // compass correction (radians)
     stride: 0.7, // metres per step
@@ -232,12 +256,15 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
     },
   })
   const onStep = (headingDeg: number) => {
+    stepCount.current++
     const k = kf.current
-    if (!k || !fix || !geoCfg || room !== 'hackgt') return
-    // which way is compass north / east in the hall's coordinates (from the GPS alignment)
-    const [x0, z0] = toHall(geoCfg, fix.lat, fix.lon)
-    const [xn, zn] = toHall(geoCfg, fix.lat + 1e-5, fix.lon)
-    const [xe, ze] = toHall(geoCfg, fix.lat, fix.lon + 1e-5)
+    if (!k || !geoCfg || room !== 'hackgt') return
+    // which way is compass north / east in the hall's coordinates (from the GPS alignment);
+    // works from the door anchor even before the first GPS fix arrives
+    const ref = fix ?? { lat: 33.7771, lon: -84.3963 }
+    const [x0, z0] = toHall(geoCfg, ref.lat, ref.lon)
+    const [xn, zn] = toHall(geoCfg, ref.lat + 1e-5, ref.lon)
+    const [xe, ze] = toHall(geoCfg, ref.lat, ref.lon + 1e-5)
     const nl = Math.hypot(xn - x0, zn - z0) || 1
     const el = Math.hypot(xe - x0, ze - z0) || 1
     const h = (headingDeg * Math.PI) / 180 + learn.current.bias
@@ -256,6 +283,7 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
   }
   const motionStatus = useMotion(live && room === 'hackgt' && motionOn, onStep)
   motionActive.current = motionStatus === 'on'
+  motionStatusRef.current = motionStatus
   const enableMotion = async () => {
     const ok = await requestMotion()
     setMotionOn(ok)
@@ -263,7 +291,16 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
   }
 
   useEffect(() => {
-    gps.current = null // re-place on the next fix after changing rooms
+    // Walking in through the main doors is a perfect anchor (like Doorstep's entrance
+    // detection): start tracking from exactly there, then steps + GPS take over.
+    if (room === 'hackgt') {
+      kf.current = { x: HALL_SPAWN[0], z: HALL_SPAWN[1], p: 2, t: Date.now(), rejects: 0 }
+      gps.current = null
+    } else {
+      kf.current = null
+      gps.current = null
+    }
+    lastMeas.current = ''
   }, [room])
   // Send what the device reports to the server so the atrium can be mapped from
   // real coordinates (and so we can see why live location isn't moving someone).
@@ -274,7 +311,14 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
     if (now - lastSample.current < 2000 && status === 'live') return
     lastSample.current = now
     const hall = fix && geoCfg ? toHall(geoCfg, fix.lat, fix.lon) : null
-    postSample({ name, status, lat: fix?.lat, lon: fix?.lon, acc: fix?.acc, hall })
+    const k = kf.current
+    postSample({
+      name, status, lat: fix?.lat, lon: fix?.lon, acc: fix?.acc, hall,
+      est: k ? [+k.x.toFixed(2), +k.z.toFixed(2), +Math.sqrt(k.p).toFixed(1)] : null,
+      motion: motionStatusRef.current, steps: stepCount.current,
+      stride: +learn.current.stride.toFixed(2), bias: +((learn.current.bias * 180) / Math.PI).toFixed(0),
+      where,
+    })
   }, [fix, status, live, room, geoCfg, name])
   const calibrating = useMemo(() => new URLSearchParams(location.search).has('calibrate'), [])
 

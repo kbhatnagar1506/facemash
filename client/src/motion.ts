@@ -64,9 +64,23 @@ export function useMotion(enabled: boolean, onStep: (heading: number) => void) {
       } else if (up && lp < 9.9) up = false
     }
     const screenAngle = () => (screen.orientation?.angle ?? (window as unknown as { orientation?: number }).orientation ?? 0) as number
+    // compass readings wobble indoors: smooth them on the circle (so 359° and 1° average to 0°)
+    let hs = 0
+    let hc = 0
     const onOrient = (e: DeviceOrientationEvent & { webkitCompassHeading?: number }) => {
-      if (typeof e.webkitCompassHeading === 'number') heading = e.webkitCompassHeading // iOS: already compass degrees
-      else if (e.absolute && e.alpha != null) heading = (360 - e.alpha + screenAngle()) % 360 // Android absolute
+      let h: number | null = null
+      if (typeof e.webkitCompassHeading === 'number') h = e.webkitCompassHeading // iOS: already compass degrees
+      else if (e.absolute && e.alpha != null) h = (360 - e.alpha + screenAngle()) % 360 // Android absolute
+      if (h == null) return
+      const r = (h * Math.PI) / 180
+      if (heading == null) {
+        hs = Math.sin(r)
+        hc = Math.cos(r)
+      } else {
+        hs += (Math.sin(r) - hs) * 0.2
+        hc += (Math.cos(r) - hc) * 0.2
+      }
+      heading = ((Math.atan2(hs, hc) * 180) / Math.PI + 360) % 360
     }
     window.addEventListener('devicemotion', onMotion)
     const absEvent = 'ondeviceorientationabsolute' in window ? 'deviceorientationabsolute' : 'deviceorientation'
