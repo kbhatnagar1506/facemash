@@ -33,6 +33,7 @@ const (
 	tokenPrefix  = "gtq_"
 	pairPrefix   = "gtqp_"
 	mcpKeyPath   = "/api/mcp/t/" // + token: the connector URL carries its own key
+	nowKeyPath   = "/api/now/t/" // + token: the one-GET fast path
 	pairTTL      = 10 * time.Minute
 	mcpVersion   = "2025-06-18"
 	eventTZ      = "America/New_York"
@@ -77,6 +78,7 @@ type museCaller struct {
 	hub     *Hub
 	event   string // event.json path
 	nowFunc func() time.Time
+	label   string // what this request asked for (for the latency log)
 }
 
 func (c *museCaller) now() time.Time {
@@ -87,6 +89,16 @@ func (c *museCaller) now() time.Time {
 }
 
 var museTools = []tool{
+	{
+		Name:        "get_happening_now",
+		Title:       "HackGT right now",
+		Description: "Start here: one call answers most questions. What's happening at HackGT 13 right now and up next (US Eastern), how many people are in the virtual campus and the Klaus atrium, and the attendee you're helping (name, bean, where they were last).",
+		Input:       map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false},
+		Path:        "now",
+		Run: func(ctx context.Context, c *museCaller, _ map[string]any) (any, error) {
+			return c.snapshot(ctx)
+		},
+	},
 	{
 		Name:        "get_my_profile",
 		Title:       "My HackGT profile",
@@ -146,6 +158,59 @@ var museTools = []tool{
 			return map[string]any{"online": n["online"], "in_klaus_atrium": n["hackgt"], "on_campus": n["campus"]}, nil
 		},
 	},
+}
+
+// The shared part of "now" (schedule + headcount) is precomputed and reused for
+// nowTTL, so answering is a memory read plus one small account lookup.
+const nowTTL = 15 * time.Second
+
+var nowCache struct {
+	sync.Mutex
+	at    time.Time
+	event string
+	blob  map[string]any
+}
+
+func sharedNow(eventFile string, hub *Hub, now time.Time) map[string]any {
+	nowCache.Lock()
+	defer nowCache.Unlock()
+	if nowCache.blob != nil && nowCache.event == eventFile && now.Sub(nowCache.at) < nowTTL && now.After(nowCache.at) {
+		return nowCache.blob
+	}
+	blob := map[string]any{"event": serverTitle, "where": "Klaus Advanced Computing Building, Georgia Tech", "time_zone": eventTZ}
+	if sch, err := schedule(eventFile, "now", now); err == nil {
+		for k, v := range sch.(map[string]any) {
+			blob[k] = v
+		}
+	}
+	if hub != nil {
+		n := hub.counts()
+		blob["people"] = map[string]any{"online": n["online"], "in_klaus_atrium": n["hackgt"], "on_campus": n["campus"]}
+	}
+	nowCache.at, nowCache.event, nowCache.blob = now, eventFile, blob
+	return blob
+}
+
+// snapshot is everything most questions need, in one blob.
+func (c *museCaller) snapshot(ctx context.Context) (map[string]any, error) {
+	out := map[string]any{}
+	for k, v := range sharedNow(c.event, c.hub, c.now()) {
+		out[k] = v
+	}
+	a, err := c.acc.store.Account(ctx, c.tenant, c.id)
+	if err != nil {
+		return nil, err
+	}
+	me := map[string]any{"name": firstNonEmpty(a.Profile.Name, a.User.Name), "email": a.User.Email, "bean": describeLook(a.Profile.Look, a.Profile.Color)}
+	if p := a.Progress; p != nil {
+		place := "outdoors on the Georgia Tech campus"
+		if p.Room == "hackgt" {
+			place = "inside the Klaus atrium"
+		}
+		me["last_seen"] = map[string]any{"where": place, "at": p.At.UTC().Format(time.RFC3339)}
+	}
+	out["you"] = me
+	return out, nil
 }
 
 func firstNonEmpty(s ...string) string {
@@ -307,8 +372,10 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 	// (/api/mcp/t/gtq_…) so an agent only has to register one URL: nothing to sign in to.
 	caller := func(r *http.Request) (*museCaller, error) {
 		tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if inURL, found := strings.CutPrefix(r.URL.Path, mcpKeyPath); found {
-			tok, ok = inURL, true
+		for _, prefix := range []string{mcpKeyPath, nowKeyPath} {
+			if inURL, found := strings.CutPrefix(r.URL.Path, prefix); found {
+				tok, ok = inURL, true
+			}
 		}
 		if !ok || !strings.HasPrefix(tok, tokenPrefix) {
 			return nil, errBadToken
@@ -349,6 +416,8 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 			unauthorized(w)
 			return
 		}
+		start := time.Now()
+		defer func() { calls.add(c.id, "mcp "+c.label, start, time.Since(start)) }()
 		body, err := io.ReadAll(io.LimitReader(r.Body, maxMCPBody))
 		if err != nil {
 			http.Error(w, "bad request", http.StatusBadRequest)
@@ -399,6 +468,8 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 				unauthorized(w)
 				return
 			}
+			start := time.Now()
+			defer func() { calls.add(c.id, "GET "+r.URL.Path, start, time.Since(start)) }()
 			args := map[string]any{}
 			for k, v := range r.URL.Query() {
 				args[k] = v[0]
@@ -414,6 +485,56 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 			writeJSON(w, http.StatusOK, out)
 		})
 	}
+	// the fast path: one GET, one JSON blob (key in the Authorization header or in the URL)
+	nowHandler := func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			w.Header().Set("Allow", "GET")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		c, err := caller(r)
+		if err != nil {
+			unauthorized(w)
+			return
+		}
+		start := time.Now()
+		defer func() { calls.add(c.id, "GET /api/now", start, time.Since(start)) }()
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		out, err := c.snapshot(ctx)
+		if err != nil {
+			log.Printf("muse: now for #%d: %v", c.id, err)
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "try again in a moment"})
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	}
+	mux.HandleFunc("/api/now", nowHandler)
+	mux.HandleFunc(nowKeyPath, nowHandler)
+
+	// latency test: "I'm asking my agent now", then how fast it came to us and got its answer
+	mux.HandleFunc("/api/muse/ask", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.Header.Get("Origin") == "" || !originOK(r) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "bad origin"})
+			return
+		}
+		id, ok := acc.sess.read(r)
+		if !ok {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "sign in first"})
+			return
+		}
+		calls.ask(id, time.Now())
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("/api/muse/latency", func(w http.ResponseWriter, r *http.Request) {
+		id, ok := acc.sess.read(r)
+		if !ok {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "sign in first"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"questions": calls.report(id, time.Now())})
+	})
+
 	mux.HandleFunc("/api/openapi.json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		writeJSON(w, http.StatusOK, openAPI(base))
@@ -518,7 +639,8 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 		log.Printf("muse: #%d paired an agent", p.id)
 		info := connectInfo(base, tok)
 		info["connector_url"] = base + mcpKeyPath + tok
-		info["prompt"] = connectorPrompt(base + mcpKeyPath + tok)
+		info["now_url"] = base + nowKeyPath + tok
+		info["prompt"] = connectorPrompt(base, tok)
 		info["token_type"] = "Bearer"
 		info["next"] = "Save token as a secret credential (never show it in chat). Use it as \"Authorization: Bearer <token>\" for the MCP server at " + base + "/api/mcp or the REST API described at " + base + "/api/openapi.json."
 		writeJSON(w, http.StatusOK, info)
@@ -644,11 +766,16 @@ func pairPrompt(base, code string, exp time.Time) string {
 		"4. Then tell me what's happening at HackGT right now."
 }
 
-// connectorPrompt is the one line an agent needs: a URL to register, nothing to fetch first.
-func connectorPrompt(url string) string {
-	return "Add a custom connector for HackGT 13. It's an MCP server at " + url +
-		" (streamable HTTP; the key is part of the URL, so there's no sign-in). " +
-		"Keep the URL private. Then tell me what's happening at HackGT right now."
+// connectorPrompt is what the attendee pastes into their agent: a fast path it can use for
+// every question (one GET, one JSON blob) and an explicit "don't do the slow thing", since
+// agents default to handshaking, listing tools and chaining calls.
+func connectorPrompt(base, tok string) string {
+	return "Save this as my HackGT 13 skill. Both links contain my private key: keep them secret and never show them in chat.\n" +
+		"FAST PATH, use it for every HackGT question: make ONE HTTP GET to " + base + nowKeyPath + tok +
+		" and answer from the JSON it returns (what's on now and next, how many people are here, and my profile). " +
+		"Don't list tools, don't do an MCP handshake, don't make other calls first.\n" +
+		"Only if that doesn't cover the question: the MCP server at " + base + mcpKeyPath + tok + " has the full schedule (get_schedule with when=all).\n" +
+		"Now tell me what's happening at HackGT right now."
 }
 
 // connectInfo is what the app shows (and what you'd paste into Muse).
@@ -690,6 +817,19 @@ func handleRPC(ctx context.Context, c *museCaller, raw json.RawMessage) any {
 	if json.Unmarshal(raw, &m) != nil || m.JSONRPC != "2.0" {
 		return rpcError(nil, -32700, "parse error")
 	}
+	// one line per call, so we can see what agents actually ask (names only, no payloads)
+	tool := ""
+	if m.Method == "tools/call" {
+		var p struct {
+			Name string `json:"name"`
+		}
+		json.Unmarshal(m.Params, &p)
+		tool = " " + p.Name
+	}
+	if c.label != "" {
+		c.label += ", "
+	}
+	c.label += m.Method + tool
 	if m.Method == "" { // a response to something we never sent
 		return nil
 	}
@@ -839,4 +979,128 @@ func mintTestSession(email, keyFile string) {
 	}
 	v, _ := a.sess.issue(kindSession, acc.ID, time.Hour)
 	fmt.Println(v)
+}
+
+// ---------- latency log ----------
+
+// calls remembers each person's recent agent calls (in memory, last 300) and the moments
+// they said "I'm asking now", so a question can be timed: ask → the agent's first call to
+// us → our last response. Calls less than questionGap apart belong to the same question.
+var calls = &callLog{by: map[int64][]museCall{}, asks: map[int64][]time.Time{}}
+
+const questionGap = 20 * time.Second
+
+type museCall struct {
+	At   time.Time
+	What string
+	Dur  time.Duration
+}
+
+type callLog struct {
+	mu   sync.Mutex
+	by   map[int64][]museCall
+	asks map[int64][]time.Time
+}
+
+func (l *callLog) add(id int64, what string, at time.Time, d time.Duration) {
+	log.Printf("agent: #%d %s %.1fms", id, what, float64(d.Microseconds())/1000)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	cs := append(l.by[id], museCall{at, what, d})
+	if len(cs) > 300 {
+		cs = cs[len(cs)-300:]
+	}
+	l.by[id] = cs
+}
+
+func (l *callLog) ask(id int64, at time.Time) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	as := append(l.asks[id], at)
+	if len(as) > 50 {
+		as = as[len(as)-50:]
+	}
+	l.asks[id] = as
+}
+
+func ms(d time.Duration) float64 { return float64(d.Microseconds()) / 1000 }
+
+// report: the last few questions, newest first.
+func (l *callLog) report(id int64, now time.Time) []map[string]any {
+	l.mu.Lock()
+	cs := append([]museCall(nil), l.by[id]...)
+	asks := append([]time.Time(nil), l.asks[id]...)
+	l.mu.Unlock()
+	type burst struct{ calls []museCall }
+	var bursts []burst
+	for _, c := range cs {
+		if n := len(bursts); n > 0 {
+			last := bursts[n-1].calls[len(bursts[n-1].calls)-1]
+			if c.At.Sub(last.At.Add(last.Dur)) < questionGap {
+				bursts[n-1].calls = append(bursts[n-1].calls, c)
+				continue
+			}
+		}
+		bursts = append(bursts, burst{[]museCall{c}})
+	}
+	var out []map[string]any
+	used := map[int]bool{}
+	for _, a := range asks {
+		q := map[string]any{"asked_at": a.UTC().Format(time.RFC3339Nano)}
+		for i, b := range bursts {
+			if used[i] || b.calls[0].At.Before(a) || b.calls[0].At.Sub(a) > 5*time.Minute {
+				continue
+			}
+			used[i] = true
+			fillBurst(q, b.calls)
+			q["ask_to_first_call_ms"] = ms(b.calls[0].At.Sub(a))
+			last := b.calls[len(b.calls)-1]
+			q["ask_to_last_response_ms"] = ms(last.At.Add(last.Dur).Sub(a))
+			break
+		}
+		if q["calls"] == nil {
+			if now.Sub(a) > 5*time.Minute {
+				q["status"] = "no calls came"
+			} else {
+				q["status"] = "waiting for the agent"
+			}
+		}
+		out = append(out, q)
+	}
+	// calls nobody timed still show, so every question is visible
+	for i, b := range bursts {
+		if !used[i] {
+			q := map[string]any{"asked_at": nil}
+			fillBurst(q, b.calls)
+			out = append(out, q)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return sortKey(out[i]) > sortKey(out[j]) })
+	if len(out) > 15 {
+		out = out[:15]
+	}
+	return out
+}
+
+func fillBurst(q map[string]any, cs []museCall) {
+	var server time.Duration
+	what := make([]string, 0, len(cs))
+	for _, c := range cs {
+		server += c.Dur
+		what = append(what, c.What)
+	}
+	last := cs[len(cs)-1]
+	q["first_call_at"] = cs[0].At.UTC().Format(time.RFC3339Nano)
+	q["calls"] = len(cs)
+	q["what"] = what
+	q["fetch_span_ms"] = ms(last.At.Add(last.Dur).Sub(cs[0].At))
+	q["server_ms"] = ms(server)
+}
+
+func sortKey(q map[string]any) string {
+	if s, ok := q["asked_at"].(string); ok {
+		return s
+	}
+	s, _ := q["first_call_at"].(string)
+	return s
 }
