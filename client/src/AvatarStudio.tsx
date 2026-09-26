@@ -5,7 +5,7 @@ import * as THREE from 'three'
 import { BeanBody } from './Bean'
 import type { AvatarState } from './Avatar'
 import { ACCENT_COLORS, BODY_COLORS, EYES, HATS, ITEMS, PATTERNS, SPONSOR_BEANS, decodeLook, defaultLook, encodeLook, loadLook, randomLook, saveLook, type Look } from './look'
-import { saveProfile } from './account'
+import { fetchMe, saveProfile } from './account'
 
 // /avatar: build your jellybean. A turntable preview you can spin, and big friendly
 // pickers for colour, pattern, face and hat. "Save & play" stores it and drops you
@@ -19,6 +19,14 @@ const LABEL: Record<string, string> = {
 }
 const HAT_ICON: Record<string, string> = { none: '∅', cap: '🧢', crown: '👑', bunny: '🐰', bucket: '🪣', propeller: '🚁', halo: '😇', party: '🥳', headphones: '🎧' }
 const ITEM_ICON: Record<string, string> = { none: '✋', laptop: '💻', coffee: '☕', boba: '🧋', phone: '📱', duck: '🦆', energy: '⚡', trophy: '🏆' }
+
+/** Label colour for a chip filled with `hex`: white or ink, whichever reads better (WCAG contrast). */
+function inkOn(hex: string) {
+  const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
+  const L = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+  const INK = 0.0237 // --ink #2b2a33
+  return 1.05 / (L + 0.05) >= (L + 0.05) / (INK + 0.05) ? '#fff' : 'var(--ink)'
+}
 
 function Podium() {
   return (
@@ -129,6 +137,17 @@ export function AvatarStudio() {
       return ''
     }
   })
+  // signed in on a new device: start from the name on your account, not an empty box
+  useEffect(() => {
+    fetchMe().then((me) => setName((n) => n || me.profile?.name || me.user?.given || ''))
+  }, [])
+  useEffect(() => {
+    const prev = document.title
+    document.title = 'Bean Studio · facemash'
+    return () => {
+      document.title = prev
+    }
+  }, [])
   const [cheer, setCheer] = useState(0)
   const [saved, setSaved] = useState(false)
   const set = (p: Partial<Look>) => setLook((l) => ({ ...l, ...p }))
@@ -188,7 +207,7 @@ export function AvatarStudio() {
               <button
                 key={sb.id}
                 className={look.logo === sb.id ? 'chip on' : 'chip'}
-                style={{ borderColor: 'var(--ink)', background: look.logo === sb.id ? '#ffd23f' : sb.look.body, color: look.logo === sb.id ? 'var(--ink)' : '#fff' }}
+                style={{ borderColor: 'var(--ink)', background: look.logo === sb.id ? '#ffd23f' : sb.look.body, color: look.logo === sb.id ? 'var(--ink)' : inkOn(sb.look.body) }}
                 onClick={() => setLook({ ...sb.look })}
               >
                 {sb.name}
