@@ -1,6 +1,6 @@
 #!/bin/bash
 # GT Campus Quest game server: the Go WebSocket server behind Caddy (automatic HTTPS).
-IMAGE="us-central1-docker.pkg.dev/patchguard-reakon/cloud-run-source-deploy/gt-campus-quest@sha256:4b7060ad126f2c83211410a52011db96e3a36d2536536339d09d7e1c7266091f"
+IMAGE="us-central1-docker.pkg.dev/patchguard-reakon/cloud-run-source-deploy/gt-campus-quest@sha256:5184cdfa921ff40dab2c262600c4a1c2c35176669a8a424dcccd067caba8f8f0"
 HOST="35-188-1-8.sslip.io"
 export HOME=/home/chronos
 docker-credential-gcr configure-docker --registries us-central1-docker.pkg.dev
@@ -20,12 +20,15 @@ DBENV=""
 # root-only. Without it the feature is off and the server behaves as before.
 MAPIENV=""
 [ -f /mnt/stateful_partition/gt/mapi-client.env ] && MAPIENV="--env-file /mnt/stateful_partition/gt/mapi-client.env"
+# jev (TypeSafe) picks outfits from agent memory: JEV_API_KEY in jev.env (root 0600)
+JEVENV=""
+[ -f /mnt/stateful_partition/gt/jev.env ] && JEVENV="--env-file /mnt/stateful_partition/gt/jev.env"
 GOOGLE_CLIENT_ID=$(curl -sf -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/attributes/google-client-id || true)
 docker run -d --restart=always --name game --network gt \
   -e DIRECT_URL="https://$HOST" -e ALLOWED_ORIGINS='https://gt-campus-quest*.vercel.app,https://fasemash.tech,https://www.fasemash.tech' \
   -e GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \
   -e DB_INSTANCE='patchguard-reakon:us-central1:facemash-db' -e DB_NAME=facemash \
-  -e DB_IAM_USER='751583582765-compute@developer' $DBENV $MAPIENV \
+  -e DB_IAM_USER='751583582765-compute@developer' $DBENV $MAPIENV $JEVENV \
   -e TENANT=hackgt13 -e TENANT_NAME='HackGT 13' \
   -v /mnt/stateful_partition/gt/geo.json:/app/geo.json:ro \
   -v /mnt/stateful_partition/gt/data:/data \
