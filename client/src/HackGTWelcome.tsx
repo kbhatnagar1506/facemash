@@ -78,7 +78,7 @@ export function InfoBoard({ event, panel, onClose }: { event: EventInfo; panel: 
             <h2>Schedule</h2>
             <div className="hg-days">
               {event.days.map((d, i) => (
-                <button key={d.label} className={i === day ? 'on' : ''} onClick={() => setDay(i)}>
+                <button key={d.label} className={i === day ? 'on' : ''} aria-pressed={i === day} onClick={() => setDay(i)}>
                   {d.label}
                 </button>
               ))}
