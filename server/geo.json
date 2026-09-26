@@ -1,7 +1,7 @@
 {
-  "a": 1,
-  "b": 0,
-  "tx": -139.9,
-  "tz": 116.5,
-  "note": "The atrium is Klaus's west wing, toward MIRC and Caddell. No rotation: the hall's east doors sit just inside the HackGT main entrance (campus 158.4,-94.5), its west wall lands on Klaus's west face (x~123) and its back wall on the north end of the wing (z~-145). Refine on site with ?calibrate."
+  "a": 0,
+  "b": -1,
+  "tx": 131.6,
+  "tz": 159.6,
+  "note": "HackGT main entrance = Klaus's west main door (south face, toward MIRC/Caddell; OSM entrance=main at campus 137.6,-110.6), confirmed on site. Walking in through it (hall west) is real north; the hall's back wall (sponsor row) is real east. The hall footprint falls inside the Klaus outline. Refine on site with ?calibrate."
 }

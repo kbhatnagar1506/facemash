@@ -22,7 +22,7 @@ EVENT_BUILDING = "Christopher W. Klaus Advanced Computing Building"
 # Entrance nodes of the event building (Overpass: way(42706123);node(w)["entrance"];out;)
 ENTRANCES = ROOT / "data" / "klaus_entrances.json"
 # The HackGT main entrance (OSM entrance=main on the courtyard side), confirmed on site.
-MAIN_ENTRANCE = (33.7768401, -84.396261)
+MAIN_ENTRANCE = (33.7770001, -84.3965131)  # west main door, toward MIRC / Caddell
 
 ROAD_WIDTH = {
     "motorway": 16, "trunk": 14, "primary": 12, "secondary": 11, "tertiary": 9,

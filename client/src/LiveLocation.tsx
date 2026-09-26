@@ -22,7 +22,7 @@ export function LivePill({
         : status === 'waiting' || !fix
           ? 'Finding you…'
           : fix.acc > 60
-            ? `GPS too rough (±${Math.round(fix.acc)} m)`
+            ? `GPS too rough (±${Math.round(fix.acc)} m). Turn on Precise Location + Wi-Fi`
             : where === 'out'
               ? `Not in ${place}, using keys`
               : `Live ±${Math.round(fix.acc)} m`
