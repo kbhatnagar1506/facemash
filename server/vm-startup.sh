@@ -10,10 +10,9 @@ docker network create gt 2>/dev/null || true
 docker rm -f game caddy 2>/dev/null || true
 # Sign in with Google: the OAuth web client ID lives in instance metadata (google-client-id),
 # so it can change without editing this script. Accounts and progress: Cloud SQL facemash-db,
-# reached through the Cloud SQL connector as the VM's own service account (IAM database
-# auth: no password, no allow-listed IPs).
-# Until the VM's account can log in to Cloud SQL itself, db.env (root-only) can hold a direct
-# connection instead (DB_HOST/DB_USER/DB_PASSWORD, TLS); the server prefers it when present.
+# which only accepts this VM's IP and only over TLS, as facemash_app; the connection
+# (DB_HOST/DB_USER/DB_PASSWORD) is in db.env, root-only (password also in Secret Manager:
+# facemash-db-app). Without db.env the server tries IAM auth as the VM's service account.
 DBENV=""
 [ -f /mnt/stateful_partition/gt/db.env ] && DBENV="--env-file /mnt/stateful_partition/gt/db.env"
 GOOGLE_CLIENT_ID=$(curl -sf -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/attributes/google-client-id || true)
