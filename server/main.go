@@ -469,6 +469,9 @@ func main() {
 		mintTestSession(*sessionFor, *keyFile)
 		return
 	}
+	if adminCLI(*keyFile) { // -purge-test-accounts (admin.go)
+		return
+	}
 
 	// ALLOWED_ORIGINS=https://gt.example.com,https://gt-campus-quest*.vercel.app
 	// (a * matches anything, e.g. Vercel preview deploys). Unset: same-host requests
@@ -533,6 +536,7 @@ func main() {
 			acct.talk.watchProximity(hub) // two opted-in players within 3 m for 3 s (talk_config.json)
 		}
 		mountVoice(mux, acct, acct.voice, originOK)
+		mountAdmin(mux, acct, hub) // /api/admin/* for organizers in ADMIN_EMAILS (admin.go)
 		if *devLogin {
 			mountDevLogin(mux, acct)
 		}
