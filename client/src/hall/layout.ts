@@ -54,7 +54,7 @@ export interface Table {
 export const TABLES: Table[] = [-12, -6.5, -1, 4.5, 10].flatMap((z, row) =>
   [2.2, 9.8].map((x, col) => ({ n: row * 2 + col + 1, x, z })),
 )
-export const TABLE = { w: 3.4, d: 1.5, h: 0.78 }
+export const TABLE = { r: 0.9, h: 0.76 } // round grey hacking tables
 
 type Box = [number, number, number, number] // x0, z0, x1, z1
 
@@ -86,7 +86,7 @@ export const GROUND_BLOCKS: Box[] = [
   [X0 + 0.1, 20.6, X0 + 0.9, 21.4], // recycling bin by Seminar Room West
   [6.4, 26.6, 7.3, 27.9], // info kiosk
   [13.2, 25.6, 15.6, 27.9], // folding table + chair
-  ...TABLES.map((t): Box => [t.x - 2, t.z - 1.6, t.x + 2, t.z + 1.6]),
+  ...TABLES.map((t): Box => [t.x - 1.55, t.z - 1.55, t.x + 1.55, t.z + 1.55]),
 ]
 
 function inBox(x: number, z: number, [x0, z0, x1, z1]: Box, r: number) {
@@ -211,9 +211,7 @@ export function nearestTable(x: number, z: number, y = 0, range = 2.8): Table | 
   let best: Table | null = null
   let bestD = range
   for (const t of TABLES) {
-    const dx = Math.max(0, Math.abs(x - t.x) - TABLE.w / 2)
-    const dz = Math.max(0, Math.abs(z - t.z) - TABLE.d / 2)
-    const d = Math.hypot(dx, dz)
+    const d = Math.max(0, Math.hypot(x - t.x, z - t.z) - TABLE.r)
     if (d < bestD) {
       bestD = d
       best = t

@@ -276,69 +276,71 @@ function PhotoBooth() {
 
 const LAPTOP_COLORS = ['#c9ccd2', '#2b2d33', '#c9ccd2', '#8c9097']
 const SCREEN_COLORS = ['#7fd3ff', '#b5f5c8', '#ffd98a', '#d7c2ff', '#9fe7ff']
-export const CHAIR_X = [-1.1, 0, 1.1]
+const SEATS = 6
 
-function HackTable({ t, active }: { t: Table; active: boolean }) {
+/** Round grey hacking table: pedestal base, six folding chairs, laptops facing each seat. */
+function HackTable({ t }: { t: Table }) {
   const screens = useRef<THREE.MeshBasicMaterial[]>([])
-  const laptops = useMemo(() => {
-    const out: { x: number; side: 1 | -1; body: string; screen: string }[] = []
-    CHAIR_X.forEach((x, i) =>
-      ([1, -1] as const).forEach((side, j) => {
-        if ((t.n * 3 + i * 5 + j * 7) % 4 !== 0) {
-          out.push({ x, side, body: LAPTOP_COLORS[(t.n + i + j) % 4], screen: SCREEN_COLORS[(t.n * 2 + i + j) % 5] })
-        }
+  const seats = useMemo(
+    () =>
+      Array.from({ length: SEATS }, (_, k) => {
+        const a = (k / SEATS) * Math.PI * 2 + t.n * 0.4
+        const laptop = (t.n * 3 + k * 5) % 4 !== 0
+        return { a, laptop, body: LAPTOP_COLORS[(t.n + k) % 4], screen: SCREEN_COLORS[(t.n * 2 + k) % 5] }
       }),
-    )
-    return out
-  }, [t.n])
+    [t.n],
+  )
   // screens flicker gently as code scrolls
   useFrame(({ clock }) => {
     screens.current.forEach((m, i) => {
-      if (m) m.color.setScalar(1).lerp(new THREE.Color(laptops[i].screen), 0.75 + 0.25 * Math.sin(clock.elapsedTime * 3 + i * 1.7 + t.n))
+      if (m) m.color.setScalar(1).lerp(new THREE.Color(seats[i].screen), 0.75 + 0.25 * Math.sin(clock.elapsedTime * 3 + i * 1.7 + t.n))
     })
   })
   return (
     <group position={[t.x, 0, t.z]}>
       <mesh position={[0, TABLE.h, 0]} castShadow receiveShadow>
-        <boxGeometry args={[TABLE.w, 0.08, TABLE.d]} />
-        <meshToonMaterial color="#e2c79c" />
+        <cylinderGeometry args={[TABLE.r, TABLE.r, 0.05, 40]} />
+        <meshLambertMaterial color="#a9aeb4" />
       </mesh>
-      {[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([sx, sz], i) => (
-        <mesh key={i} position={[sx * (TABLE.w / 2 - 0.12), TABLE.h / 2, sz * (TABLE.d / 2 - 0.12)]}>
-          <boxGeometry args={[0.07, TABLE.h, 0.07]} />
-          <meshLambertMaterial color="#6d737c" />
-        </mesh>
-      ))}
-      {CHAIR_X.flatMap((x) =>
-        ([1, -1] as const).map((side) => (
-          <FoldingChair key={`${x}${side}`} x={x} z={side * (TABLE.d / 2 + 0.45)} rot={side === 1 ? Math.PI : 0} />
-        )),
-      )}
-      {laptops.map((l, i) => (
-        <group key={i} position={[l.x, TABLE.h + 0.05, l.side * 0.3]} rotation-y={l.side === 1 ? 0 : Math.PI}>
-          <mesh>
-            <boxGeometry args={[0.46, 0.025, 0.32]} />
-            <meshLambertMaterial color={l.body} />
-          </mesh>
-          <group position={[0, 0.01, -0.16]} rotation-x={-0.3}>
-            <mesh position={[0, 0.15, 0]}>
-              <boxGeometry args={[0.46, 0.3, 0.02]} />
-              <meshLambertMaterial color={l.body} />
-            </mesh>
-            <mesh position={[0, 0.15, 0.012]}>
-              <planeGeometry args={[0.41, 0.25]} />
-              <meshBasicMaterial ref={(m) => { if (m) screens.current[i] = m }} color={l.screen} />
-            </mesh>
-          </group>
+      <mesh position={[0, TABLE.h - 0.035, 0]}>
+        <cylinderGeometry args={[TABLE.r - 0.02, TABLE.r - 0.05, 0.03, 40]} />
+        <meshLambertMaterial color="#7d8288" />
+      </mesh>
+      <mesh position={[0, TABLE.h / 2, 0]}>
+        <cylinderGeometry args={[0.06, 0.06, TABLE.h, 12]} />
+        <meshLambertMaterial color="#6b7077" />
+      </mesh>
+      <mesh position={[0, 0.02, 0]}>
+        <cylinderGeometry args={[0.38, 0.42, 0.04, 24]} />
+        <meshLambertMaterial color="#6b7077" />
+      </mesh>
+      {seats.map((s, i) => (
+        <group key={i}>
+          <FoldingChair x={Math.sin(s.a) * (TABLE.r + 0.42)} z={Math.cos(s.a) * (TABLE.r + 0.42)} rot={s.a + Math.PI} />
+          {s.laptop && (
+            <group position={[Math.sin(s.a) * 0.55, TABLE.h + 0.04, Math.cos(s.a) * 0.55]} rotation-y={s.a}>
+              <mesh>
+                <boxGeometry args={[0.42, 0.025, 0.3]} />
+                <meshLambertMaterial color={s.body} />
+              </mesh>
+              <group position={[0, 0.01, -0.15]} rotation-x={-0.3}>
+                <mesh position={[0, 0.14, 0]}>
+                  <boxGeometry args={[0.42, 0.28, 0.02]} />
+                  <meshLambertMaterial color={s.body} />
+                </mesh>
+                <mesh position={[0, 0.14, 0.012]}>
+                  <planeGeometry args={[0.37, 0.23]} />
+                  <meshBasicMaterial ref={(m) => { if (m) screens.current[i] = m }} color={s.screen} />
+                </mesh>
+              </group>
+            </group>
+          )}
         </group>
       ))}
-      <mesh position={[TABLE.w / 2 - 0.3, TABLE.h + 0.1, 0]}>
+      <mesh position={[0.15, TABLE.h + 0.1, -0.1]}>
         <cylinderGeometry args={[0.04, 0.04, 0.15, 10]} />
         <meshLambertMaterial color={t.n % 2 ? '#2f80ed' : '#e8543f'} />
       </mesh>
-      <Html position={[0, 2.2, 0]} center zIndexRange={[15, 0]} style={{ display: active ? undefined : 'none', pointerEvents: 'none' }}>
-        <div className="table-tag">Table {t.n}</div>
-      </Html>
     </group>
   )
 }
@@ -372,7 +374,7 @@ export function Decor({ active }: { active: boolean }) {
       <PhotoBooth />
       <Sponsors />
       {TABLES.map((t) => (
-        <HackTable key={t.n} t={t} active={active} />
+        <HackTable key={t.n} t={t} />
       ))}
       <ExitShell active={active} />
     </group>

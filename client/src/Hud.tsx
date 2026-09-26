@@ -294,7 +294,7 @@ export function Hud({
             {near.kind === 'shell' && <>🐚 A shiny shell at the Klaus entrance! It's glowing with <b>{title}</b> energy…</>}
             {near.kind === 'exit' && <>🐚 Head back out to campus?</>}
             {near.kind === 'spot' && near.spot.text}
-            {near.kind === 'table' && <><b>Table {near.table.n}</b>: grab a seat and start hacking! Press E to see the tracks.</>}
+            {near.kind === 'table' && <>Grab a seat and start hacking! Press E to see the tracks.</>}
           </p>
           {(near.kind !== 'spot' || near.spot.action) && <span className="dialog-hint">Press E ▼</span>}
         </div>
