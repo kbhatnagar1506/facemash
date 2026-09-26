@@ -1,4 +1,4 @@
-import { Component, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Component, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { PerformanceMonitor } from '@react-three/drei'
 import * as THREE from 'three'
@@ -8,6 +8,8 @@ import { layoutLines, reveal } from './landing/reveal'
 import { SECTIONS } from './landing/path'
 import { clamp } from './landing/physics'
 import { frameFor, makeShared, type Frame } from './landing/shared'
+import { SignInSheet } from './landing/SignIn'
+import { fetchMe, signOut, type Me } from './account'
 import './landing.css'
 
 // The landing page. The story is the problem statement, word for word, set in eight
@@ -57,8 +59,61 @@ function BeanMark() {
   )
 }
 
+/** Signed in: your Google photo in the nav, with a way out. */
+function AccountChip({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
+  const [open, setOpen] = useState(false)
+  const u = me.user!
+  useEffect(() => {
+    if (!open) return
+    const close = () => setOpen(false)
+    addEventListener('click', close)
+    return () => removeEventListener('click', close)
+  }, [open])
+  return (
+    <div className="acct">
+      <button
+        className="acct-btn"
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`Signed in as ${u.name || u.email}`}
+        onClick={(e) => {
+          e.stopPropagation()
+          setOpen((o) => !o)
+        }}
+      >
+        {u.picture ? <img src={u.picture} alt="" referrerPolicy="no-referrer" /> : <span>{(u.given || u.name || u.email).slice(0, 1)}</span>}
+      </button>
+      {open && (
+        <div className="acct-menu" role="menu">
+          <div className="acct-who">
+            <strong>{u.name}</strong>
+            <span>{u.email}</span>
+          </div>
+          <button type="button" role="menuitem" onClick={() => signOut().then(onSignedOut)}>
+            Sign out
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function Landing() {
   const shared = useMemo(makeShared, [])
+  // Enter asks you to sign in (skippable) when sign-in is on and you aren't yet
+  const [me, setMe] = useState<Me | null>(null)
+  const [sheet, setSheet] = useState(false)
+  useEffect(() => {
+    fetchMe().then(setMe)
+  }, [])
+  const enter = (e: MouseEvent<HTMLAnchorElement>) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
+    if (me?.googleClientId && !me.user) {
+      e.preventDefault()
+      setSheet(true)
+    }
+  }
   if (import.meta.env.DEV) (window as unknown as { __landing: unknown }).__landing = shared
   const root = useRef<HTMLDivElement>(null!)
   const nav = useRef<HTMLElement>(null!)
@@ -258,7 +313,8 @@ export function Landing() {
           <a className="nav-link" href="/avatar">
             Make your bean
           </a>
-          <a className="btn btn-secondary btn-sm" href="/play">
+          {me?.user && <AccountChip me={me} onSignedOut={() => fetchMe().then(setMe)} />}
+          <a className="btn btn-secondary btn-sm" href="/play" onClick={enter}>
             Enter
             <Chevron />
           </a>
@@ -349,7 +405,7 @@ export function Landing() {
               <a className="btn btn-primary" href="/avatar">
                 Make your bean
               </a>
-              <a className="btn btn-secondary" href="/play">
+              <a className="btn btn-secondary" href="/play" onClick={enter}>
                 Enter HackGT 13
                 <Chevron />
               </a>
@@ -357,6 +413,7 @@ export function Landing() {
           </div>
         </section>
       </main>
+      {sheet && me?.googleClientId && <SignInSheet clientId={me.googleClientId} next="/play" onClose={() => setSheet(false)} />}
     </div>
   )
 }

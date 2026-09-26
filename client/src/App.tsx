@@ -8,9 +8,10 @@ import { World } from './World'
 import { Player, type PlayerInfo, type View } from './Player'
 import { Remotes } from './Remotes'
 import { requestMotion, useMotion } from './motion'
-import { defaultLook, encodeLook, loadLook } from './look'
+import { decodeLook, defaultLook, encodeLook, loadLook, saveLook } from './look'
 import { Hud } from './Hud'
 import { Shells } from './Shells'
+import { fetchMe, type Me } from './account'
 import { CALIBRATION_SPOTS, HallCollider, HALL_BOUNDS, HALL_SPAWN, HALL_YAW, PERSON_SCALE, TABLE, TABLES, cameraCeiling, eastX, westX } from './hall/layout'
 // the Klaus hall is big: it downloads in its own chunk, only once you're near Klaus
 const HackGTHall = lazy(() => import('./HackGTHall').then((m) => ({ default: m.HackGTHall })))
@@ -38,8 +39,8 @@ function save(key: string, v: unknown) {
   }
 }
 
-function Title({ onStart }: { onStart: (name: string, color: string) => void }) {
-  const [name, setName] = useState(() => load('gt.name', ''))
+function Title({ onStart, me }: { onStart: (name: string, color: string) => void; me: Me | null }) {
+  const [name, setName] = useState(() => load('gt.name', '') || me?.profile?.name || me?.user?.given || '')
   const [color, setColor] = useState(() => load('gt.color', COLORS[0]))
   return (
     <div className="title">
@@ -81,18 +82,30 @@ function Title({ onStart }: { onStart: (name: string, color: string) => void }) 
   )
 }
 
-function Game({ campus, name, color }: { campus: Campus; name: string; color: string }) {
+type Resume = NonNullable<Me['progress']>
+
+function Game({ campus, name, color, resume, ticket }: { campus: Campus; name: string; color: string; resume?: Resume | null; ticket?: string }) {
   // your bean from /avatar (or a default bean in your colour)
   const myLook = useMemo(() => loadLook() ?? defaultLook(color), [color])
   const collider = useMemo(() => new Collider(campus), [campus])
-  const start = useMemo(() => collider.freeSpot(...campus.spawn), [collider, campus])
+  // signed in: back where you left off. Inside the hall, your campus spot is Klaus (where
+  // leaving the hall puts you).
+  const inHall = resume?.room === 'hackgt'
+  const start = useMemo<[number, number]>(() => {
+    if (resume && !inHall) return collider.freeSpot(resume.x, resume.z)
+    if (inHall && campus.event) return collider.freeSpot(...campus.event.center)
+    return collider.freeSpot(...campus.spawn)
+  }, [collider, campus, resume, inHall])
   // Created in an effect (not useMemo) so StrictMode's double mount doesn't leave a closed socket.
   const [net, setNet] = useState<Net | null>(null)
   useEffect(() => {
-    const n = new Net(name, color, start[0], start[1], encodeLook(myLook))
+    const n = inHall
+      ? new Net(name, color, resume!.x, resume!.z, encodeLook(myLook), 'hackgt', ticket)
+      : new Net(name, color, start[0], start[1], encodeLook(myLook), 'campus', ticket)
+    if (inHall) n.correction = { x: resume!.x, z: resume!.z }
     setNet(n)
     return () => n.close()
-  }, [name, color, start, myLook])
+  }, [name, color, start, myLook, inHall, resume, ticket])
   const info = useRef<PlayerInfo>({ x: start[0], z: start[1], bike: false })
   const zoom = useRef(34)
   const [eventOpen, setEventOpen] = useState(false)
@@ -101,7 +114,12 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
     fetch('/api/event').then((r) => (r.ok ? r.json() : null)).then(setEvent).catch(() => {})
   }, [])
   const hallCollider = useMemo(() => new HallCollider(), [])
-  const [room, setRoom] = useState<'campus' | 'hackgt'>('campus')
+  const [room, setRoom] = useState<'campus' | 'hackgt'>(inHall ? 'hackgt' : 'campus')
+  // picking up inside the hall skips the fly-through (once; walking back in plays it)
+  const skipIntro = useRef(inHall)
+  useEffect(() => {
+    if (room === 'campus') skipIntro.current = false
+  }, [room])
   // rendering quality (see <PerformanceMonitor>)
   const [dpr, setDpr] = useState(() => Math.min(1.5, window.devicePixelRatio))
   const [lite, setLite] = useState(false)
@@ -121,7 +139,7 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
   const view = useMemo<View>(
     () =>
       room === 'hackgt'
-        ? { mode: 'inside', yaw0: HALL_YAW, spawn: HALL_SPAWN, scale: PERSON_SCALE, ceiling: cameraCeiling, bounds: [HALL_BOUNDS[0] + 0.8, HALL_BOUNDS[1] + 0.8, HALL_BOUNDS[2] - 0.8, HALL_BOUNDS[3] - 0.2] }
+        ? { mode: 'inside', yaw0: HALL_YAW, spawn: HALL_SPAWN, scale: PERSON_SCALE, ceiling: cameraCeiling, bounds: [HALL_BOUNDS[0] + 0.8, HALL_BOUNDS[1] + 0.8, HALL_BOUNDS[2] - 0.8, HALL_BOUNDS[3] - 0.2], intro: !skipIntro.current }
         : { mode: 'overhead' },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [room === 'hackgt'],
@@ -482,17 +500,30 @@ export default function App() {
   const [campus, setCampus] = useState<Campus | null>(null)
   const [error, setError] = useState('')
   const [who, setWho] = useState<{ name: string; color: string } | null>(null)
+  const [me, setMe] = useState<Me | null>(null)
 
   useEffect(() => {
     loadCampus().then(setCampus, (e) => setError(String(e)))
+    fetchMe().then((m) => {
+      setMe(m)
+      // signed in with a saved player: straight back in, your bean from your account
+      const p = m.user && m.profile
+      if (p && p.name) {
+        if (p.look) saveLook(decodeLook(p.look))
+        save('gt.name', p.name)
+        if (p.color) save('gt.color', p.color)
+        setWho({ name: p.name, color: p.color || COLORS[0] })
+      }
+    })
   }, [])
 
   if (error) return <div className="loading">Couldn't load the campus map: {error}</div>
-  if (!who) return <Title onStart={(name, color) => setWho({ name, color })} />
+  if (!me) return <div className="loading">Loading…</div>
+  if (!who) return <Title me={me} onStart={(name, color) => setWho({ name, color })} />
   if (!campus) return <div className="loading">Loading Georgia Tech…</div>
   return (
     <Suspense fallback={<div className="loading">Loading…</div>}>
-      <Game campus={campus} name={who.name} color={who.color} />
+      <Game campus={campus} name={who.name} color={who.color} resume={me.user ? me.progress : null} ticket={me.ticket} />
     </Suspense>
   )
 }

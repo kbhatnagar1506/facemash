@@ -8,10 +8,18 @@ mkdir -p /mnt/stateful_partition/gt/data
 [ -f /mnt/stateful_partition/gt/geo.json ] || docker cp $(docker create "$IMAGE"):/app/geo.json /mnt/stateful_partition/gt/geo.json
 docker network create gt 2>/dev/null || true
 docker rm -f game caddy 2>/dev/null || true
+# Sign in with Google: the OAuth web client ID lives in instance metadata (google-client-id),
+# so it can change without editing this script. Accounts and progress: Cloud SQL, reached with
+# the VM's own service account (IAM database auth, no password).
+GOOGLE_CLIENT_ID=$(curl -sf -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/attributes/google-client-id || true)
 docker run -d --restart=always --name game --network gt \
   -e ALLOWED_ORIGINS='https://gt-campus-quest*.vercel.app' \
+  -e GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \
+  -e DB_INSTANCE='patchguard-reakon:us-central1:facemash-db' -e DB_NAME=facemash \
+  -e DB_IAM_USER='751583582765-compute@developer' \
+  -e TENANT=hackgt13 -e TENANT_NAME='HackGT 13' \
   -v /mnt/stateful_partition/gt/geo.json:/app/geo.json:ro \
   -v /mnt/stateful_partition/gt/data:/data \
-  --ulimit nofile=65536:65536 "$IMAGE" -samples /data/geo_samples.jsonl
+  --ulimit nofile=65536:65536 "$IMAGE" -samples /data/geo_samples.jsonl -session-key /data/session.key
 docker run -d --restart=always --name caddy --network gt -p 80:80 -p 443:443 \
   -v caddy_data:/data caddy:2 caddy reverse-proxy --from "$HOST" --to game:8080

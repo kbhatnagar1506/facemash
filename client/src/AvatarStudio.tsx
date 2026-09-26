@@ -4,7 +4,8 @@ import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import { BeanBody } from './Bean'
 import type { AvatarState } from './Avatar'
-import { ACCENT_COLORS, BODY_COLORS, EYES, HATS, ITEMS, PATTERNS, SPONSOR_BEANS, defaultLook, loadLook, randomLook, saveLook, type Look } from './look'
+import { ACCENT_COLORS, BODY_COLORS, EYES, HATS, ITEMS, PATTERNS, SPONSOR_BEANS, defaultLook, encodeLook, loadLook, randomLook, saveLook, type Look } from './look'
+import { saveProfile } from './account'
 
 // /avatar: build your jellybean. A turntable preview you can spin, and big friendly
 // pickers for colour, pattern, face and hat. "Save & play" stores it and drops you
@@ -114,6 +115,8 @@ export function AvatarStudio() {
   const set = (p: Partial<Look>) => setLook((l) => ({ ...l, ...p }))
   const play = () => {
     saveLook(look)
+    // signed in: your account gets the new bean too (a guest's stays on this device)
+    saveProfile({ name: name.trim() || 'Bean', look: encodeLook(look) })
     setCheer((c) => c + 1) // one last happy jump before heading in
     setSaved(true)
     try {
