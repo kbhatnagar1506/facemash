@@ -34,7 +34,7 @@
 .tk-spark { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); font-size: 30px; color: #f5b700; animation: tk-pop .5s ease-out; }
 
 /* bubbles */
-.tk-chat { overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 8px; padding: 8px 2px 12px; min-height: 0; }
+.tk-chat { overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 8px; padding: 8px 6px 12px 2px; min-height: 0; }
 .tk-b {
   max-width: 82%; padding: 9px 13px; border: 3px solid var(--ink); border-radius: 16px; font: 700 15px/1.35 var(--round);
   overflow-wrap: anywhere; box-shadow: 0 3px 0 rgba(43, 42, 51, .18); animation: tk-in .22s ease-out;

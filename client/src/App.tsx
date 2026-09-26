@@ -396,12 +396,21 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
     return () => window.removeEventListener('wheel', wheel)
   }, [])
 
+  // an agent talk covers the screen: stop drawing the world behind it (phones stay cool)
+  const [talkOpen, setTalkOpen] = useState(false)
+  useEffect(() => {
+    const h = (e: Event) => setTalkOpen((e as CustomEvent<boolean>).detail)
+    addEventListener('talk-open', h)
+    return () => removeEventListener('talk-open', h)
+  }, [])
+
   if (!net) return <div className="loading">Connecting…</div>
   return (
     <>
       <Canvas
         shadows="soft"
         dpr={dpr}
+        frameloop={talkOpen ? 'never' : 'always'}
         onCreated={({ gl, scene }) => {
           // ?perf: expose the renderer for live profiling from the console
           if (location.search.includes('perf')) Object.assign(window, { __gl: gl, __scene: scene })

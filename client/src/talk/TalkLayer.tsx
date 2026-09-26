@@ -16,6 +16,10 @@ export function TalkLayer({ net, myLook }: { net: Net; myLook: string }) {
     return () => s.close()
   }, [net])
   const talks = useSyncExternalStore(store?.subscribe ?? noSub, store?.snapshot ?? noSnap)
+  const open = talks.length > 0
+  useEffect(() => {
+    dispatchEvent(new CustomEvent('talk-open', { detail: open }))
+  }, [open])
   const [opt, setOpt] = useState<OptIn | null>(null)
   // refresh the "left today" count after each talk ends
   const ended = talks.filter((t) => t.phase !== 'talking').length

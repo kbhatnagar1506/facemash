@@ -306,3 +306,5 @@ kbd {
 .talk-switch.on .talk-knob { background: #2e9b4f; }
 .talk-switch.on .talk-knob::after { transform: translateX(14px); }
 @media (prefers-reduced-motion: reduce) { .talk-knob, .talk-knob::after { transition: none; } }
+/* phones: the switches step above an open dialog instead of covering it */
+@media (max-width: 900px) { .hud:has(> .dialog) ~ .live-ui { bottom: 262px; } }
