@@ -935,18 +935,19 @@ func talkRelReason(reason string, side int) string {
 // match: ask both humans, and write the icebreaker while they decide.
 func (r *talkRun) match(verdict map[string]any) {
 	reason, _ := verdict["reason"].(string)
-	for i, s := range r.sides {
-		rel := talkRelReason(reason, i)
-		r.t.sink.send(s.person.id, map[string]any{"t": "verdict", "id": r.rec.ID, "match": true, "reason": rel,
-			"why": r.t.cfg.Lines.Why[rel], "ask": r.t.cfg.Lines.Ask})
-	}
 	r.mark("verdict")
 	go r.icebreaker(verdict)
+	// awaiting before the phones hear about it, so an instant "Meet them" isn't turned away
 	ttl := time.Duration(max(r.t.cfg.Limits.ApproveTTLS, 1)) * time.Second
 	r.mu.Lock()
 	r.expiry = time.AfterFunc(ttl, func() { r.t.expire(r) })
 	r.mu.Unlock()
 	r.finish("awaiting")
+	for i, s := range r.sides {
+		rel := talkRelReason(reason, i)
+		r.t.sink.send(s.person.id, map[string]any{"t": "verdict", "id": r.rec.ID, "match": true, "reason": rel,
+			"why": r.t.cfg.Lines.Why[rel], "ask": r.t.cfg.Lines.Ask})
+	}
 }
 
 var talkIcebreakerSchema = map[string]any{
