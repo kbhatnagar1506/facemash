@@ -326,9 +326,10 @@ kbd {
   .dialog { bottom: calc(172px + env(safe-area-inset-bottom)); }
   .cine-skip { right: calc(24px + env(safe-area-inset-right)); }
 }
-/* landscape phones: smaller map, and the dialog clear of the stick */
+/* landscape phones: smaller map, and the dialog up top, clear of the chat and the stick */
 @media (pointer: coarse) and (hover: none) and (max-height: 500px) {
   .minimap canvas { width: 110px !important; height: 110px !important; }
   .minimap-head img { max-width: 90px; }
-  .dialog { bottom: calc(12px + env(safe-area-inset-bottom)); width: min(460px, calc(100vw - 340px)); padding: 10px 14px 20px; font-size: 14px; }
+  /* between the status pill and the map, clear of the chat and the stick */
+  .dialog { top: calc(10px + env(safe-area-inset-top)); bottom: auto; width: min(420px, calc(100vw - 440px)); padding: 10px 14px 20px; font-size: 14px; }
 }
