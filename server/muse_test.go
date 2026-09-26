@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -403,5 +404,81 @@ func TestLatencyReport(t *testing.T) {
 	}
 	if other := l.report(2, t0); len(other) != 0 {
 		t.Fatalf("someone else's calls leaked: %v", other)
+	}
+}
+
+func TestAgentMemory(t *testing.T) {
+	srv, acc, _, id, tok := museServer(t)
+	post := func(path, auth, body string) (int, map[string]any) {
+		req, _ := http.NewRequest("POST", srv.URL+path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		if auth != "" {
+			req.Header.Set("Authorization", "Bearer "+auth)
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		var out map[string]any
+		json.NewDecoder(res.Body).Decode(&out)
+		return res.StatusCode, out
+	}
+	mem := `{"user_id":"Buzz","exported_at":"2026-09-26T17:20:00Z","memory_md":"likes rust","daily_notes":[{"date":"2026-09-25","content":"hi"}],"bank":{"world":"..."}}`
+	if code, _ := post("/api/memory/t/"+tok, "", "not json"); code != 400 {
+		t.Fatalf("junk: %d", code)
+	}
+	if code, _ := post("/api/memory", "", mem); code != 401 {
+		t.Fatalf("no key: %d", code)
+	}
+	if code, _ := post("/api/memory/t/"+tok, "", `{"x":"`+strings.Repeat("a", maxMemory)+`"}`); code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("too big: %d", code)
+	}
+	code, out := post("/api/memory/t/"+tok, "", mem)
+	if code != 200 || out["ok"] != true {
+		t.Fatalf("save: %d %v", code, out)
+	}
+	cookie := func() *http.Cookie {
+		v, exp := acc.sess.issue(kindSession, id, time.Hour)
+		return &http.Cookie{Name: sessionCookie, Value: v, Expires: exp}
+	}
+	req, _ := http.NewRequest("GET", srv.URL+"/api/muse/memory", nil)
+	req.AddCookie(cookie())
+	res, _ := http.DefaultClient.Do(req)
+	var info map[string]any
+	json.NewDecoder(res.Body).Decode(&info)
+	res.Body.Close()
+	if info["stored"] != true || info["exported_at"] != "2026-09-26T17:20:00Z" || !strings.Contains(strings.Join(func() []string {
+		var s []string
+		for _, k := range info["sections"].([]any) {
+			s = append(s, k.(string))
+		}
+		return s
+	}(), ","), "memory_md") || strings.Contains(fmt.Sprint(info), "likes rust") {
+		t.Fatalf("info (must describe, never reveal): %v", info)
+	}
+	// deleting needs the page's own origin
+	del := func(origin string) int {
+		req, _ := http.NewRequest("DELETE", srv.URL+"/api/muse/memory", nil)
+		req.AddCookie(cookie())
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		res, _ := http.DefaultClient.Do(req)
+		return res.StatusCode
+	}
+	if del("https://evil.test") != 403 || del("https://site.test") != 204 {
+		t.Fatal("delete origin check")
+	}
+	req, _ = http.NewRequest("GET", srv.URL+"/api/muse/memory", nil)
+	req.AddCookie(cookie())
+	res, _ = http.DefaultClient.Do(req)
+	json.NewDecoder(res.Body).Decode(&info)
+	res.Body.Close()
+	if info["stored"] != false {
+		t.Fatalf("after delete: %v", info)
+	}
+	if p := memoryPrompt("https://site.test/api/memory/t/gtq_x"); !strings.Contains(p, "Never include ~/memory/people/") || !strings.Contains(p, "https://site.test/api/memory/t/gtq_x") {
+		t.Fatalf("memory prompt: %s", p)
 	}
 }

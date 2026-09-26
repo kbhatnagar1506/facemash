@@ -17,7 +17,7 @@ import './landing.css'
 const MUSE_URL = 'https://muse.ai'
 const PAIR = /^#?(gtqp_[A-Za-z0-9_-]{16,})$/
 
-type Claimed = { prompt: string; connector_url: string }
+type Claimed = { prompt: string; connector_url: string; memory_prompt?: string }
 
 // redeem each code once, even if the page mounts twice; a reload shows the same result
 const claims = new Map<string, Promise<Claimed>>()
@@ -160,6 +160,13 @@ function Scanned({ code }: { code: string }) {
               </a>
             </div>
             <p className="muse-fine">The link inside is your personal key: keep it to yourself. You can disconnect it any time in the app.</p>
+            {got.memory_prompt && (
+              <div className="muse-optional">
+                <strong>Optional: send what Muse remembers about you</strong>
+                <p>It helps HackGT 13 find people you'd want to meet. Muse sends only its notes about you, never about other people. You can see what's stored, and delete it, in the app.</p>
+                <CopyButton text={got.memory_prompt} primary={false} />
+              </div>
+            )}
           </>
         )}
       </section>
@@ -182,6 +189,33 @@ type Question = {
 const secs = (ms?: number) => (ms == null ? '–' : ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`)
 
 /** Latency test: tap as you ask your agent something; see how fast it came to us and got its answer. */
+type MemInfo = { stored: boolean; kb?: number; received_at?: string; sections?: string[] }
+
+/** What your agent sent about you (described, never shown), and a way to delete it. */
+function Memory() {
+  const [m, setM] = useState<MemInfo | null>(null)
+  const load = () =>
+    fetch('/api/muse/memory', { credentials: 'same-origin' })
+      .then((r) => (r.ok ? (r.json() as Promise<MemInfo>) : null))
+      .then(setM)
+      .catch(() => {})
+  useEffect(() => {
+    load()
+    const t = setInterval(load, 5000)
+    return () => clearInterval(t)
+  }, [])
+  if (!m?.stored) return null
+  return (
+    <p className="muse-fine">
+      Muse's memory about you: {m.kb} KB ({(m.sections ?? []).join(', ')}), received{' '}
+      {new Date(m.received_at!).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.{' '}
+      <button className="muse-link" type="button" onClick={() => fetch('/api/muse/memory', { method: 'DELETE', credentials: 'same-origin' }).then(load)}>
+        Delete it
+      </button>
+    </p>
+  )
+}
+
 function Latency() {
   const [qs, setQs] = useState<Question[]>([])
   useEffect(() => {
@@ -366,6 +400,7 @@ function Pairing() {
             Disconnect
           </button>
         </div>
+        <Memory />
         <Latency />
       </section>
     )

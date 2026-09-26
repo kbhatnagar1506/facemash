@@ -10,9 +10,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -61,6 +63,11 @@ type Store interface {
 	RevokeTokens(ctx context.Context, tenant string, id int64, label string) error
 	// TokenStatus: is there a live token with this label, and when was it made and last used
 	TokenStatus(ctx context.Context, tenant string, id int64, label string) (map[string]any, error)
+	// What someone's own agent remembers about them (sent by the agent, by their choice):
+	// the latest copy per person per tenant, as JSON. MemoryInfo never returns the content.
+	SaveMemory(ctx context.Context, tenant string, id int64, data []byte, exportedAt *time.Time) error
+	MemoryInfo(ctx context.Context, tenant string, id int64) (map[string]any, error)
+	DeleteMemory(ctx context.Context, tenant string, id int64) error
 	Close()
 }
 
@@ -123,6 +130,16 @@ CREATE TABLE IF NOT EXISTS api_tokens (
   FOREIGN KEY (tenant_id, user_id) REFERENCES memberships(tenant_id, user_id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS api_tokens_owner ON api_tokens(tenant_id, user_id);
+CREATE TABLE IF NOT EXISTS agent_memory (
+  tenant_id   text   NOT NULL,
+  user_id     bigint NOT NULL,
+  data        jsonb  NOT NULL,
+  bytes       integer NOT NULL,
+  exported_at timestamptz,
+  received_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (tenant_id, user_id),
+  FOREIGN KEY (tenant_id, user_id) REFERENCES memberships(tenant_id, user_id) ON DELETE CASCADE
+);
 `
 
 type pgStore struct {
@@ -280,6 +297,44 @@ func (s *pgStore) RevokeTokens(ctx context.Context, tenant string, id int64, lab
 	return err
 }
 
+func (s *pgStore) SaveMemory(ctx context.Context, tenant string, id int64, data []byte, exportedAt *time.Time) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO agent_memory (tenant_id, user_id, data, bytes, exported_at, received_at) VALUES ($1, $2, $3::jsonb, $4, $5, now())
+		ON CONFLICT (tenant_id, user_id) DO UPDATE SET data = EXCLUDED.data, bytes = EXCLUDED.bytes,
+		  exported_at = EXCLUDED.exported_at, received_at = now()`, tenant, id, string(data), len(data), exportedAt)
+	return err
+}
+
+func (s *pgStore) MemoryInfo(ctx context.Context, tenant string, id int64) (map[string]any, error) {
+	var bytes int
+	var exported *time.Time
+	var received time.Time
+	var keys []string
+	err := s.pool.QueryRow(ctx, `SELECT bytes, exported_at, received_at,
+		  ARRAY(SELECT jsonb_object_keys(data) ORDER BY 1)
+		FROM agent_memory WHERE tenant_id = $1 AND user_id = $2`, tenant, id).Scan(&bytes, &exported, &received, &keys)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return map[string]any{"stored": false}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return memoryInfo(bytes, exported, received, keys), nil
+}
+
+func (s *pgStore) DeleteMemory(ctx context.Context, tenant string, id int64) error {
+	_, err := s.pool.Exec(ctx, `DELETE FROM agent_memory WHERE tenant_id = $1 AND user_id = $2`, tenant, id)
+	return err
+}
+
+func memoryInfo(bytes int, exported *time.Time, received time.Time, keys []string) map[string]any {
+	out := map[string]any{"stored": true, "kb": float64(bytes*10/1024) / 10, "received_at": received.UTC().Format(time.RFC3339), "sections": keys, "exported_at": nil}
+	if exported != nil {
+		out["exported_at"] = exported.UTC().Format(time.RFC3339)
+	}
+	return out
+}
+
 func (s *pgStore) TokenStatus(ctx context.Context, tenant string, id int64, label string) (map[string]any, error) {
 	var created time.Time
 	var used *time.Time
@@ -312,6 +367,13 @@ type memStore struct {
 	users   map[int64]user
 	members map[string]*memMember // "<tenant>/<id>"
 	tokens  map[string]memToken   // hash → owner
+	memory  map[string]memMemory  // "<tenant>/<id>"
+}
+
+type memMemory struct {
+	data     []byte
+	exported *time.Time
+	received time.Time
 }
 
 type memToken struct {
@@ -322,7 +384,7 @@ type memToken struct {
 }
 
 func newMemStore() *memStore {
-	return &memStore{byEmail: map[string]int64{}, users: map[int64]user{}, members: map[string]*memMember{}, tokens: map[string]memToken{}}
+	return &memStore{byEmail: map[string]int64{}, users: map[int64]user{}, members: map[string]*memMember{}, tokens: map[string]memToken{}, memory: map[string]memMemory{}}
 }
 
 func memKey(tenant string, id int64) string { return fmt.Sprintf("%s/%d", tenant, id) }
@@ -440,4 +502,38 @@ func (m *memStore) TokenStatus(_ context.Context, tenant string, id int64, label
 		}
 	}
 	return map[string]any{"connected": false}, nil
+}
+
+func (m *memStore) SaveMemory(_ context.Context, tenant string, id int64, data []byte, exportedAt *time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.members[memKey(tenant, id)] == nil {
+		return errNoAccount
+	}
+	m.memory[memKey(tenant, id)] = memMemory{append([]byte(nil), data...), exportedAt, time.Now().UTC()}
+	return nil
+}
+
+func (m *memStore) MemoryInfo(_ context.Context, tenant string, id int64) (map[string]any, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	mm, ok := m.memory[memKey(tenant, id)]
+	if !ok {
+		return map[string]any{"stored": false}, nil
+	}
+	var obj map[string]json.RawMessage
+	json.Unmarshal(mm.data, &obj)
+	keys := make([]string, 0, len(obj))
+	for k := range obj {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return memoryInfo(len(mm.data), mm.exported, mm.received, keys), nil
+}
+
+func (m *memStore) DeleteMemory(_ context.Context, tenant string, id int64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.memory, memKey(tenant, id))
+	return nil
 }
