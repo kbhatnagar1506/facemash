@@ -154,11 +154,11 @@ export function AvatarStudio() {
   const play = () => {
     saveLook(look)
     // signed in: your account gets the new bean too (a guest's stays on this device)
-    saveProfile({ name: name.trim() || 'Bean', look: encodeLook(look) })
+    saveProfile({ name: name.trim() || 'Hacker', look: encodeLook(look) })
     setCheer((c) => c + 1) // one last happy jump before heading in
     setSaved(true)
     try {
-      localStorage.setItem('gt.name', JSON.stringify(name.trim() || 'Bean'))
+      localStorage.setItem('gt.name', JSON.stringify(name.trim() || 'Hacker'))
     } catch {
       /* fine */
     }

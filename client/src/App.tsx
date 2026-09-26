@@ -51,7 +51,7 @@ function Title({ onStart, me }: { onStart: (name: string, color: string) => void
         className="title-card"
         onSubmit={(e) => {
           e.preventDefault()
-          const n = name.trim() || 'Trainer'
+          const n = name.trim() || me?.user?.given?.trim() || 'Hacker'
           save('gt.name', n)
           save('gt.color', color)
           onStart(n, color)
@@ -101,7 +101,10 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
   const start = useMemo<[number, number]>(() => {
     if (resume && !inHall) return collider.freeSpot(resume.x, resume.z)
     if (inHall && campus.event) return collider.freeSpot(...campus.event.center)
-    return collider.freeSpot(...campus.spawn)
+    // new here: a step or two off the spawn point, so arrivals' nameplates don't stack
+    const a = Math.random() * Math.PI * 2
+    const r = 1.5 + Math.random() * 1.5
+    return collider.freeSpot(campus.spawn[0] + Math.cos(a) * r, campus.spawn[1] + Math.sin(a) * r)
   }, [collider, campus, resume, inHall])
   // Created in an effect (not useMemo) so StrictMode's double mount doesn't leave a closed socket.
   const [net, setNet] = useState<Net | null>(null)

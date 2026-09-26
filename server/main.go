@@ -288,7 +288,7 @@ func (c *client) handle(m inbound) {
 		}
 		c.p.Name = cleanText(m.Name, maxNameLen)
 		if c.p.Name == "" {
-			c.p.Name = "Trainer"
+			c.p.Name = "Hacker" // the client sends your first name when it has one
 		}
 		c.p.Color = m.Color
 		if !palette[c.p.Color] {
