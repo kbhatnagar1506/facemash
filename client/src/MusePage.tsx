@@ -142,6 +142,69 @@ function Scanned({ code }: { code: string }) {
   )
 }
 
+type Question = {
+  asked_at: string | null
+  status?: string
+  calls?: number
+  what?: string[]
+  ask_to_first_call_ms?: number
+  ask_to_last_response_ms?: number
+  fetch_span_ms?: number
+  server_ms?: number
+  first_call_at?: string
+}
+
+const secs = (ms?: number) => (ms == null ? '–' : ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`)
+
+/** Latency test: tap as you ask your agent something; see how fast it came to us and got its answer. */
+function Latency() {
+  const [qs, setQs] = useState<Question[]>([])
+  useEffect(() => {
+    const load = () =>
+      fetch('/api/muse/latency', { credentials: 'same-origin' })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => d && setQs(d.questions ?? []))
+        .catch(() => {})
+    load()
+    const t = setInterval(load, 2000)
+    return () => clearInterval(t)
+  }, [])
+  const ask = () => fetch('/api/muse/ask', { method: 'POST', credentials: 'same-origin' }).then(() => setQs((q) => [{ asked_at: new Date().toISOString(), status: 'waiting for the agent' }, ...q]))
+  return (
+    <div className="lat">
+      <div className="lat-head">
+        <strong>Latency test</strong>
+        <button className="btn btn-secondary btn-sm" type="button" onClick={ask}>
+          I'm asking Muse now
+        </button>
+      </div>
+      {qs.length === 0 ? (
+        <p className="lat-empty">Tap the button as you send Muse a question. Each question shows up here with its timings.</p>
+      ) : (
+        <ol className="lat-list">
+          {qs.slice(0, 6).map((q, i) => (
+            <li key={(q.asked_at ?? q.first_call_at ?? '') + i}>
+              <span className="lat-time">{new Date(q.asked_at ?? q.first_call_at ?? Date.now()).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}</span>
+              {q.calls == null ? (
+                <span className="lat-wait">{q.status}</span>
+              ) : (
+                <span className="lat-nums">
+                  {q.asked_at && (
+                    <>
+                      <b>{secs(q.ask_to_first_call_ms)}</b> until Muse called · <b>{secs(q.ask_to_last_response_ms)}</b> until it had the answer ·{' '}
+                    </>
+                  )}
+                  {q.calls} call{q.calls === 1 ? '' : 's'} · {secs(q.server_ms)} on our server
+                </span>
+              )}
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  )
+}
+
 type Pair = { code: string; url: string; prompt: string; expires: string }
 type Status = { connected: boolean; since?: string; last_used?: string | null; pairing?: boolean }
 
@@ -278,6 +341,7 @@ function Pairing() {
             Disconnect
           </button>
         </div>
+        <Latency />
       </section>
     )
 
@@ -294,6 +358,7 @@ function Pairing() {
         <p className="muse-sub">Now paste it into Muse and send. This turns to connected as soon as Muse checks in.</p>
         <p className="muse-waiting">Waiting for your Muse…</p>
         <Onward connected={false} />
+        <Latency />
       </section>
     )
 

@@ -989,3 +989,51 @@ html.scroll-page #root {
   font-size: 12.5px;
   line-height: 1.45;
 }
+.lat {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  text-align: left;
+}
+.lat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.lat-head strong {
+  font: 700 15px var(--display);
+}
+.landing .lat-empty {
+  margin: 10px 0 0;
+  color: var(--ink-3);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.lat-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.lat-list li {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--paper);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.lat-time {
+  color: var(--ink-3);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.lat-nums b {
+  font-variant-numeric: tabular-nums;
+}
+.lat-wait {
+  color: var(--ink-3);
+}

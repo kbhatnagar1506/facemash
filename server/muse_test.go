@@ -313,3 +313,95 @@ func TestMusePairing(t *testing.T) {
 		t.Fatalf("no rate limit: %d", last)
 	}
 }
+
+func TestNowFastPath(t *testing.T) {
+	srv, _, _, _, tok := museServer(t)
+	get := func(path, auth string) (int, map[string]any) {
+		req, _ := http.NewRequest("GET", srv.URL+path, nil)
+		if auth != "" {
+			req.Header.Set("Authorization", "Bearer "+auth)
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		var out map[string]any
+		json.NewDecoder(res.Body).Decode(&out)
+		return res.StatusCode, out
+	}
+	for _, c := range []struct{ path, auth string }{{"/api/now/t/" + tok, ""}, {"/api/now", tok}} {
+		code, out := get(c.path, c.auth)
+		you, _ := out["you"].(map[string]any)
+		people, _ := out["people"].(map[string]any)
+		if code != 200 || out["now"] == nil || out["happening_now"] == nil || out["up_next"] == nil || people == nil || you["name"] != "Buzz" || you["last_seen"] == nil {
+			t.Fatalf("GET %s: %d %v", c.path[:9], code, out)
+		}
+	}
+	if code, _ := get("/api/now", ""); code != 401 {
+		t.Fatalf("no key: %d", code)
+	}
+	if code, _ := get("/api/now/t/gtq_wrong", ""); code != 401 {
+		t.Fatalf("bad key: %d", code)
+	}
+	// the same snapshot as one MCP tool, listed first
+	_, list := rpc(t, srv.URL, tok, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
+	if first := list["result"].(map[string]any)["tools"].([]any)[0].(map[string]any); first["name"] != "get_happening_now" {
+		t.Fatalf("first tool: %v", first["name"])
+	}
+	_, now := rpc(t, srv.URL, tok, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_happening_now"}}`)
+	if sc := now["result"].(map[string]any)["structuredContent"].(map[string]any); sc["you"] == nil || sc["happening_now"] == nil {
+		t.Fatalf("get_happening_now: %v", sc)
+	}
+}
+
+func TestNowCache(t *testing.T) {
+	loc, _ := time.LoadLocation(eventTZ)
+	t0 := time.Date(2026, 9, 25, 17, 45, 0, 0, loc)
+	a := sharedNow("event.json", nil, t0)
+	b := sharedNow("event.json", nil, t0.Add(5*time.Second))
+	if a["now"] != b["now"] {
+		t.Fatal("within the TTL the snapshot should be reused")
+	}
+	c := sharedNow("event.json", nil, t0.Add(nowTTL+time.Minute)) // "now" reads to the minute
+	if c["now"] == a["now"] {
+		t.Fatal("after the TTL the snapshot should refresh")
+	}
+}
+
+func TestPromptFastPath(t *testing.T) {
+	p := connectorPrompt("https://site.test", "gtq_abc")
+	for _, want := range []string{"ONE HTTP GET to https://site.test/api/now/t/gtq_abc", "Don't list tools", "https://site.test/api/mcp/t/gtq_abc", "keep them secret"} {
+		if !strings.Contains(p, want) {
+			t.Errorf("prompt is missing %q", want)
+		}
+	}
+}
+
+func TestLatencyReport(t *testing.T) {
+	l := &callLog{by: map[int64][]museCall{}, asks: map[int64][]time.Time{}}
+	t0 := time.Date(2026, 9, 26, 12, 0, 0, 0, time.UTC)
+	l.ask(1, t0)
+	l.add(1, "GET /api/now", t0.Add(4200*time.Millisecond), 30*time.Millisecond)
+	l.add(1, "mcp tools/call get_schedule", t0.Add(6*time.Second), 20*time.Millisecond)
+	// a second question a minute later, untimed
+	l.add(1, "GET /api/now", t0.Add(70*time.Second), 25*time.Millisecond)
+	l.ask(1, t0.Add(2*time.Minute)) // asked, nothing yet
+	rep := l.report(1, t0.Add(2*time.Minute+time.Second))
+	if len(rep) != 3 {
+		t.Fatalf("questions: %d %v", len(rep), rep)
+	}
+	if rep[0]["status"] != "waiting for the agent" {
+		t.Fatalf("newest should be waiting: %v", rep[0])
+	}
+	timed := rep[2]
+	if timed["calls"] != 2 || timed["ask_to_first_call_ms"] != 4200.0 || timed["ask_to_last_response_ms"] != 6020.0 || timed["server_ms"] != 50.0 {
+		t.Fatalf("timed question: %v", timed)
+	}
+	if rep[1]["asked_at"] != nil || rep[1]["calls"] != 1 {
+		t.Fatalf("untimed question: %v", rep[1])
+	}
+	if other := l.report(2, t0); len(other) != 0 {
+		t.Fatalf("someone else's calls leaked: %v", other)
+	}
+}
