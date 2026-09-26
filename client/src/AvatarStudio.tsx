@@ -121,7 +121,7 @@ export function AvatarStudio() {
     } catch {
       /* fine */
     }
-    setTimeout(() => (location.href = '/?cheer'), 1500)
+    setTimeout(() => (location.href = '/play?cheer'), 1500)
   }
 
   return (
