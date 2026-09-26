@@ -266,7 +266,8 @@ kbd {
 .sw.on { outline: 4px solid #ffd23f; outline-offset: 2px; transform: scale(1.08); }
 .studio-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip .ico { font-size: 16px; }
-.studio-actions { display: grid; grid-template-columns: 1fr 1.3fr; gap: 10px; position: sticky; bottom: 0; background: var(--paper); padding-top: 8px; }
+.studio-actions { display: grid; grid-template-columns: 1fr 1.3fr; gap: 10px; position: sticky; bottom: 0; z-index: 2; background: var(--paper); padding-top: 8px; box-shadow: 0 -10px 10px -10px rgba(27, 29, 36, .35); }
+/* the bar sits over the pickers as they scroll: nothing (a selected swatch's ring, the Accent label) shows through or below it */
 .studio-random { background: #e6f7ff; }
 .studio-play { background: #ff5d6c; color: #fff; font-size: 16px; }
 @media (max-width: 800px) {

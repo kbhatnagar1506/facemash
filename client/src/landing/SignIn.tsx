@@ -1,6 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
 import { loadGoogle, signInWithGoogle, type Me } from '../account'
 
+// Google's script wants initialize() once per page: later sheets (reopened, or StrictMode's
+// second mount) just point the one callback at themselves.
+type GIS = Awaited<ReturnType<typeof loadGoogle>>
+let initedFor = ''
+let onCredential: (credential: string) => void = () => {}
+function initGoogle(g: GIS, clientId: string, cb: (credential: string) => void) {
+  onCredential = cb
+  if (initedFor === clientId) return
+  initedFor = clientId
+  g.accounts.id.initialize({
+    client_id: clientId,
+    ux_mode: 'popup',
+    itp_support: true,
+    use_fedcm_for_button: true,
+    callback: ({ credential }) => onCredential(credential),
+  })
+}
+
 // The door into the game: sign in with Google (which also creates your account the first
 // time). There is no guest mode; signing in is what saves your bean and where you were.
 
@@ -29,21 +47,15 @@ export function SignInSheet({
     loadGoogle()
       .then((g) => {
         if (!live || !button.current) return
-        g.accounts.id.initialize({
-          client_id: clientId,
-          ux_mode: 'popup',
-          itp_support: true,
-          use_fedcm_for_button: true,
-          callback: ({ credential }) => {
-            setState('busy')
-            signInWithGoogle(credential).then(
-              (me) => (location.href = typeof next === 'string' ? next : next(me)),
-              (e: Error) => {
-                setError(e.message)
-                setState('error')
-              },
-            )
-          },
+        initGoogle(g, clientId, (credential) => {
+          setState('busy')
+          signInWithGoogle(credential).then(
+            (me) => (location.href = typeof next === 'string' ? next : next(me)),
+            (e: Error) => {
+              setError(e.message)
+              setState('error')
+            },
+          )
         })
         const width = Math.min(320, Math.round(button.current.clientWidth || 320))
         g.accounts.id.renderButton(button.current, { theme: 'outline', size: 'large', shape: 'pill', text: 'continue_with', logo_alignment: 'center', width })
