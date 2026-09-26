@@ -231,6 +231,27 @@ export function Hud({
     }
   }, [campus, info, room])
 
+  // P: mark where you're standing (used to lay walls exactly where they are in real life).
+  const [marks, setMarks] = useState<{ n: number; x: number; z: number; at: number }[]>([])
+  useEffect(() => {
+    if (room !== 'hackgt') return
+    const k = (e: KeyboardEvent) => {
+      if (e.code !== 'KeyP' || document.activeElement instanceof HTMLInputElement) return
+      const { x, z } = info.current
+      setMarks((m) => {
+        const n = m.length + 1
+        fetch('/api/geo/samples', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ kind: 'wall-mark', n, x: +x.toFixed(2), z: +z.toFixed(2), t: new Date().toISOString() }),
+        }).catch(() => {})
+        return [...m, { n, x, z, at: Date.now() }]
+      })
+    }
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }, [room, info])
+
   const act = () => {
     if (!near) return
     if (near.kind === 'shell') setEventOpen(true)
@@ -297,6 +318,11 @@ export function Hud({
             {near.kind === 'table' && <>Grab a seat and start hacking! Press E to see the tracks.</>}
           </p>
           {(near.kind !== 'spot' || near.spot.action) && <span className="dialog-hint">Press E ▼</span>}
+        </div>
+      )}
+      {marks.length > 0 && Date.now() - marks[marks.length - 1].at < 3000 && (
+        <div key={`m${marks.length}`} className="photo-toast">
+          📍 Mark {marks[marks.length - 1].n} saved ({marks[marks.length - 1].x.toFixed(1)}, {marks[marks.length - 1].z.toFixed(1)})
         </div>
       )}
       {snap > 0 && Date.now() - snap < 2500 && (
