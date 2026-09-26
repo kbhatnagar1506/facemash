@@ -376,7 +376,7 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 	// (/api/mcp/t/gtq_…) so an agent only has to register one URL: nothing to sign in to.
 	caller := func(r *http.Request) (*museCaller, error) {
 		tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-		for _, prefix := range []string{mcpKeyPath, nowKeyPath, memKeyPath} {
+		for _, prefix := range []string{mcpKeyPath, nowKeyPath, memKeyPath, askKeyPath} {
 			if inURL, found := strings.CutPrefix(r.URL.Path, prefix); found {
 				tok, ok = inURL, true
 			}
@@ -491,7 +491,7 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 	}
 	// the fast path: one GET, one JSON blob (key in the Authorization header or in the URL)
 	nowHandler := func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead && (r.Method != http.MethodPost || acc.fast == nil) {
 			w.Header().Set("Allow", "GET")
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -502,14 +502,23 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 			return
 		}
 		start := time.Now()
-		defer func() { calls.add(c.id, "GET /api/now", start, time.Since(start)) }()
+		label := "GET /api/now"
+		defer func() { calls.add(c.id, label, start, time.Since(start)) }()
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
+		// ?q= (or POST {"q"}) also searches the person's own notes, alongside (memfast.go)
+		mem := acc.fast.nowMemory(r, c)
+		if mem != nil {
+			label = r.Method + " /api/now +memory"
+		}
 		out, err := c.snapshot(ctx)
 		if err != nil {
 			log.Printf("muse: now for #%d: %v", c.id, err)
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "try again in a moment"})
 			return
+		}
+		if mem != nil {
+			out["memory"] = <-mem
 		}
 		writeJSON(w, http.StatusOK, out)
 	}
@@ -558,10 +567,17 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "try again in a moment"})
 			return
 		}
+		acc.fast.uploaded(c.tenant, c.id, obj) // and into their private memory index, in the background
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "kb": float64(len(body)*10/1024) / 10})
 	}
 	mux.HandleFunc("/api/memory", memoryHandler)
 	mux.HandleFunc(memKeyPath, memoryHandler)
+	// questions about the person themself, answered from their own notes (memfast.go)
+	if acc.fast != nil {
+		ask := acc.fast.askHandler(caller, unauthorized, writeJSON)
+		mux.HandleFunc("/api/ask", ask)
+		mux.HandleFunc(askKeyPath, ask)
+	}
 
 	// for the page: what's stored (never the content), and a way to delete it
 	mux.HandleFunc("/api/muse/memory", func(w http.ResponseWriter, r *http.Request) {
@@ -575,6 +591,12 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 		if r.Method == http.MethodDelete || r.Method == http.MethodPost {
 			if r.Header.Get("Origin") == "" || !originOK(r) {
 				writeJSON(w, http.StatusForbidden, map[string]string{"error": "bad origin"})
+				return
+			}
+			// the index copy first: once that's recorded, its erase happens even across restarts
+			if err := acc.fast.forget(ctx, acc.tenant, id); err != nil {
+				log.Printf("muse: memory purge for #%d: %v", id, err)
+				writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "try again in a moment"})
 				return
 			}
 			if err := acc.store.DeleteMemory(ctx, acc.tenant, id); err != nil {
@@ -723,6 +745,7 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 		// straight to this server, not through Vercel's proxy (which caps request bodies)
 		info["memory_prompt"] = memoryPrompt(direct + memKeyPath + tok)
 		info["prompt"] = connectorPrompt(base, tok)
+		acc.fast.prompts(info, base, tok) // + the memory fast path, when it's on
 		info["token_type"] = "Bearer"
 		info["next"] = "Save token as a secret credential (never show it in chat). Use it as \"Authorization: Bearer <token>\" for the MCP server at " + base + "/api/mcp or the REST API described at " + base + "/api/openapi.json."
 		writeJSON(w, http.StatusOK, info)
@@ -955,7 +978,7 @@ func handleRPC(ctx context.Context, c *museCaller, raw json.RawMessage) any {
 		return rpcResult(m.ID, map[string]any{})
 	case "tools/list":
 		list := make([]map[string]any, 0, len(museTools))
-		for _, t := range museTools {
+		for _, t := range c.tools() {
 			list = append(list, map[string]any{
 				"name": t.Name, "title": t.Title, "description": t.Description, "inputSchema": t.Input,
 				"annotations": map[string]any{"title": t.Title, "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false},
@@ -970,7 +993,7 @@ func handleRPC(ctx context.Context, c *museCaller, raw json.RawMessage) any {
 		if json.Unmarshal(m.Params, &p) != nil {
 			return rpcError(m.ID, -32602, "invalid params")
 		}
-		for _, t := range museTools {
+		for _, t := range c.tools() {
 			if t.Name != p.Name {
 				continue
 			}
