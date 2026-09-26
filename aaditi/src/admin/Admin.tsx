@@ -1,12 +1,13 @@
-import { useLayoutEffect, useRef, useState, type PointerEvent as RPointerEvent, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type MouseEvent, type PointerEvent as RPointerEvent, type ReactNode } from 'react'
 import { hms, spinner, stamp, useNow } from '../ui/time'
-import { CHATS, JEV_DELAY, RADIUS_M, RING, USER, USERS, type Chat } from './data'
+import { ChatFocus } from './ChatFocus'
+import { CHATS, RADIUS_M, RING, USER, USERS, type Chat } from './data'
+import { LOAD, chatPhase, type Phase } from './timing'
 import './admin.css'
 
 // Architecture view of the platform: hub in the middle, every lifetime user around it,
 // and for active users, the live agent-to-agent chat between them and whoever their muse is talking to.
 
-const LOAD = Date.now()
 const HUB = { w: 440, h: 250 }
 const UBOX = { w: 230, h: 138 }
 const CBOX = { w: 390, h: 400 }
@@ -37,23 +38,65 @@ function exit(b: Box, to: Pt, pad = 6): Pt {
   return { x: b.x + dx * t, y: b.y + dy * t }
 }
 
-function chatPhase(c: Chat, now: number) {
-  const elapsed = (now - (LOAD - c.startedAgo * 1000)) / 1000
-  const last = c.msgs.at(-1)!.t
-  const phase = elapsed < last ? 'live' : elapsed < last + JEV_DELAY ? 'classifying' : 'matched'
-  return { elapsed, phase, visible: c.msgs.filter((m) => m.t <= elapsed) } as const
-}
-
 type Sel = { kind: 'user' | 'chat'; id: string } | null
+type View = { x: number; y: number; k: number }
+const clampK = (k: number) => Math.min(2.5, Math.max(0.12, k))
 
 export function Admin() {
   const now = useNow(500)
   const [sel, setSel] = useState<Sel>(null)
-  const [view, setView] = useState({ x: 0, y: 0, k: 0.3 })
+  const [view, setView] = useState<View>({ x: 0, y: 0, k: 0.3 })
+  const [open, setOpen] = useState<{ id: string; origin: { x: number; y: number } } | null>(null)
+  const openRef = useRef(open)
+  openRef.current = open
   const port = useRef<HTMLDivElement>(null)
   const drag = useRef<{ x: number; y: number; vx: number; vy: number; moved: boolean } | null>(null)
   const touched = useRef(false)
   const dragged = useRef(false)
+
+  // Camera: `cur` is what's on screen, `goal` is where it's heading. Every frame eases cur toward
+  // goal; zoom eases in log space so each step feels the same, and while zooming at the cursor the
+  // world point under it (`anchor`) stays pinned.
+  const cur = useRef<View>(view)
+  const goal = useRef<View>(view)
+  const anchor = useRef<{ px: number; py: number; wx: number; wy: number } | null>(null)
+  const raf = useRef(0)
+  const show = (v: View) => {
+    cur.current = v
+    setView(v)
+  }
+  const snap = (v: View) => {
+    cancelAnimationFrame(raf.current)
+    raf.current = 0
+    anchor.current = null
+    goal.current = v
+    show(v)
+  }
+  const run = () => {
+    if (raf.current) return
+    let last = performance.now()
+    const step = (t: number) => {
+      const a = 1 - Math.exp(-Math.min(50, t - last) / 120)
+      last = t
+      const c = cur.current
+      const g = goal.current
+      const an = anchor.current
+      const k = c.k * Math.pow(g.k / c.k, a)
+      const v = an ? { k, x: an.px - an.wx * k, y: an.py - an.wy * k } : { k, x: c.x + (g.x - c.x) * a, y: c.y + (g.y - c.y) * a }
+      const done = Math.abs(Math.log(g.k / k)) < 0.002 && Math.abs(g.x - v.x) < 0.5 && Math.abs(g.y - v.y) < 0.5
+      show(done ? g : v)
+      if (done) {
+        raf.current = 0
+        anchor.current = null
+      } else raf.current = requestAnimationFrame(step)
+    }
+    raf.current = requestAnimationFrame(step)
+  }
+  const glide = (v: View) => {
+    anchor.current = null
+    goal.current = v
+    run()
+  }
 
   const phases = Object.fromEntries(CHATS.map((c) => [c.id, chatPhase(c, now)]))
   const busy = new Set(CHATS.filter((c) => phases[c.id].phase !== 'matched').flatMap((c) => [c.a, c.b]))
@@ -78,7 +121,7 @@ export function Admin() {
   }
   const dim = (id: string) => (sel && !related.has(id) ? ' faded' : '')
 
-  const fit = () => {
+  const fit = (instant = false) => {
     const el = port.current
     if (!el) return
     const all = [hubBox, ...Object.values(userBox), ...Object.values(chatBox)]
@@ -87,14 +130,20 @@ export function Admin() {
     const minY = Math.min(...all.map((b) => b.y - b.h / 2)) - 40
     const maxY = Math.max(...all.map((b) => b.y + b.h / 2)) + 40
     const k = Math.min(el.clientWidth / (maxX - minX), el.clientHeight / (maxY - minY))
-    setView({ k, x: el.clientWidth / 2 - ((minX + maxX) / 2) * k, y: el.clientHeight / 2 - ((minY + maxY) / 2) * k })
+    const v = { k, x: el.clientWidth / 2 - ((minX + maxX) / 2) * k, y: el.clientHeight / 2 - ((minY + maxY) / 2) * k }
+    if (instant) snap(v)
+    else glide(v)
   }
 
-  const zoomAt = (factor: number, px: number, py: number) =>
-    setView((v) => {
-      const k = Math.min(2.5, Math.max(0.12, v.k * factor))
-      return { k, x: px - ((px - v.x) * k) / v.k, y: py - ((py - v.y) * k) / v.k }
-    })
+  const zoomAt = (factor: number, px: number, py: number) => {
+    const c = cur.current
+    const an = anchor.current
+    if (!an || Math.abs(an.px - px) > 2 || Math.abs(an.py - py) > 2) anchor.current = { px, py, wx: (px - c.x) / c.k, wy: (py - c.y) / c.k }
+    const a = anchor.current!
+    const k = clampK(goal.current.k * factor)
+    goal.current = { k, x: a.px - a.wx * k, y: a.py - a.wy * k }
+    run()
+  }
 
   // focus a box: zoom so it fills most of the screen
   const focus = (b: Box) => {
@@ -102,14 +151,14 @@ export function Admin() {
     if (!el) return
     touched.current = true
     const k = Math.min(1.4, Math.min(el.clientWidth / (b.w * 2.2), el.clientHeight / (b.h * 1.6)))
-    setView({ k, x: el.clientWidth / 2 - b.x * k, y: el.clientHeight / 2 - b.y * k })
+    glide({ k, x: el.clientWidth / 2 - b.x * k, y: el.clientHeight / 2 - b.y * k })
   }
 
   useLayoutEffect(() => {
-    fit()
+    fit(true)
     const el = port.current
     if (!el) return
-    const ro = new ResizeObserver(() => !touched.current && fit())
+    const ro = new ResizeObserver(() => !touched.current && fit(true))
     ro.observe(el)
     const onWheel = (e: WheelEvent) => {
       const log = (e.target as HTMLElement).closest('.chat-log')
@@ -117,21 +166,24 @@ export function Admin() {
       e.preventDefault()
       touched.current = true
       const r = el.getBoundingClientRect()
-      zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top)
+      // mouse wheels send a few big deltas, trackpads many small ones; both become eased steps
+      const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY
+      zoomAt(Math.exp(-Math.max(-120, Math.min(120, dy)) * 0.0022), e.clientX - r.left, e.clientY - r.top)
     }
     el.addEventListener('wheel', onWheel, { passive: false })
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setSel(null)
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !openRef.current && setSel(null)
     window.addEventListener('keydown', onKey)
     return () => {
       ro.disconnect()
       el.removeEventListener('wheel', onWheel)
       window.removeEventListener('keydown', onKey)
+      cancelAnimationFrame(raf.current)
     }
   }, [])
 
   const down = (e: RPointerEvent) => {
     if ((e.target as HTMLElement).closest('.chat-log, button, .overlay')) return
-    drag.current = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y, moved: false }
+    drag.current = { x: e.clientX, y: e.clientY, vx: cur.current.x, vy: cur.current.y, moved: false }
   }
   const move = (e: RPointerEvent) => {
     const d = drag.current
@@ -142,7 +194,7 @@ export function Admin() {
     if (!d.moved) port.current?.setPointerCapture(e.pointerId)
     d.moved = true
     touched.current = true
-    setView((v) => ({ ...v, x: d.vx + dx, y: d.vy + dy }))
+    snap({ k: cur.current.k, x: d.vx + dx, y: d.vy + dy })
   }
   const up = (e: RPointerEvent) => {
     const d = drag.current
@@ -151,6 +203,11 @@ export function Admin() {
     if (d && !d.moved && e.target === e.currentTarget.firstChild) setSel(null)
   }
   // a click that ended a drag shouldn't select
+  const openChat = (id: string, x: number, y: number) => {
+    if (dragged.current) return
+    setSel({ kind: 'chat', id })
+    setOpen({ id, origin: { x, y } })
+  }
   const pick = (s: Sel) => () => !dragged.current && setSel((cur) => (cur?.kind === s?.kind && cur?.id === s?.id ? null : s))
 
   return (
@@ -240,10 +297,15 @@ export function Admin() {
           ))}
 
           {CHATS.map((c) => (
-            <ChatCard key={c.id} c={c} b={chatBox[c.id]} now={now} p={phases[c.id]} cls={`${sel?.id === c.id ? ' selected' : ''}${sel ? (related.has(c.id) ? '' : ' faded') : ''}`} onPick={pick({ kind: 'chat', id: c.id })} onFocus={() => focus(chatBox[c.id])} />
+            <ChatCard key={c.id} c={c} b={chatBox[c.id]} now={now} p={phases[c.id]} cls={`${sel?.id === c.id ? ' selected' : ''}${sel ? (related.has(c.id) ? '' : ' faded') : ''}`} onPick={(x, y) => openChat(c.id, x, y)} onFocus={() => focus(chatBox[c.id])} />
           ))}
         </div>
       </div>
+
+      {open && (() => {
+        const c = CHATS.find((x) => x.id === open.id)!
+        return <ChatFocus c={c} p={phases[c.id]} now={now} origin={open.origin} onClose={() => setOpen(null)} />
+      })()}
 
       <div className="overlay title-card">
         <div className="t">Muse · admin architecture</div>
@@ -287,9 +349,10 @@ export function Admin() {
   )
 }
 
-function Place({ b, className, children, onClick }: { b: Box; className: string; children: ReactNode; onClick?: () => void }) {
+type PlaceProps = { b: Box; className: string; children: ReactNode; onClick?: (e: MouseEvent) => void; title?: string }
+function Place({ b, className, children, onClick, title }: PlaceProps) {
   return (
-    <div className={`node ${className}`} style={{ left: b.x - b.w / 2, top: b.y - b.h / 2, width: b.w, height: b.h }} onClick={onClick}>
+    <div className={`node ${className}`} style={{ left: b.x - b.w / 2, top: b.y - b.h / 2, width: b.w, height: b.h }} onClick={onClick} title={title}>
       {children}
     </div>
   )
@@ -308,7 +371,7 @@ function Stat({ n, v, k, unit }: { n: number; v: string; k: string; unit?: strin
   )
 }
 
-type ChatProps = { c: Chat; b: Box; now: number; p: ReturnType<typeof chatPhase>; cls: string; onPick: () => void; onFocus: () => void }
+type ChatProps = { c: Chat; b: Box; now: number; p: Phase; cls: string; onPick: (x: number, y: number) => void; onFocus: () => void }
 
 function ChatCard({ c, b, now, p, cls, onPick, onFocus }: ChatProps) {
   const log = useRef<HTMLDivElement>(null)
@@ -323,7 +386,7 @@ function ChatCard({ c, b, now, p, cls, onPick, onFocus }: ChatProps) {
   }, [p.visible.length, p.phase])
 
   return (
-    <Place b={b} className={`chat ${p.phase}${cls}`} onClick={onPick}>
+    <Place b={b} className={`chat ${p.phase}${cls}`} onClick={(e) => onPick(e.clientX, e.clientY)} title="Click to open full screen">
       <header className="c-head">
         <div className="c-who">
           muse·{A} <span className="dim">⇄</span> muse·{B}
