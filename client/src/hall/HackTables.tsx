@@ -300,12 +300,12 @@ export function FoldingTable(props: FoldingTableProps) {
   )
 }
 
-/** One numbered hacking table on the open floor: two leaves, three seats a side. */
+/** One numbered hacking table on the open floor: one maple leaf, two seats a side. */
 function HackTable({ t }: { t: Table }) {
-  const s = TABLE.w / 3
+  const s = TABLE.w / 4
   return (
     <group position={[t.x, 0, t.z]}>
-      <FoldingTable seed={t.n * 7 + 3} seats={[-s, 0, s]} seatsBack={[-s, 0, s]} />
+      <FoldingTable seed={t.n * 7 + 3} leaves={1} seats={[-s, s]} seatsBack={[-s, s]} />
     </group>
   )
 }
@@ -326,7 +326,7 @@ export function HackTables() {
  * The spread on a sponsor table (top at y = h, front toward +z): QR stands,
  * sticker piles, pens, candy, water, a laptop or two, and business cards.
  */
-export function Swag({ w, seed = 1, h = 0.76, laptops = 1 }: { w: number; seed?: number; h?: number; laptops?: number }) {
+export function Swag({ w, seed = 1, h = 0.95, laptops = 1 }: { w: number; seed?: number; h?: number; laptops?: number }) {
   const built = useMemo(() => {
     const r = rng(seed + 101)
     const k = new Kit()

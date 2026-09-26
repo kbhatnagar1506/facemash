@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import * as THREE from 'three'
-import { CEIL, HALL_EXIT } from './layout'
+import { BALCONY, CEIL, HALL_EXIT, L1, MEZZ_Z } from './layout'
 import { HackTables } from './HackTables'
 import { curtain, textCard } from './textures'
 import { Bear, Sponsors } from './Sponsors'
@@ -16,6 +16,11 @@ const BUNTING: [THREE.Vector3Tuple, THREE.Vector3Tuple, number][] = [
   [[-12, 9.6, -12], [16.6, 9.2, -20], 1.8],
   [[-9.5, 10.8, 3], [16.6, 11.2, -6], 2.0],
   [[-8.5, 12.2, 12], [16.6, 12.6, 4], 1.8],
+  [[-12, 15.5, -20], [16.6, 15, -10], 2.2],
+  [[-9, 7.6, -2], [16.6, 8, -14], 1.6],
+  [[-10, 14.2, -4], [16.6, 14.6, 10], 2.4],
+  [[-12, 8.4, -22], [10, 8.8, 2], 1.8],
+  [[-7, 17, 2], [16.6, 17.4, -22], 2.6],
 ]
 
 function Bunting() {
@@ -87,10 +92,32 @@ function Bunting() {
 
 /* ----------------------------------------------------------------- seagulls */
 
-const GULLS: THREE.Vector3Tuple[] = [
-  [-6, 12, -6], [2, 10.5, -14], [8, 13, -4], [-2, 14.5, 4], [12, 11, -18],
-  [5, 15.5, 8], [-9, 10.2, -20], [14, 13.5, 6], [0, 9.2, -22], [-4, 16, -12], [10, 8.6, 12],
-]
+/** Keep hanging things out of the intro camera's climb and its top-shot view (Player.tsx). */
+function clearOfIntro([x, y, z]: THREE.Vector3Tuple | [number, number, number, ...unknown[]]) {
+  const p = new THREE.Vector3(x as number, y as number, z as number)
+  const near = (a: THREE.Vector3, b: THREE.Vector3, r: number) => {
+    const ab = b.clone().sub(a)
+    const t = Math.max(0, Math.min(1, p.clone().sub(a).dot(ab) / ab.lengthSq()))
+    return p.distanceTo(a.clone().addScaledVector(ab, t)) < r
+  }
+  const top = new THREE.Vector3(-0.5, 17.3, 1)
+  return !near(new THREE.Vector3(5, 3.8, 0), top, 4.5) && !near(top, new THREE.Vector3(0, 0, -13), 3.2)
+}
+
+const GULLS: THREE.Vector3Tuple[] = (() => {
+  // a whole flock on fishing line through the atrium void, at every height
+  const out: THREE.Vector3Tuple[] = [
+    [-6, 12, -6], [2, 10.5, -14], [8, 13, -4], [-2, 14.5, 4], [12, 11, -18],
+    [5, 15.5, 8], [-9, 10.2, -20], [14, 13.5, 6], [0, 9.2, -22], [-4, 16, -12], [10, 8.6, 12],
+  ]
+  let s = 7
+  const r = () => ((s = (s * 16807) % 2147483647) / 2147483647)
+  while (out.filter(clearOfIntro).length < 32) {
+    const p: THREE.Vector3Tuple = [-8 + r() * 23, 7.2 + r() * 11, -23 + r() * 25]
+    if (out.every((q) => Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]) > 3)) out.push(p)
+  }
+  return out.filter(clearOfIntro)
+})()
 
 function Gull({ at, i }: { at: THREE.Vector3Tuple; i: number }) {
   const g = useRef<THREE.Group>(null!)
@@ -156,6 +183,89 @@ function Seagulls() {
     <group>
       {GULLS.map((at, i) => (
         <Gull key={i} at={at} i={i} />
+      ))}
+    </group>
+  )
+}
+
+/* ----------------------------------------------------- seaside decorations */
+
+/** Glowing paper jellyfish lanterns hanging in the void, gently bobbing. */
+const JELLIES: [number, number, number, string][] = [
+  [-3, 11, -10, '#9fd8ff'], [6, 13.5, -16, '#f6b6d9'], [12, 10.5, -8, '#b8a8e6'], [1, 14.5, -2, '#8fe3d6'],
+  [9, 12, 0, '#9fd8ff'], [-6, 13, -18, '#f7c59f'], [14, 15, -20, '#f6b6d9'], [4, 9.5, -6, '#b8a8e6'],
+  [-1, 16, -20, '#8fe3d6'], [11, 16.5, -2, '#f7c59f'],
+]
+
+function Jelly({ at, i }: { at: [number, number, number, string]; i: number }) {
+  const g = useRef<THREE.Group>(null!)
+  const tentacles = useMemo(
+    () =>
+      Array.from({ length: 7 }, (_, k) => {
+        const a = (k / 7) * Math.PI * 2
+        const pts = Array.from({ length: 8 }, (_, j) => new THREE.Vector3(Math.cos(a) * 0.3 + Math.sin(j * 1.3 + k) * 0.05, -j * 0.16, Math.sin(a) * 0.3 + Math.cos(j * 1.1 + k) * 0.05))
+        return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 12, 0.018, 4)
+      }),
+    [],
+  )
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime + i * 2.1
+    g.current.position.y = at[1] + Math.sin(t * 0.7) * 0.25
+    g.current.rotation.y = t * 0.15
+    g.current.scale.set(1 + Math.sin(t * 1.4) * 0.05, 1 - Math.sin(t * 1.4) * 0.05, 1 + Math.sin(t * 1.4) * 0.05)
+  })
+  return (
+    <group ref={g} position={[at[0], at[1], at[2]]}>
+      <mesh position={[0, (CEIL - at[1]) / 2, 0]}>
+        <cylinderGeometry args={[0.006, 0.006, CEIL - at[1], 3]} />
+        <meshBasicMaterial color="#e8e6e0" transparent opacity={0.5} />
+      </mesh>
+      <mesh>
+        <sphereGeometry args={[0.45, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <meshBasicMaterial color={at[3]} transparent opacity={0.8} side={THREE.DoubleSide} toneMapped={false} />
+      </mesh>
+      <mesh position={[0, 0.05, 0]}>
+        <sphereGeometry args={[0.2, 12, 8]} />
+        <meshBasicMaterial color="#fffaf0" transparent opacity={0.9} toneMapped={false} />
+      </mesh>
+      {tentacles.map((geo, k) => (
+        <mesh key={k} geometry={geo}>
+          <meshBasicMaterial color={at[3]} transparent opacity={0.75} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+/** Orange-and-white life rings hung on the balcony railings. */
+function LifeRing({ p, ry }: { p: THREE.Vector3Tuple; ry: number }) {
+  return (
+    <group position={p} rotation-y={ry}>
+      {Array.from({ length: 8 }, (_, k) => (
+        <mesh key={k} rotation-z={(k / 8) * Math.PI * 2}>
+          <torusGeometry args={[0.32, 0.1, 8, 6, Math.PI / 4 + 0.01]} />
+          <meshLambertMaterial color={k % 2 ? '#f4f4f0' : '#e8543f'} />
+        </mesh>
+      ))}
+      <mesh>
+        <torusGeometry args={[0.33, 0.012, 4, 24]} />
+        <meshLambertMaterial color="#d8c9a6" />
+      </mesh>
+    </group>
+  )
+}
+
+function SeasideDecor() {
+  return (
+    <group>
+      {JELLIES.filter(clearOfIntro).map((j, i) => (
+        <Jelly key={i} at={j} i={i} />
+      ))}
+      {[1, 7, 13].map((x) => (
+        <LifeRing key={x} p={[x, L1 + 0.9, MEZZ_Z - 0.12]} ry={0} />
+      ))}
+      {[-9, -1].map((z) => (
+        <LifeRing key={z} p={[BALCONY.left.x1 + 0.12, L1 + 0.9, z]} ry={Math.PI / 2} />
       ))}
     </group>
   )
@@ -300,6 +410,7 @@ export function Decor({ active }: { active: boolean }) {
     <group>
       <Bunting />
       <Seagulls />
+      <SeasideDecor />
       <PhotoBooth />
       <Sponsors />
       <HackTables />

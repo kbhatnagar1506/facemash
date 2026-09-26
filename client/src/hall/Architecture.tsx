@@ -5,7 +5,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { BALCONY, CEIL, COLUMNS, CX, CXB, SAG, SLANT, WEST_ZS, XB, ceilY, eastX, wallZ, westX, DOORS_Z, HALL, L1, MEZZ_WEST_Z, MEZZ_X0, MEZZ_Z, STAIR, X0, X1, Z0, Z1 } from './layout'
 import { Entrance } from './Entrance'
 import { addTerrazzo } from './detail'
-import { ceilingTiles, checkerWall, glassPanes, netTexture, terrazzo, textCard } from './textures'
+import { ceilingTiles, checkerWall, glassPanes, netTexture, terrazzo } from './textures'
 
 const WHITE = '#f4f2ee'
 
@@ -92,57 +92,44 @@ function Railing({ from, to, y, glass = false }: { from: [number, number]; to: [
   const ang = -Math.atan2(to[1] - from[1], to[0] - from[0])
   const mid: [number, number, number] = [(from[0] + to[0]) / 2, y, (from[1] + to[1]) / 2]
   const posts = Math.max(1, Math.round(len / 1.8))
-  if (glass) {
-    const panels = Math.max(1, Math.round(len / 1.5))
-    const pw = len / panels
-    return (
-      <group position={mid} rotation-y={ang}>
-        {/* frameless glass panels in a base channel, a hair apart, with a top sheen */}
-        {Array.from({ length: panels }, (_, i) => (
-          <group key={i} position={[-len / 2 + pw * (i + 0.5), 0, 0]}>
-            <mesh position={[0, 0.6, 0]} renderOrder={2}>
-              <boxGeometry args={[pw - 0.03, 1.02, 0.025]} />
-              <meshStandardMaterial color="#9fb8b6" roughness={0.05} metalness={0.3} transparent opacity={0.3} depthWrite={false} />
-            </mesh>
-            <mesh position={[0, 1.02, 0.014]} renderOrder={3}>
-              <planeGeometry args={[pw - 0.05, 0.14]} />
-              <meshBasicMaterial color="#ffffff" transparent opacity={0.12} depthWrite={false} side={THREE.DoubleSide} />
-            </mesh>
-            {[-1, 1].map((s) => (
-              <mesh key={s} position={[s * (pw / 2 - 0.02), 0.6, 0]}>
-                <boxGeometry args={[0.012, 1.02, 0.035]} />
-                <meshLambertMaterial color="#c9cdd1" transparent opacity={0.6} />
-              </mesh>
-            ))}
-          </group>
-        ))}
-        <mesh position={[0, 0.07, 0]}>
-          <boxGeometry args={[len, 0.14, 0.09]} />
-          <meshLambertMaterial color="#a9adb2" />
-        </mesh>
-        <mesh position={[0, 1.14, 0]}>
-          <boxGeometry args={[len + 0.1, 0.07, 0.12]} />
-          <meshLambertMaterial color={HANDRAIL} />
-        </mesh>
-      </group>
-    )
-  }
+  // Klaus balustrade (photo): tall bays in dark metal frames, each with two stacked
+  // panes: a smoked mesh pane below the mid rail and clearer glass above, wooden cap rail.
+  void glass
+  void posts
+  const bays = Math.max(1, Math.round(len / 1.6))
+  const bw = len / bays
+  const H = 1.75
   return (
     <group position={mid} rotation-y={ang}>
-      <mesh position={[0, 0.55, 0]}>
-        <boxGeometry args={[len, 1.0, 0.04]} />
-        <meshLambertMaterial color={BRONZE} transparent opacity={0.88} />
+      <mesh position={[0, 0.47, 0]} renderOrder={2}>
+        <boxGeometry args={[len, 0.8, 0.02]} />
+        <meshStandardMaterial color="#6f6a61" roughness={0.35} metalness={0.4} transparent opacity={0.78} depthWrite={false} />
       </mesh>
-      <mesh position={[0, 1.1, 0]}>
-        <boxGeometry args={[len + 0.1, 0.08, 0.16]} />
-        <meshLambertMaterial color={HANDRAIL} />
+      <mesh position={[0, 1.3, 0]} renderOrder={2}>
+        <boxGeometry args={[len, 0.78, 0.02]} />
+        <meshStandardMaterial color="#a9b8b6" roughness={0.05} metalness={0.3} transparent opacity={0.32} depthWrite={false} />
       </mesh>
-      {Array.from({ length: posts + 1 }, (_, i) => (
-        <mesh key={i} position={[-len / 2 + (len / posts) * i, 0.55, 0.03]}>
-          <boxGeometry args={[0.05, 1.1, 0.05]} />
-          <meshLambertMaterial color="#8d9096" />
+      <mesh position={[0, 1.36, 0.013]} renderOrder={3}>
+        <planeGeometry args={[len, 0.2]} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={0.08} depthWrite={false} side={THREE.DoubleSide} />
+      </mesh>
+      {/* frame: base, mid rail, top rail, and a mullion at every bay */}
+      {[0.05, 0.89, H - 0.04].map((y) => (
+        <mesh key={y} position={[0, y, 0]}>
+          <boxGeometry args={[len, 0.06, 0.05]} />
+          <meshLambertMaterial color="#4a4a4c" />
         </mesh>
       ))}
+      {Array.from({ length: bays + 1 }, (_, i) => (
+        <mesh key={i} position={[-len / 2 + bw * i, H / 2, 0]}>
+          <boxGeometry args={[0.05, H, 0.05]} />
+          <meshLambertMaterial color="#4a4a4c" />
+        </mesh>
+      ))}
+      <mesh position={[0, H + 0.03, 0]}>
+        <boxGeometry args={[len + 0.1, 0.07, 0.13]} />
+        <meshLambertMaterial color={HANDRAIL} />
+      </mesh>
     </group>
   )
 }
@@ -435,17 +422,40 @@ function Mezzanine() {
 /** The walkable 2nd-floor balcony (left + back-left) with the Klaus lettering under it. */
 function LeftBalcony() {
   const { left, back } = BALCONY
-  const letters = useMemo(
-    () =>
-      textCard(
-        [
-          { text: 'CHRISTOPHER W. KLAUS', font: '600 92px Georgia, "Times New Roman", serif', color: '#9ea3a8' },
-          { text: 'ADVANCED COMPUTING BUILDING', font: '600 92px Georgia, "Times New Roman", serif', color: '#9ea3a8' },
-        ],
-        { w: 2048, h: 360 },
-      ),
-    [],
-  )
+  const letters = useMemo(() => {
+    // brushed-steel serif letters standing off the fascia: a crisp dark cast shadow,
+    // a steel face with a top-lit gradient, and a thin bright edge so it reads from afar
+    const W = 2048
+    const H = 400
+    const c = document.createElement('canvas')
+    c.width = W
+    c.height = H
+    const g = c.getContext('2d')!
+    g.textAlign = 'center'
+    g.textBaseline = 'middle'
+    const lines: [string, number, number][] = [
+      ['CHRISTOPHER W. KLAUS', 116, 130],
+      ['ADVANCED COMPUTING BUILDING', 96, 280],
+    ]
+    for (const [text, size, y] of lines) {
+      g.font = `700 ${size}px Georgia, "Times New Roman", serif`
+      g.fillStyle = 'rgba(40,44,50,0.55)'
+      g.fillText(text, W / 2 + 7, y + 9)
+      const grd = g.createLinearGradient(0, y - size / 2, 0, y + size / 2)
+      grd.addColorStop(0, '#9aa1a9')
+      grd.addColorStop(0.5, '#5f666e')
+      grd.addColorStop(1, '#474d54')
+      g.fillStyle = grd
+      g.fillText(text, W / 2, y)
+      g.lineWidth = 2
+      g.strokeStyle = 'rgba(235,238,242,0.7)'
+      g.strokeText(text, W / 2 - 1, y - 1)
+    }
+    const t = new THREE.CanvasTexture(c)
+    t.colorSpace = THREE.SRGBColorSpace
+    t.anisotropy = 16
+    return { map: t, aspect: W / H }
+  }, [])
   return (
     <group>
       <WestSlab z0={left.z0} z1={left.z1} top={L1} east={left.x1} />
@@ -456,9 +466,10 @@ function LeftBalcony() {
         <meshLambertMaterial color={WHITE} />
       </mesh>
       {/* the Klaus lettering on the balcony's front edge, facing into the atrium */}
-      <mesh position={[left.x1 + 0.1, L1 - 1.1, -6]} rotation-y={Math.PI / 2}>
-        <planeGeometry args={[11, 11 / letters.aspect]} />
-        <meshBasicMaterial map={letters.map} transparent />
+      {/* between the columns (z = -5 and the back), so nothing stands in front of it */}
+      <mesh position={[left.x1 + 0.1, L1 - 1.05, -9.6]} rotation-y={Math.PI / 2}>
+        <planeGeometry args={[8.2, 8.2 / letters.aspect]} />
+        <meshBasicMaterial map={letters.map} transparent toneMapped={false} />
       </mesh>
       <mesh position={[left.x1 + 0.02, L1 - 0.95, (MEZZ_Z + back.z1) / 2]} rotation-y={Math.PI / 2}>
         <boxGeometry args={[MEZZ_Z - back.z1, 1.3, 0.12]} />

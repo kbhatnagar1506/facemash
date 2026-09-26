@@ -95,11 +95,10 @@ export interface Table {
   x: number
   z: number
 }
-/** 18 hacking tables packed into the open floor, 3 columns × 6 rows, tight aisles like on the day. */
-export const TABLES: Table[] = [-12, -8, -4, 0, 4, 8].flatMap((z, row) =>
-  [2.3, 7.5, 12.7].map((x, col) => ({ n: row * 3 + col + 1, x, z })),
+/** 10 hacking tables in the open floor, 2 columns × 5 rows, with room to walk between. */
+export const TABLES: Table[] = [-12, -6.5, -1, 4.5, 10].flatMap((z, row) =>
+  [3.2, 10.4].map((x, col) => ({ n: row * 2 + col + 1, x, z })),
 )
-/** Long maple folding tables (two leaves end to end), long axis east–west. */
 export const TABLE = { w: 4.4, d: 0.9, h: 0.76 }
 
 type Box = [number, number, number, number] // x0, z0, x1, z1
@@ -110,18 +109,18 @@ export const GROUND_BLOCKS: Box[] = [
   [-0.45, -22.8, 4.45, -18.6], // photo booth frame
   [-0.7, -18.6, 4.7, -16.5], // the boat
   // back wall sponsor row (Notability, Visa, T-Mobile, Citadel, Aramco)
-  [-7.4, -27.4, -2.3, -24.1],
-  [-0.7, -27.4, 12.1, -25.1],
-  [12.1, -27.9, 18.5, -25.5],
+  [-7.9, -27.4, -2.3, -24.1],
+  [-1.3, -27.4, 12.3, -25.1],
+  [12.3, -27.9, 18.5, -25.5],
   [18.5, -25, 19.3, -23.6], // Aramco's folding chair
   // east windows, inside the glass (NSA, Meta, Impiricus, maple table, SpaceX, maple tables)
-  [17.6 + ex(-20), -21.8, 19.9 + ex(-20), -18.2],
-  [17.6 + ex(-12.5), -14.2, 19.9 + ex(-12.5), -10],
+  [17.6 + ex(-20), -22, 19.9 + ex(-20), -18],
+  [17.6 + ex(-12.5), -14.5, 19.9 + ex(-12.5), -9.7],
   [18.4 + ex(-6.6), -7, 19.9 + ex(-6.6), -6.2],
-  [17.6 + ex(-4.2), -5.9, 19.9 + ex(-4.2), -2.5],
+  [17.6 + ex(-4.2), -6.1, 19.9 + ex(-4.2), -2.3],
   [18.2 + ex(-1.9), -2.3, 19.9 + ex(-1.9), -0.9],
   [17.4 + ex(0.6), -0.4, 19.9 + ex(0.6), 2.5],
-  [17.6, 3.3, 19.9, 6.3],
+  [17.6, 3, 19.9, 7.3],
   [17.6, 7.6, 19.9, 9.6],
   [17.6, 10.6, 19.9, 12.6],
   // organizers
