@@ -99,42 +99,7 @@ function Showcase({ look, pose, cheer }: { look: Look; pose: 'idle' | 'wave' | '
   )
 }
 
-/** /avatar?gallery: every hat, held item, face and pattern side by side, for checking them all. */
-function Gallery() {
-  const state = useRef<AvatarState>({ moving: false })
-  const base = defaultLook('#ff8a3d')
-  const rows: { label: string; looks: Look[] }[] = [
-    { label: 'hats', looks: HATS.map((h, i) => ({ ...base, body: BODY_COLORS[i % BODY_COLORS.length], hat: h, item: 'none' })) },
-    { label: 'items', looks: ITEMS.map((it, i) => ({ ...base, body: BODY_COLORS[(i + 3) % BODY_COLORS.length], item: it })) },
-    { label: 'faces', looks: EYES.map((e, i) => ({ ...base, body: BODY_COLORS[(i + 6) % BODY_COLORS.length], eyes: e, item: 'none' })) },
-    { label: 'sponsors', looks: SPONSOR_BEANS.map((sb) => sb.look) },
-    { label: 'patterns', looks: PATTERNS.map((p, i) => ({ ...base, body: BODY_COLORS[(i + 1) % BODY_COLORS.length], accent: ACCENT_COLORS[(i + 1) % ACCENT_COLORS.length], pattern: p, item: 'none' })) },
-  ]
-  const only = new URLSearchParams(location.search).get('row')
-  const page = new URLSearchParams(location.search).get('page')
-  let show = only === null ? rows : [rows[Number(only)] ?? rows[0]]
-  if (page !== null) show = show.map((r) => ({ ...r, looks: r.looks.slice(Number(page) * 4, Number(page) * 4 + 4) }))
-  const n = Math.max(...show.map((r) => r.looks.length))
-  return (
-    <div style={{ position: 'fixed', inset: 0 }}>
-      <Canvas style={{ width: '100%', height: '100%' }} camera={{ position: [0, only === null ? 3.2 : 1.4, only === null ? 30 : Math.max(5, n * 1.5 + 1)], fov: 40 }} dpr={[1, 2]}>
-        <color attach="background" args={['#ffe9f3']} />
-        <hemisphereLight args={['#ffffff', '#ffd9e8', 1.6]} />
-        <directionalLight position={[3, 6, 8]} intensity={1.6} />
-        {show.map((row, r) =>
-          row.looks.map((l, i) => (
-            <group key={`${r}-${i}`} position={[(i - (row.looks.length - 1) / 2) * 2.2, (show.length - 1) * 1.8 - r * 3.6, 0]}>
-              <BeanBody look={l} state={state} shadows={false} />
-            </group>
-          )),
-        )}
-      </Canvas>
-    </div>
-  )
-}
-
 export function AvatarStudio() {
-  if (location.search.includes('gallery')) return <Gallery />
   const [look, setLook] = useState<Look>(() => loadLook() ?? defaultLook())
   const [pose, setPose] = useState<'idle' | 'wave' | 'walk'>('idle')
   const [name, setName] = useState(() => {

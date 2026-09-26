@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Billboard, Html } from '@react-three/drei'
 import * as THREE from 'three'
@@ -42,18 +42,64 @@ function paint(geo: THREE.BufferGeometry, fn: (ny: number) => THREE.Color) {
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
 }
 
-function Buildings({ campus }: { campus: Campus }) {
-  const ramp = useToonRamp()
-  const mats = useMemo(
-    () => ({
-      body: withCutaway(new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: ramp }), { windows: [WALL, WALL_EVENT] }),
-      line: new THREE.LineBasicMaterial({ color: '#2b2a33' }), // (outlines have no normals, so no shader patch)
-    }),
-    [ramp],
-  )
+/**
+ * Streaming campus: the map is cut into TILE-metre tiles, and only the tiles near
+ * you are built and drawn (buildings, trees, lamps, benches). Far tiles don't exist
+ * at all until you walk toward them, so startup is quick and the GPU only ever
+ * works on the neighbourhood you're in. Each tile also has tight bounds, so the
+ * ones behind the camera are skipped too.
+ */
+const TILE = 240
+const LOAD_RADIUS = 420 // metres around you that exist
+const tileKey = (x: number, z: number) => `${Math.floor(x / TILE)},${Math.floor(z / TILE)}`
+function byTile<T>(items: T[], at: (t: T) => [number, number]) {
+  const m = new Map<string, T[]>()
+  for (const it of items) {
+    const [x, z] = at(it)
+    const k = tileKey(x, z)
+    const list = m.get(k)
+    if (list) list.push(it)
+    else m.set(k, [it])
+  }
+  return m
+}
+/** Tile keys within LOAD_RADIUS of the player, re-checked twice a second. */
+function useNearTiles(focus: React.MutableRefObject<{ x: number; z: number }>) {
+  const calc = () => {
+    const out: string[] = []
+    const { x, z } = focus.current
+    const r = Math.ceil(LOAD_RADIUS / TILE) + 1
+    const cx = Math.floor(x / TILE)
+    const cz = Math.floor(z / TILE)
+    for (let i = -r; i <= r; i++)
+      for (let j = -r; j <= r; j++) {
+        const tx = (cx + i + 0.5) * TILE
+        const tz = (cz + j + 0.5) * TILE
+        if (Math.hypot(tx - x, tz - z) < LOAD_RADIUS + TILE * 0.71) out.push(`${cx + i},${cz + j}`)
+      }
+    return out.sort().join('|')
+  }
+  const [keys, setKeys] = useState(calc)
+  const acc = useRef(0)
+  useFrame((_, dt) => {
+    acc.current += dt
+    if (acc.current < 0.5) return
+    acc.current = 0
+    const k = calc()
+    if (k !== keys) setKeys(k)
+  })
+  return useMemo(() => new Set(keys.split('|')), [keys])
+}
+function finishInstances(mesh: THREE.InstancedMesh) {
+  mesh.instanceMatrix.needsUpdate = true
+  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+  mesh.computeBoundingSphere()
+}
+
+function BuildingTile({ buildings, mats }: { buildings: Campus['buildings']; mats: { body: THREE.Material; line: THREE.Material } }) {
   const { geo, edges } = useMemo(() => {
     const parts: THREE.BufferGeometry[] = []
-    for (const b of campus.buildings) {
+    for (const b of buildings) {
       const g = new THREE.ExtrudeGeometry(shape(b.pts), { depth: b.h, bevelEnabled: false })
       g.rotateX(-Math.PI / 2)
       const roof = new THREE.Color(b.roof)
@@ -72,14 +118,37 @@ function Buildings({ campus }: { campus: Campus }) {
     }
     const geo = mergeGeometries(parts)!
     parts.forEach((p) => p.dispose())
+    geo.computeBoundingSphere()
     const edges = new THREE.EdgesGeometry(geo, 35)
     return { geo, edges }
-  }, [campus])
-
+  }, [buildings])
+  useEffect(() => () => {
+    geo.dispose()
+    edges.dispose()
+  }, [geo, edges])
   return (
     <group>
       <mesh geometry={geo} material={mats.body} castShadow receiveShadow />
       <lineSegments geometry={edges} material={mats.line} />
+    </group>
+  )
+}
+
+function Buildings({ campus, near }: { campus: Campus; near: Set<string> }) {
+  const ramp = useToonRamp()
+  const mats = useMemo(
+    () => ({
+      body: withCutaway(new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: ramp }), { windows: [WALL, WALL_EVENT] }),
+      line: new THREE.LineBasicMaterial({ color: '#2b2a33' }), // (outlines have no normals, so no shader patch)
+    }),
+    [ramp],
+  )
+  const tiles = useMemo(() => byTile(campus.buildings, (b) => b.pts[0]), [campus])
+  return (
+    <group>
+      {[...tiles].filter(([k]) => near.has(k)).map(([k, bs]) => (
+        <BuildingTile key={k} buildings={bs} mats={mats} />
+      ))}
     </group>
   )
 }
@@ -223,7 +292,7 @@ function useTreePoints(campus: Campus) {
 }
 
 /** Park benches and warm lamp posts along the footpaths (instanced: one draw each). */
-function StreetFurniture({ campus }: { campus: Campus }) {
+function StreetFurniture({ campus, near }: { campus: Campus; near: Set<string> }) {
   const ramp = useToonRamp()
   const spots = useMemo(() => {
     const coll = new Collider(campus)
@@ -241,8 +310,8 @@ function StreetFurniture({ campus }: { campus: Campus }) {
         if (L < 6) continue
         const nx = -(bz - az) / L
         const nz = (bx - ax) / L
-        for (let t = 4; t < L; t += 22) {
-          const side = (Math.floor(t / 22) + i) % 2 ? 1 : -1
+        for (let t = 4; t < L; t += 30) {
+          const side = (Math.floor(t / 30) + i) % 2 ? 1 : -1
           const px = ax + ((bx - ax) * t) / L
           const pz = az + ((bz - az) * t) / L
           // a lamp right at the path edge
@@ -251,7 +320,7 @@ function StreetFurniture({ campus }: { campus: Campus }) {
           if (!coll.blocked(lx, lz, 1) && clear(lx, lz, 0.5) && !near(lamps, lx, lz, 12) && !shells.some(([sx, sz]) => Math.hypot(lx - sx, lz - sz) < 6)) lamps.push([lx, lz])
           // every other stop, a bench on the other side, facing the path
           const bt = t + 11
-          if (bt >= L || (Math.floor(t / 22) % 2)) continue
+          if (bt >= L || (Math.floor(t / 30) % 2)) continue
           const qx = ax + ((bx - ax) * bt) / L - nx * (r.w / 2 + 1.1) * side
           const qz = az + ((bz - az) * bt) / L - nz * (r.w / 2 + 1.1) * side
           if (!coll.blocked(qx, qz, 1.4) && clear(qx, qz, 0.7) && !near(benches, qx, qz, 18) && !shells.some(([sx, sz]) => Math.hypot(qx - sx, qz - sz) < 7))
@@ -262,10 +331,10 @@ function StreetFurniture({ campus }: { campus: Campus }) {
     return { lamps, benches }
   }, [campus])
 
-  const benchGeo = useMemo(() => {
+  const kit = useMemo(() => {
     const parts: THREE.BufferGeometry[] = []
-    const box = (s: THREE.Vector3Tuple, p: THREE.Vector3Tuple) => {
-      const g = new THREE.BoxGeometry(...s)
+    const box = (sz: THREE.Vector3Tuple, p: THREE.Vector3Tuple) => {
+      const g = new THREE.BoxGeometry(...sz)
       g.translate(...p)
       parts.push(g.toNonIndexed())
     }
@@ -275,54 +344,75 @@ function StreetFurniture({ campus }: { campus: Campus }) {
     }
     for (const z of [-0.18, 0, 0.18]) box([1.8, 0.05, 0.14], [0, 0.47, z])
     for (const y of [0.65, 0.85]) box([1.8, 0.1, 0.04], [0, y, -0.26])
-    return mergeGeometries(parts)!
-  }, [])
-
-  const placeLamps = (mesh: THREE.InstancedMesh | null, y: number) => {
-    if (!mesh) return
-    const m = new THREE.Matrix4()
-    spots.lamps.forEach(([x, z], i) => mesh.setMatrixAt(i, m.makeTranslation(x, y, z)))
-    mesh.instanceMatrix.needsUpdate = true
-  }
-  const placeBenches = (mesh: THREE.InstancedMesh | null) => {
-    if (!mesh) return
-    const m = new THREE.Matrix4()
-    spots.benches.forEach(([x, z, r], i) => mesh.setMatrixAt(i, m.makeRotationY(r).setPosition(x, 0, z)))
-    mesh.instanceMatrix.needsUpdate = true
-  }
-  const nl = spots.lamps.length
-  const nb = spots.benches.length
+    // one lamp = pole + shade + glowing globe, pre-merged per material (low poly)
+    const pole = new THREE.CylinderGeometry(0.07, 0.1, 3.8, 6)
+    pole.translate(0, 1.9, 0)
+    const shade = new THREE.CylinderGeometry(0.32, 0.22, 0.1, 8)
+    shade.translate(0, 3.72, 0)
+    const globe = new THREE.SphereGeometry(0.28, 8, 6)
+    globe.translate(0, 3.95, 0)
+    return {
+      bench: mergeGeometries(parts)!,
+      post: mergeGeometries([pole.toNonIndexed(), shade.toNonIndexed()])!,
+      globe,
+      dark: new THREE.MeshToonMaterial({ color: '#2c3a4a', gradientMap: ramp }),
+      glow: new THREE.MeshBasicMaterial({ color: '#ffe7a8', toneMapped: false }),
+      wood: new THREE.MeshToonMaterial({ color: '#a86f3e', gradientMap: ramp }),
+    }
+  }, [ramp])
+  const lampTiles = useMemo(() => byTile(spots.lamps, (p) => p), [spots])
+  const benchTiles = useMemo(() => byTile(spots.benches, (p) => [p[0], p[1]]), [spots])
   return (
     <group>
-      <instancedMesh ref={(m) => placeLamps(m, 1.9)} args={[undefined, undefined, nl]} castShadow>
-        <cylinderGeometry args={[0.07, 0.1, 3.8, 6]} />
-        <meshToonMaterial color="#2c3a4a" gradientMap={ramp} />
-      </instancedMesh>
-      <instancedMesh ref={(m) => placeLamps(m, 3.95)} args={[undefined, undefined, nl]}>
-        <sphereGeometry args={[0.28, 10, 8]} />
-        <meshBasicMaterial color="#ffe7a8" toneMapped={false} />
-      </instancedMesh>
-      <instancedMesh ref={(m) => placeLamps(m, 3.72)} args={[undefined, undefined, nl]}>
-        <cylinderGeometry args={[0.32, 0.22, 0.1, 10]} />
-        <meshToonMaterial color="#2c3a4a" gradientMap={ramp} />
-      </instancedMesh>
-      <instancedMesh ref={placeBenches} args={[undefined, undefined, nb]} castShadow receiveShadow geometry={benchGeo}>
-        <meshToonMaterial color="#a86f3e" gradientMap={ramp} />
-      </instancedMesh>
+      {[...lampTiles].filter(([k]) => near.has(k)).map(([k, pts]) => (
+        <group key={`l${k}`}>
+          {[kit.post, kit.globe].map((g, gi) => (
+            <instancedMesh
+              key={gi}
+              args={[g, gi ? kit.glow : kit.dark, pts.length]}
+              castShadow={gi === 0}
+              ref={(mesh) => {
+                if (!mesh) return
+                const m = new THREE.Matrix4()
+                pts.forEach(([x, z], i) => mesh.setMatrixAt(i, m.makeTranslation(x, 0, z)))
+                finishInstances(mesh)
+              }}
+            />
+          ))}
+        </group>
+      ))}
+      {[...benchTiles].filter(([k]) => near.has(k)).map(([k, pts]) => (
+        <instancedMesh
+          key={`b${k}`}
+          args={[kit.bench, kit.wood, pts.length]}
+          castShadow
+          receiveShadow
+          ref={(mesh) => {
+            if (!mesh) return
+            const m = new THREE.Matrix4()
+            pts.forEach(([x, z, r], i) => mesh.setMatrixAt(i, m.makeRotationY(r).setPosition(x, 0, z)))
+            finishInstances(mesh)
+          }}
+        />
+      ))}
     </group>
   )
 }
 
-function Trees({ campus }: { campus: Campus }) {
+function Trees({ campus, near }: { campus: Campus; near: Set<string> }) {
   const ramp = useToonRamp()
   const trees = useTreePoints(campus)
-  const n = trees.length
-
-  const place = (mesh: THREE.InstancedMesh | null, top: boolean) => {
+  const kit = useMemo(() => {
+    const trunk = new THREE.CylinderGeometry(0.35, 0.45, 2.2, 6)
+    const top = new THREE.IcosahedronGeometry(1, 0)
+    return { trunk, top, bark: new THREE.MeshToonMaterial({ color: '#8a5a3b', gradientMap: ramp }), leaf: new THREE.MeshToonMaterial({ gradientMap: ramp }) }
+  }, [ramp])
+  const tiles = useMemo(() => byTile(trees, (p) => p), [trees])
+  const place = (mesh: THREE.InstancedMesh | null, top: boolean, pts: [number, number][]) => {
     if (!mesh) return
     const m = new THREE.Matrix4()
     const c = new THREE.Color()
-    trees.forEach(([x, z], i) => {
+    pts.forEach(([x, z], i) => {
       // Deterministic per-tree size/tint from its position.
       const k = Math.abs(Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1
       const s = 0.8 + k * 0.6
@@ -334,28 +424,16 @@ function Trees({ campus }: { campus: Campus }) {
       }
       mesh.setMatrixAt(i, m)
     })
-    mesh.instanceMatrix.needsUpdate = true
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+    finishInstances(mesh)
   }
-
   return (
     <group>
-      <instancedMesh
-        ref={(m) => place(m, false)}
-        args={[undefined, undefined, n]}
-        castShadow
-      >
-        <cylinderGeometry args={[0.35, 0.45, 2.2, 6]} />
-        <meshToonMaterial color="#8a5a3b" gradientMap={ramp} />
-      </instancedMesh>
-      <instancedMesh
-        ref={(m) => place(m, true)}
-        args={[undefined, undefined, n]}
-        castShadow
-      >
-        <icosahedronGeometry args={[1, 0]} />
-        <meshToonMaterial gradientMap={ramp} />
-      </instancedMesh>
+      {[...tiles].filter(([k]) => near.has(k)).map(([k, pts]) => (
+        <group key={k}>
+          <instancedMesh ref={(m) => place(m, false, pts)} args={[kit.trunk, kit.bark, pts.length]} castShadow />
+          <instancedMesh ref={(m) => place(m, true, pts)} args={[kit.top, kit.leaf, pts.length]} castShadow />
+        </group>
+      ))}
     </group>
   )
 }
@@ -390,13 +468,14 @@ function EventBeacon({ campus, onOpen }: { campus: Campus; onOpen: () => void })
   )
 }
 
-export function World({ campus, onOpenEvent }: { campus: Campus; onOpenEvent: () => void }) {
+export function World({ campus, onOpenEvent, focus }: { campus: Campus; onOpenEvent: () => void; focus: React.MutableRefObject<{ x: number; z: number }> }) {
+  const near = useNearTiles(focus)
   return (
     <group>
       <Ground campus={campus} />
-      <Buildings campus={campus} />
-      <Trees campus={campus} />
-      <StreetFurniture campus={campus} />
+      <Buildings campus={campus} near={near} />
+      <Trees campus={campus} near={near} />
+      <StreetFurniture campus={campus} near={near} />
       <EventBeacon campus={campus} onOpen={onOpenEvent} />
     </group>
   )

@@ -28,7 +28,10 @@ export interface ChatLine {
 type Listener = () => void
 
 export class Net {
+  /** Players currently in view (the server streams only nearby players: area of interest). */
   players = new Map<number, NetPlayer>()
+  /** Names/colours/looks the server has introduced, kept even when someone walks out of view. */
+  info = new Map<number, { name: string; color: string; look?: string }>()
   chat: ChatLine[] = []
   bubbles = new Map<number, { text: string; at: number }>()
   myId = 0
@@ -56,13 +59,57 @@ export class Net {
     ws.onopen = () => {
       ws.send(JSON.stringify({ t: 'hello', ...this.hello }))
     }
-    ws.onmessage = (ev) => this.onMessage(JSON.parse(ev.data))
+    ws.binaryType = 'arraybuffer'
+    ws.onmessage = (ev) => (ev.data instanceof ArrayBuffer ? this.onFrame(ev.data) : this.onMessage(JSON.parse(ev.data)))
     ws.onclose = () => {
       this.connected = false
       this.players.clear()
       this.emit()
       if (!this.closed) setTimeout(() => this.open(), 1500)
     }
+  }
+
+  /**
+   * Binary position frame: 'S', count u16, then per player 13 bytes:
+   * id u32 | x i16 dm | z i16 dm | r i16 crad | y i16 dm | moving u8 (little-endian).
+   */
+  private onFrame(buf: ArrayBuffer) {
+    const v = new DataView(buf)
+    if (v.getUint8(0) !== 83 /* 'S' */) return
+    const n = v.getUint16(1, true)
+    const rows: number[][] = new Array(n)
+    for (let i = 0, o = 3; i < n; i++, o += 13)
+      rows[i] = [v.getUint32(o, true), v.getInt16(o + 4, true), v.getInt16(o + 6, true), v.getInt16(o + 8, true), v.getUint8(o + 12), v.getInt16(o + 10, true)]
+    this.applyFrame(rows)
+  }
+
+  /** Nearby players this tick: [id, x dm, z dm, r crad, moving, y dm]; anyone missing walked out of range. */
+  private applyFrame(rows: number[][]) {
+    const seen = new Set<number>()
+    let changed = false
+    for (const [id, x, z, r, m, y] of rows) {
+      if (id === this.myId) continue
+      seen.add(id)
+      const cur = this.players.get(id)
+      if (cur) {
+        cur.x = x / 10
+        cur.z = z / 10
+        cur.r = r / 100
+        cur.m = m === 1
+        cur.y = y / 10
+      } else {
+        const who = this.info.get(id)
+        this.players.set(id, { id, name: who?.name ?? '', color: who?.color ?? '#e0564f', look: who?.look, x: x / 10, z: z / 10, r: r / 100, m: m === 1, y: y / 10 })
+        changed = true
+      }
+    }
+    for (const id of [...this.players.keys()]) {
+      if (!seen.has(id)) {
+        this.players.delete(id)
+        changed = true
+      }
+    }
+    if (changed) this.emit()
   }
 
   private onMessage(msg: any) {
@@ -79,11 +126,26 @@ export class Net {
         break
       case 'join':
         this.players.set(msg.p.id, msg.p)
+        this.emit()
         break
       case 'leave': {
-        this.players.delete(msg.id)
+        if (this.players.delete(msg.id)) this.emit()
+        this.info.delete(msg.id)
         break
       }
+      case 'i':
+        // introductions: who someone is, sent once when they first come into view
+        for (const p of msg.p as { id: number; name: string; color: string; look?: string }[]) {
+          this.info.set(p.id, { name: p.name, color: p.color, look: p.look })
+          const cur = this.players.get(p.id)
+          if (cur) Object.assign(cur, { name: p.name, color: p.color, look: p.look })
+        }
+        this.emit()
+        break
+      case 's':
+        // (JSON form of the position frame; the server normally sends binary, see onFrame)
+        this.applyFrame(msg.p as number[][])
+        break
       case 'state':
         for (const p of msg.p as NetPlayer[]) {
           if (p.id === this.myId) continue

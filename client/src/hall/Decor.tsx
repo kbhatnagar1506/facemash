@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import * as THREE from 'three'
-import { BALCONY, CEIL, HALL_EXIT, L1, MEZZ_Z } from './layout'
+import { PHOTO_EVENT, BALCONY, CEIL, HALL_EXIT, L1, MEZZ_Z } from './layout'
 import { HackTables } from './HackTables'
 import { curtain, textCard } from './textures'
 import { Bear, Sponsors } from './Sponsors'
@@ -273,8 +273,7 @@ function SeasideDecor() {
 
 /* -------------------------------------------------------------- photo booth */
 
-/** Fired by the HUD when you press E at the photo booth. */
-export const PHOTO_EVENT = 'hackgt-photo'
+export { PHOTO_EVENT } from './layout'
 
 function PhotoBooth() {
   const [x0, x1, z0, z1, h] = [-0.2, 4.2, -22.6, -18.6, 3.6]

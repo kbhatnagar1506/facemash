@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { Bloom, EffectComposer, N8AO, SMAA, Vignette } from '@react-three/postprocessing'
 import { Collider, loadCampus, type Campus } from './map'
@@ -9,7 +9,9 @@ import { Remotes } from './Remotes'
 import { defaultLook, encodeLook, loadLook } from './look'
 import { Hud } from './Hud'
 import { Shells } from './Shells'
-import { CALIBRATION_SPOTS, HackGTHall, HallCollider, HALL_BOUNDS, HALL_SPAWN, HALL_YAW, PERSON_SCALE, cameraCeiling } from './HackGTHall'
+import { CALIBRATION_SPOTS, HallCollider, HALL_BOUNDS, HALL_SPAWN, HALL_YAW, PERSON_SCALE, cameraCeiling } from './hall/layout'
+// the Klaus hall is big: it downloads in its own chunk, only once you're near Klaus
+const HackGTHall = lazy(() => import('./HackGTHall').then((m) => ({ default: m.HackGTHall })))
 import { toHall, useLiveLocation, type GeoCfg } from './geo'
 import { Calibrate, LivePill } from './LiveLocation'
 import type { EventInfo } from './HackGTWelcome'
@@ -96,6 +98,19 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
   }, [])
   const hallCollider = useMemo(() => new HallCollider(), [])
   const [room, setRoom] = useState<'campus' | 'hackgt'>('campus')
+  // The hall loads (and pre-compiles) once you get within 300 m of Klaus, then stays.
+  const [hallWanted, setHallWanted] = useState(false)
+  useEffect(() => {
+    if (hallWanted) return
+    const ev = campus.event
+    const check = () => {
+      const near = !ev || Math.hypot(info.current.x - ev.center[0], info.current.z - ev.center[1]) < 300
+      if (near || room === 'hackgt') setHallWanted(true)
+    }
+    check()
+    const t = setInterval(check, 1000)
+    return () => clearInterval(t)
+  }, [hallWanted, room, campus])
   const view = useMemo<View>(
     () =>
       room === 'hackgt'
@@ -191,7 +206,7 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
       <Canvas
         shadows="soft"
         dpr={[1, 1.5]}
-        camera={{ fov: 40, near: 1, far: 1800, position: [start[0], 25, start[1] + 20] }}
+        camera={{ fov: 40, near: 1, far: 800, position: [start[0], 25, start[1] + 20] }}
       >
         <color attach="background" args={['#bfe6ff']} />
         <fog attach="fog" args={['#bfe6ff', 180, 700]} />
@@ -204,12 +219,14 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
             lobby under the low ceiling isn't left dim when the sun can't reach it */}
         {room === 'hackgt' && <directionalLight position={[-6, 30, 30]} intensity={0.55} color="#fff3e2" />}
         <group visible={room === 'campus'}>
-          <World campus={campus} onOpenEvent={() => setEventOpen(true)} />
+          <World campus={campus} onOpenEvent={() => setEventOpen(true)} focus={info} />
           <Shells campus={campus} info={info} onOpen={() => setEventOpen(true)} active={room === 'campus'} />
         </group>
-        <Suspense fallback={null}>
-          <HackGTHall active={room === 'hackgt'} />
-        </Suspense>
+        {hallWanted && (
+          <Suspense fallback={null}>
+            <HackGTHall active={room === 'hackgt'} />
+          </Suspense>
+        )}
         <Player
           name={name}
           color={color}

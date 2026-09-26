@@ -3,7 +3,7 @@ import type { Campus, Collider } from './map'
 import type { Net } from './net'
 import type { PlayerInfo } from './Player'
 import { HackGTWelcome, InfoBoard, type EventInfo } from './HackGTWelcome'
-import { HALL_EXIT, PHOTO_EVENT, nearestSpot, type Spot, type Table } from './HackGTHall'
+import { HALL_EXIT, PHOTO_EVENT, nearestSpot, type Spot, type Table } from './hall/layout'
 import { nearestShell } from './Shells'
 
 const MAP_PX = 190
@@ -273,13 +273,29 @@ export function Hud({
   const title = event?.title ?? 'HackGT'
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const schedule = useMemo(() => nowNext(event), [event, clock])
+  // the server only streams nearby players, so ask it for the real head-count
+  const [roomCount, setRoomCount] = useState<number | null>(null)
+  useEffect(() => {
+    let dead = false
+    const poll = () =>
+      fetch('/api/online')
+        .then((r) => r.json())
+        .then((c: Record<string, number>) => !dead && setRoomCount(c[net.room] ?? null))
+        .catch(() => {})
+    poll()
+    const t = setInterval(poll, 5000)
+    return () => {
+      dead = true
+      clearInterval(t)
+    }
+  }, [net])
   const inHall = room === 'hackgt'
 
   return (
     <div className="hud">
       <div className="topbar">
         <div className={net.connected ? 'online' : 'online off'}>
-          ● {net.connected ? `${net.players.size + 1} ${inHall ? `at ${title}` : 'on campus'}` : 'Connecting…'}
+          ● {net.connected ? `${Math.max(roomCount ?? 0, net.players.size + 1)} ${inHall ? `at ${title}` : 'on campus'}` : 'Connecting…'}
         </div>
         {bike && !inHall && <div className="pill">🚲 Bike</div>}
       </div>

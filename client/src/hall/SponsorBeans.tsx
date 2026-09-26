@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { BeanBody } from '../Bean'
@@ -8,7 +8,7 @@ import { PERSON_SCALE, X1, ex } from './layout'
 
 // A mascot bean for every sponsor, standing at the front corner of its booth in the
 // sponsor's colours with its logo on the belly. They wave now and then and do the
-// happy smile-wink-jump when you walk up. Only drawn when you're nearby (cheap).
+// happy smile-wink-jump when you walk up. Only drawn when you're at the table (cheap).
 
 const west = -Math.PI / 2
 const SPOTS: Record<Exclude<Logo, 'none'>, [number, number, number]> = {
@@ -34,10 +34,13 @@ function SponsorBean({ i }: { i: number }) {
   const g = useRef<THREE.Group>(null!)
   const state = useRef<AvatarState>({ moving: false })
   const wasNear = useRef(false)
+  // the bean only exists while you're at its table (mount < 11 m, leave > 14 m)
+  const [on, setOn] = useState(false)
   useFrame(({ camera, clock }) => {
     const d = Math.hypot(camera.position.x - x, camera.position.z - z)
-    g.current.visible = d < 26
-    if (!g.current.visible) return
+    if (!on && d < 11) setOn(true)
+    else if (on && d > 14) setOn(false)
+    if (!on) return
     // turn a little toward whoever's looking, wave every few seconds
     const want = Math.atan2(camera.position.x - x, camera.position.z - z)
     const diff = Math.atan2(Math.sin(want - r), Math.cos(want - r))
@@ -49,11 +52,15 @@ function SponsorBean({ i }: { i: number }) {
   })
   return (
     <group ref={g} position={[x, 0, z]} scale={PERSON_SCALE}>
-      <mesh rotation-x={-Math.PI / 2} position={[0, 0.03, 0]}>
-        <circleGeometry args={[0.72, 20]} />
-        <meshBasicMaterial color="#000" transparent opacity={0.2} depthWrite={false} />
-      </mesh>
-      <BeanBody look={sb.look} state={state} shadows={false} />
+      {on && (
+        <>
+          <mesh rotation-x={-Math.PI / 2} position={[0, 0.03, 0]}>
+            <circleGeometry args={[0.72, 20]} />
+            <meshBasicMaterial color="#000" transparent opacity={0.2} depthWrite={false} />
+          </mesh>
+          <BeanBody look={sb.look} state={state} shadows={false} />
+        </>
+      )}
     </group>
   )
 }

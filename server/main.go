@@ -7,6 +7,8 @@ package main
 
 import (
 	"bytes"
+	"compress/gzip"
+	"encoding/binary"
 	"encoding/json"
 	"flag"
 	"io"
@@ -15,6 +17,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -25,7 +29,10 @@ import (
 
 const (
 	tickRate      = 15 // state broadcasts per second
-	maxPlayers    = 200
+	maxPlayers    = 1200
+	aoiRadius     = 90.0 // metres: you only hear about players this close...
+	maxVisible    = 60   // ...and at most this many of the nearest
+	maxMsgsPerSec = 40   // inbound flood guard per client
 	maxSpeed      = 30.0 // m/s, a little above the client's sprint speed
 	maxNameLen    = 16
 	maxChatLen    = 140
@@ -68,6 +75,11 @@ type client struct {
 	joined   bool
 	lastMove time.Time
 	lastChat time.Time
+
+	known     map[int]bool // players whose name/colour/look this client already has
+	lastState []byte       // last state frame sent (identical frames are skipped)
+	msgWindow time.Time    // start of the current rate-limit second
+	msgCount  int
 }
 
 type inbound struct {
@@ -119,22 +131,100 @@ func (c *client) trySend(msg []byte) {
 	}
 }
 
+// run is the 15 Hz broadcaster. Interest management keeps it scalable: players are
+// bucketed into a grid of aoiRadius-sized cells per room, and each client gets only
+// the (up to maxVisible) nearest players within aoiRadius, as a compact binary frame
+// (13 bytes a player: see below) instead of JSON.
+//
+// Names, colours and looks go out once per player per client ({"t":"i"}), the first
+// time that player comes into view. Unchanged frames aren't resent, so an idle
+// room costs almost nothing. Work per tick is ~O(players × neighbours), not O(n²).
 func (h *Hub) run() {
 	t := time.NewTicker(time.Second / tickRate)
+	type key struct {
+		room string
+		x, z int
+	}
+	type cand struct {
+		c  *client
+		d2 float64
+	}
+	grid := map[key][]*client{}
+	var near []cand
 	for range t.C {
 		h.mu.Lock()
-		if h.dirty {
-			byRoom := map[string][]Player{}
-			for _, c := range h.clients {
-				if c.joined {
-					byRoom[c.p.Room] = append(byRoom[c.p.Room], c.p)
+		if !h.dirty {
+			h.mu.Unlock()
+			continue
+		}
+		for k := range grid {
+			delete(grid, k)
+		}
+		cell := func(v float64) int { return int(math.Floor(v / aoiRadius)) }
+		for _, c := range h.clients {
+			if c.joined {
+				k := key{c.p.Room, cell(c.p.X), cell(c.p.Z)}
+				grid[k] = append(grid[k], c)
+			}
+		}
+		for _, c := range h.clients {
+			if !c.joined {
+				continue
+			}
+			near = near[:0]
+			cx, cz := cell(c.p.X), cell(c.p.Z)
+			for dx := -1; dx <= 1; dx++ {
+				for dz := -1; dz <= 1; dz++ {
+					for _, o := range grid[key{c.p.Room, cx + dx, cz + dz}] {
+						if o == c {
+							continue
+						}
+						ddx, ddz := o.p.X-c.p.X, o.p.Z-c.p.Z
+						if d2 := ddx*ddx + ddz*ddz; d2 <= aoiRadius*aoiRadius {
+							near = append(near, cand{o, d2})
+						}
+					}
 				}
 			}
-			for room, ps := range byRoom {
-				h.broadcast(room, mustJSON(map[string]any{"t": "state", "p": ps}), 0)
+			if len(near) > maxVisible {
+				sort.Slice(near, func(i, j int) bool { return near[i].d2 < near[j].d2 })
+				near = near[:maxVisible]
 			}
-			h.dirty = false
+			// introduce anyone new in view (once)
+			var intro []map[string]any
+			for _, n := range near {
+				if !c.known[n.c.p.ID] {
+					c.known[n.c.p.ID] = true
+					intro = append(intro, map[string]any{"id": n.c.p.ID, "name": n.c.p.Name, "color": n.c.p.Color, "look": n.c.p.Look})
+				}
+			}
+			if len(intro) > 0 {
+				c.trySend(mustJSON(map[string]any{"t": "i", "p": intro}))
+			}
+			// binary frame: 'S', count u16, then per player
+			// id u32 | x i16 dm | z i16 dm | r i16 crad | y i16 dm | moving u8  (13 bytes)
+			frame := make([]byte, 3, 3+len(near)*13)
+			frame[0] = 'S'
+			binary.LittleEndian.PutUint16(frame[1:], uint16(len(near)))
+			for _, n := range near {
+				q := n.c.p
+				frame = binary.LittleEndian.AppendUint32(frame, uint32(q.ID))
+				frame = binary.LittleEndian.AppendUint16(frame, uint16(int16(math.Round(q.X*10))))
+				frame = binary.LittleEndian.AppendUint16(frame, uint16(int16(math.Round(q.Z*10))))
+				frame = binary.LittleEndian.AppendUint16(frame, uint16(int16(math.Round(q.R*100))))
+				frame = binary.LittleEndian.AppendUint16(frame, uint16(int16(math.Round(q.Y*10))))
+				if q.M {
+					frame = append(frame, 1)
+				} else {
+					frame = append(frame, 0)
+				}
+			}
+			if !bytes.Equal(frame, c.lastState) {
+				c.lastState = frame
+				c.trySend(frame)
+			}
 		}
+		h.dirty = false
 		h.mu.Unlock()
 	}
 }
@@ -209,8 +299,10 @@ func (c *client) handle(m inbound) {
 		c.joined = true
 		c.lastMove = time.Now()
 
-		c.trySend(mustJSON(map[string]any{"t": "welcome", "id": c.p.ID, "room": c.p.Room, "players": h.roommates(c)}))
-		h.broadcast(c.p.Room, mustJSON(map[string]any{"t": "join", "p": c.p}), c.p.ID)
+		c.known = map[int]bool{}
+		c.lastState = nil
+		c.trySend(mustJSON(map[string]any{"t": "welcome", "id": c.p.ID, "room": c.p.Room, "players": []Player{}}))
+		h.dirty = true
 		log.Printf("join #%d %q (%d online)", c.p.ID, c.p.Name, len(h.clients))
 
 	case "move":
@@ -244,8 +336,8 @@ func (c *client) handle(m inbound) {
 		c.p.M = false
 		c.p.Y = 0
 		c.lastMove = time.Now()
-		c.trySend(mustJSON(map[string]any{"t": "room", "room": c.p.Room, "players": h.roommates(c)}))
-		h.broadcast(c.p.Room, mustJSON(map[string]any{"t": "join", "p": c.p}), c.p.ID)
+		c.lastState = nil
+		c.trySend(mustJSON(map[string]any{"t": "room", "room": c.p.Room, "players": []Player{}}))
 		h.dirty = true
 		log.Printf("#%d %q -> %s", c.p.ID, c.p.Name, c.p.Room)
 
@@ -269,6 +361,7 @@ func (c *client) readLoop() {
 		h := c.hub
 		h.mu.Lock()
 		delete(h.clients, c.p.ID)
+		h.dirty = true // neighbours' frames drop this player
 		if c.joined {
 			h.broadcast(c.p.Room, mustJSON(map[string]any{"t": "leave", "id": c.p.ID}), 0)
 			log.Printf("leave #%d %q (%d online)", c.p.ID, c.p.Name, len(h.clients))
@@ -287,7 +380,14 @@ func (c *client) readLoop() {
 		if err := c.conn.ReadJSON(&m); err != nil {
 			return
 		}
-		c.conn.SetReadDeadline(time.Now().Add(pongTimeout))
+		now := time.Now()
+		c.conn.SetReadDeadline(now.Add(pongTimeout))
+		if now.Sub(c.msgWindow) > time.Second {
+			c.msgWindow, c.msgCount = now, 0
+		}
+		if c.msgCount++; c.msgCount > maxMsgsPerSec {
+			continue // flooding: drop until the next second
+		}
 		c.handle(m)
 	}
 }
@@ -303,7 +403,11 @@ func (c *client) writeLoop() {
 				c.conn.WriteMessage(websocket.CloseMessage, nil)
 				return
 			}
-			if err := c.conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+			kind := websocket.TextMessage
+			if len(msg) > 0 && msg[0] == 'S' {
+				kind = websocket.BinaryMessage // compact position frame
+			}
+			if err := c.conn.WriteMessage(kind, msg); err != nil {
 				return
 			}
 		case <-ping.C:
@@ -425,8 +529,14 @@ func main() {
 		json.NewEncoder(w).Encode(counts)
 	})
 	// Serve the client; unknown extension-less paths (like /avatar) get the app itself.
-	files := http.FileServer(http.Dir(*static))
+	// Hashed build assets are cached for a year; JS/CSS/JSON are gzipped (≈3× smaller).
+	files := gzipFiles(http.FileServer(http.Dir(*static)))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/assets/") {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			w.Header().Set("Cache-Control", "no-cache") // index.html, campus.json: revalidate
+		}
 		p := filepath.Clean(r.URL.Path)
 		if p != "/" && filepath.Ext(p) == "" {
 			if _, err := os.Stat(filepath.Join(*static, p)); err != nil {
@@ -440,3 +550,67 @@ func main() {
 	log.Printf("GT campus server on %s (static: %s)", *addr, *static)
 	log.Fatal(http.ListenAndServe(*addr, mux))
 }
+
+// gzipFiles compresses text assets on the fly (compressed once per file, then cached).
+type gzEntry struct {
+	mod  time.Time
+	body []byte
+}
+
+var (
+	gzMu    sync.Mutex
+	gzCache = map[string]gzEntry{}
+)
+
+func gzipFiles(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ext := filepath.Ext(r.URL.Path)
+		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") || (ext != ".js" && ext != ".css" && ext != ".json" && ext != ".svg") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		rec := &captureWriter{header: http.Header{}, code: 200}
+		next.ServeHTTP(rec, r)
+		if rec.code != 200 {
+			for k, v := range rec.header {
+				w.Header()[k] = v
+			}
+			w.WriteHeader(rec.code)
+			w.Write(rec.buf.Bytes())
+			return
+		}
+		key := r.URL.Path
+		gzMu.Lock()
+		e, ok := gzCache[key]
+		mod, _ := http.ParseTime(rec.header.Get("Last-Modified"))
+		if !ok || !e.mod.Equal(mod) {
+			var b bytes.Buffer
+			zw, _ := gzip.NewWriterLevel(&b, gzip.BestCompression)
+			zw.Write(rec.buf.Bytes())
+			zw.Close()
+			e = gzEntry{mod: mod, body: b.Bytes()}
+			gzCache[key] = e
+		}
+		gzMu.Unlock()
+		for k, v := range rec.header {
+			if k != "Content-Length" {
+				w.Header()[k] = v
+			}
+		}
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Set("Vary", "Accept-Encoding")
+		w.Header().Set("Content-Length", strconv.Itoa(len(e.body)))
+		w.WriteHeader(200)
+		w.Write(e.body)
+	})
+}
+
+type captureWriter struct {
+	header http.Header
+	code   int
+	buf    bytes.Buffer
+}
+
+func (c *captureWriter) Header() http.Header         { return c.header }
+func (c *captureWriter) WriteHeader(code int)        { c.code = code }
+func (c *captureWriter) Write(b []byte) (int, error) { return c.buf.Write(b) }

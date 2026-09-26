@@ -321,3 +321,6 @@ export function wallZ(x: number) {
 export function ceilY(z: number) {
   return CEIL - 5 * Math.min(1, Math.max(0, (z - Z0) / (Z1 - Z0)))
 }
+
+/** Fired by the HUD when you press E at the photo booth. */
+export const PHOTO_EVENT = 'hackgt-photo'
