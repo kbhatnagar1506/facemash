@@ -1,7 +1,7 @@
 package main
 
-// Accounts and saved progress. Multi-tenant: a Google identity is one account across
-// every event, and everything about playing (your name, colour, bean, where you were)
+// Accounts and saved progress. Multi-tenant: an email address (case-insensitive; Google
+// sign-in only accepts verified ones) is one account across every event, and everything about playing (your name, colour, bean, where you were)
 // lives per tenant (an event such as hackgt13), so events never see each other's data.
 //
 // Production: Postgres on Cloud SQL, reached through the Cloud SQL Go connector with IAM
@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -46,8 +47,9 @@ type Account struct {
 }
 
 type Store interface {
-	// SignIn creates or refreshes the account for a verified Google identity and makes
-	// sure it belongs to tenant; created is true the first time we see this identity.
+	// SignIn creates or refreshes the account for a verified email address (the unique key,
+	// case-insensitive) and makes sure it belongs to tenant; created is true the first time
+	// we see this email.
 	SignIn(ctx context.Context, tenant string, g user) (a Account, created bool, err error)
 	Account(ctx context.Context, tenant string, id int64) (Account, error)
 	SaveProfile(ctx context.Context, tenant string, id int64, p Profile) error
@@ -105,6 +107,10 @@ CREATE TABLE IF NOT EXISTS progress (
   FOREIGN KEY (tenant_id, user_id) REFERENCES memberships(tenant_id, user_id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS memberships_user ON memberships(user_id);
+-- the email is the account's key; the Google subject is kept for reference only
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_google_sub_key;
+CREATE UNIQUE INDEX IF NOT EXISTS users_email_key ON users (lower(email));
+CREATE INDEX IF NOT EXISTS users_google_sub ON users (google_sub);
 CREATE TABLE IF NOT EXISTS api_tokens (
   id         bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   tenant_id  text   NOT NULL,
@@ -190,9 +196,9 @@ func (s *pgStore) SignIn(ctx context.Context, tenant string, g user) (Account, b
 	var created bool
 	err := s.pool.QueryRow(ctx, `
 		INSERT INTO users (google_sub, email, name, given_name, picture) VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT (google_sub) DO UPDATE SET email = EXCLUDED.email, name = EXCLUDED.name,
+		ON CONFLICT ((lower(email))) DO UPDATE SET google_sub = EXCLUDED.google_sub, name = EXCLUDED.name,
 		  given_name = EXCLUDED.given_name, picture = EXCLUDED.picture, last_seen = now()
-		RETURNING id, (xmax = 0)`, g.Sub, g.Email, g.Name, g.Given, g.Picture).Scan(&id, &created)
+		RETURNING id, (xmax = 0)`, g.Sub, strings.TrimSpace(g.Email), g.Name, g.Given, g.Picture).Scan(&id, &created)
 	if err != nil {
 		return Account{}, false, err
 	}
@@ -302,7 +308,7 @@ type memMember struct {
 type memStore struct {
 	mu      sync.Mutex
 	next    int64
-	bySub   map[string]int64
+	byEmail map[string]int64 // lower(email) → id
 	users   map[int64]user
 	members map[string]*memMember // "<tenant>/<id>"
 	tokens  map[string]memToken   // hash → owner
@@ -316,7 +322,7 @@ type memToken struct {
 }
 
 func newMemStore() *memStore {
-	return &memStore{bySub: map[string]int64{}, users: map[int64]user{}, members: map[string]*memMember{}, tokens: map[string]memToken{}}
+	return &memStore{byEmail: map[string]int64{}, users: map[int64]user{}, members: map[string]*memMember{}, tokens: map[string]memToken{}}
 }
 
 func memKey(tenant string, id int64) string { return fmt.Sprintf("%s/%d", tenant, id) }
@@ -326,11 +332,12 @@ func (m *memStore) Close() {}
 func (m *memStore) SignIn(_ context.Context, tenant string, g user) (Account, bool, error) {
 	m.mu.Lock()
 	now := time.Now().UTC()
-	id, ok := m.bySub[g.Sub]
+	key := strings.ToLower(strings.TrimSpace(g.Email))
+	id, ok := m.byEmail[key]
 	if !ok {
 		m.next++
 		id = m.next
-		m.bySub[g.Sub] = id
+		m.byEmail[key] = id
 		g.Created = now
 	} else {
 		g.Created = m.users[id].Created

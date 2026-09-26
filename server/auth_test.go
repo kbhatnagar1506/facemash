@@ -179,11 +179,18 @@ func TestSignInFlow(t *testing.T) {
 	if w := post("https://site.test", `{"credential":"`+tok+`"}`); !strings.Contains(w.Body.String(), `"created":false`) {
 		t.Fatalf("second sign in should reuse the account: %s", w.Body)
 	}
+	// the email is the key: a new Google subject or different capitals, same account
+	if a, created, _ := store.SignIn(context.Background(), "hackgt13", user{Sub: "other-sub", Email: "BUZZ@gatech.edu"}); created || a.ID != id {
+		t.Fatalf("same email should be the same account: #%d created=%v (want #%d)", a.ID, created, id)
+	}
+	if a, created, _ := store.SignIn(context.Background(), "hackgt13", user{Sub: "1234", Email: "someone.else@gatech.edu"}); !created || a.ID == id {
+		t.Fatalf("a different email must be a different account: #%d created=%v", a.ID, created)
+	}
 	// tenants are separate: the same person has no progress at another event
 	if _, err := store.Account(context.Background(), "other-event", id); err == nil {
 		t.Error("account visible in a tenant it never joined")
 	}
-	store.SignIn(context.Background(), "other-event", user{Sub: "1234"})
+	store.SignIn(context.Background(), "other-event", user{Sub: "1234", Email: "buzz@gatech.edu"})
 	if a, _ := store.Account(context.Background(), "other-event", id); a.Progress != nil || a.Profile.Name != "" {
 		t.Errorf("progress leaked across tenants: %+v", a)
 	}

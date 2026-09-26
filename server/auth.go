@@ -152,7 +152,8 @@ func verifyGoogle(tok string, audiences []string, keys *googleKeys) (user, error
 	if time.Now().Unix() > c.Exp+60 {
 		return user{}, errors.New("expired")
 	}
-	if c.Sub == "" || (c.Verified != true && c.Verified != "true") {
+	// the email is the account key, so it must be one Google has verified
+	if c.Sub == "" || c.Email == "" || (c.Verified != true && c.Verified != "true") {
 		return user{}, errors.New("email not verified")
 	}
 	return user{Sub: c.Sub, Email: c.Email, Name: c.Name, Given: c.Given, Picture: c.Picture}, nil
