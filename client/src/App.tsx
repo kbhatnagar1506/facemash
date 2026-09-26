@@ -2,6 +2,8 @@ import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { PerformanceMonitor } from '@react-three/drei'
 import { Bloom, EffectComposer, N8AO, SMAA, Vignette } from '@react-three/postprocessing'
+import type { Group } from 'three'
+import type { EffectComposer as Composer } from 'postprocessing'
 import { Collider, loadCampus, type Campus } from './map'
 import { Net } from './net'
 import { World } from './World'
@@ -121,6 +123,9 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
     fetch('/api/event').then((r) => (r.ok ? r.json() : null)).then(setEvent).catch(() => {})
   }, [])
   const hallCollider = useMemo(() => new HallCollider(), [])
+  // the campus world, and the hall's post-processing (built ahead: see <HackGTHall>)
+  const campusRef = useRef<Group>(null)
+  const hallFx = useRef<Composer | null>(null)
   const [room, setRoom] = useState<'campus' | 'hackgt'>(inHall ? 'hackgt' : 'campus')
   // picking up inside the hall skips the fly-through (once; walking back in plays it)
   const skipIntro = useRef(inHall)
@@ -425,16 +430,14 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
           args={room === 'hackgt' ? ['#fff6ea', '#cfc8ba', 1.45] : ['#e8f2ff', '#7faf65', 1.1]}
           key={room}
         />
-        {/* inside Klaus: the mezzanine's downlights, as a soft shadowless top light so the
-            lobby under the low ceiling isn't left dim when the sun can't reach it */}
-        {room === 'hackgt' && <directionalLight position={[-6, 30, 30]} intensity={0.55} color="#fff3e2" />}
-        <group visible={room === 'campus'}>
+        {/* (inside Klaus, the hall adds the mezzanine's downlights itself) */}
+        <group ref={campusRef} visible={room === 'campus'}>
           <World campus={campus} onOpenEvent={() => setEventOpen(true)} focus={info} active={room === 'campus'} />
           <Shells campus={campus} info={info} onOpen={() => setEventOpen(true)} active={room === 'campus'} />
         </group>
         {hallWanted && (
           <Suspense fallback={null}>
-            <HackGTHall active={room === 'hackgt'} />
+            <HackGTHall active={room === 'hackgt'} fx={hallFx} campus={campusRef} soon={eventOpen} />
           </Suspense>
         )}
         <Player
@@ -451,9 +454,11 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
         />
         <Remotes net={net} scale={room === 'hackgt' ? PERSON_SCALE : 1} />
         {/* glow on lights, screens and signs; soft vignette to frame the shot */}
-        {/* A fresh composer per room: indoors adds ambient occlusion, which reads the depth
+        {/* A composer per room: indoors adds ambient occlusion, which reads the depth
             buffer and can't share it with a multisampled target (that blit fails and freezes
-            the frame), so the hall uses SMAA for edges instead of MSAA. */}
+            the frame), so the hall uses SMAA for edges instead of MSAA. Both stay mounted
+            (only the current room's one draws), so the hall's is built, and warmed up by
+            <HackGTHall>, while you're still outside: walking in doesn't stall on it. */}
         {/* Adaptive quality: if frames start dropping, render at a lower pixel ratio (and drop
             ambient occlusion); climb back up when there's headroom. Keeps it smooth everywhere. */}
         <PerformanceMonitor
@@ -472,19 +477,18 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
             setLite(true)
           }}
         />
-        {room === 'hackgt' ? (
-          <EffectComposer key={lite ? 'hall-lite' : 'hall'} multisampling={0}>
+        {(hallWanted || room === 'hackgt') && (
+          <EffectComposer key={lite ? 'hall-lite' : 'hall'} ref={hallFx} enabled={room === 'hackgt'} multisampling={0}>
             {lite ? <></> : <N8AO halfRes quality="performance" aoRadius={1.4} distanceFalloff={0.6} intensity={2.6} color="#2a2420" />}
             <Bloom mipmapBlur intensity={0.35} luminanceThreshold={0.99} luminanceSmoothing={0.03} />
             <Vignette offset={0.3} darkness={0.55} />
             <SMAA />
           </EffectComposer>
-        ) : (
-          <EffectComposer key="campus" multisampling={dpr > 1.2 ? 2 : 4}>
-            <Bloom mipmapBlur intensity={0.25} luminanceThreshold={0.99} luminanceSmoothing={0.03} />
-            <Vignette offset={0.3} darkness={0.55} />
-          </EffectComposer>
         )}
+        <EffectComposer key="campus" enabled={room !== 'hackgt'} multisampling={dpr > 1.2 ? 2 : 4}>
+          <Bloom mipmapBlur intensity={0.25} luminanceThreshold={0.99} luminanceSmoothing={0.03} />
+          <Vignette offset={0.3} darkness={0.55} />
+        </EffectComposer>
       </Canvas>
       <Cinematic />
       <Hud
