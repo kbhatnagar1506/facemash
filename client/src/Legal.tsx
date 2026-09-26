@@ -71,9 +71,10 @@ export function Privacy() {
         </li>
         <li>
           <b>If you connect your Muse</b> (optional): we create a personal key for your Muse and store only a scrambled
-          (hashed) copy of it. We log which tools your Muse calls and how long they take, but not what it asks. If you
-          also choose to send what your Muse remembers about you, we store that copy in our database and in our memory
-          service so your Muse can look things up for you. We ask your Muse not to include anything about other people.
+          (hashed) copy of it. We log which tools your Muse calls and how long they take, but not what it asks. When
+          you connect it, your Muse sends what it remembers about you; we store that copy in our database and in our memory
+          service so your Muse can look things up for you. We ask your Muse not to include anything about other people, and
+          you can delete it any time on the /muse page.
         </li>
         <li>
           <b>In your browser:</b> a sign-in cookie (it lasts up to 30 days) and a few settings saved on your device, such
