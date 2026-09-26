@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { HALL, X0, X1, Z0 } from './layout'
+import { HALL, X0, XB, Z0 } from './layout'
 
 // Procedural canvas textures for the Klaus atrium, matched to the on-site photos.
 
@@ -24,7 +24,7 @@ function rng(seed: number) {
 export function terrazzo() {
   const PX = 28 // pixels per metre
   const c = document.createElement('canvas')
-  c.width = HALL.w * PX
+  c.width = (XB - X0) * PX
   c.height = HALL.d * PX
   const g = c.getContext('2d')!
   const m = (x: number) => (x - X0) * PX
@@ -41,10 +41,10 @@ export function terrazzo() {
     g.fill()
   }
   // Base: speckled light grey.
-  rect(X0, Z0, X1, HALL.d / 2, '#cfccc6')
+  rect(X0, Z0, XB, HALL.d / 2, '#cfccc6')
   // Cream fields on both sides.
   rect(X0, Z0, -7, HALL.d / 2, '#e9e5dc')
-  rect(10, Z0, X1, HALL.d / 2, '#e9e5dc')
+  rect(10, Z0, XB, HALL.d / 2, '#e9e5dc')
   // Dark charcoal runner from the doors into the atrium (entrance photo).
   // Dark on the left half of the doors, curving out into the atrium (door photo).
   poly([[-4.6, 28], [0.4, 28], [2.4, 21], [8.6, 14], [8.6, -1.5], [1.2, -1.5], [1.2, 12], [-2.4, 19]], '#55575b')

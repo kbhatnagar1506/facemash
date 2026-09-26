@@ -217,7 +217,7 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
         <Remotes net={net} scale={room === 'hackgt' ? PERSON_SCALE : 1} />
         {/* glow on lights, screens and signs; soft vignette to frame the shot */}
         <EffectComposer multisampling={4}>
-          <Bloom mipmapBlur intensity={room === 'hackgt' ? 0.45 : 0.25} luminanceThreshold={0.96} luminanceSmoothing={0.05} />
+          <Bloom mipmapBlur intensity={room === 'hackgt' ? 0.35 : 0.25} luminanceThreshold={0.99} luminanceSmoothing={0.03} />
           <Vignette offset={0.3} darkness={0.55} />
         </EffectComposer>
       </Canvas>

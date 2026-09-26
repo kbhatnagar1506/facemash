@@ -9,6 +9,22 @@ export const X1 = 20 // east windows
 export const HALL = { w: X1 - X0, d: 56 } // 37 m across, 56 m from the back wall to the entrance
 /** Centre line of the room (it isn't symmetric about x=0). */
 export const CX = (X0 + X1) / 2
+/**
+ * The atrium tapers: narrow at the entrance end, wider at the far (curved) end.
+ * The east window wall is straight through the lobby, then splays out from the
+ * mezzanine edge (z = 3) to WIDEN metres further east at the back wall.
+ */
+export const WIDEN = 6
+export const XB = X1 + WIDEN // east wall at the back
+export const CXB = (X0 + XB) / 2
+export const SLANT = Math.atan2(WIDEN, 3 - -28) // angle of the splayed east wall
+export function eastX(z: number) {
+  return X1 + WIDEN * Math.min(1, Math.max(0, (3 - z) / (3 - -28)))
+}
+/** How far the east wall has moved out at z (for placing things against it). */
+export function ex(z: number) {
+  return eastX(z) - X1
+}
 export const Z0 = -HALL.d / 2
 export const Z1 = HALL.d / 2
 export const CEIL = 22
@@ -44,7 +60,7 @@ export const COLUMNS: [number, number, number, number][] = [
   [-10.2, -5, 0.4, L1],
   [-8, -14.2, 0.4, L1],
   [-1.6, -14.2, 0.4, L1],
-  ...[-22, -14, -6, 2, 10].map((z): [number, number, number, number] => [X1 - 3.8, z, 0.45, 18.2]),
+  ...[-22, -14, -6, 2, 10].map((z): [number, number, number, number] => [X1 - 3.8 + ex(z), z, 0.45, 18.2]),
 ]
 
 export interface Table {
@@ -71,11 +87,11 @@ export const GROUND_BLOCKS: Box[] = [
   [12.1, -27.9, 18.5, -25.5],
   [18.5, -25, 19.3, -23.6], // Aramco's folding chair
   // east windows (NSA, Meta, Impiricus, SpaceX)
-  [18.1, -22.9, 19.9, -17.9],
-  [18.1, -11.1, 19.1, -10.1], // Meta roll-up beside the long table
-  [18.1, -13.9, 19.9, -11.1], // Meta long table
-  [18.2, -6.7, 19.9, -1.3],
-  [18.3, 0.4, 19.9, 3.3],
+  [18.1 + ex(-20), -22.9, 19.9 + ex(-20), -17.9],
+  [18.1 + ex(-10.6), -11.1, 19.1 + ex(-10.6), -10.1], // Meta roll-up beside the long table
+  [18.1 + ex(-12.5), -13.9, 19.9 + ex(-12.5), -11.1], // Meta long table
+  [18.2 + ex(-4), -6.7, 19.9 + ex(-4), -1.3],
+  [18.3 + ex(1.8), 0.4, 19.9 + ex(1.8), 3.3],
   [18.1, 6.1, 19.9, 8.9],
   // organizers
   [-12, 5.6, -10.6, 9.4], // Hardware Desk
@@ -106,8 +122,8 @@ export function onFurniture(x: number, z: number) {
 function groundOk(x: number, z: number, hop = false) {
   if (x < X0 + 0.6 + R || z < Z0 + 0.6 + R || z > Z1 - 0.6 - R) return false
   // East wall: only the entrance doorway lets you out to the exit shell.
-  if (x > X1 - 0.6 - R && Math.abs(z - DOORS_Z) > 2.3) return false
-  if (x > X1 + 1) return false
+  if (x > eastX(z) - 0.6 - R && Math.abs(z - DOORS_Z) > 2.3) return false
+  if (x > eastX(z) + 1) return false
   if (inBox(x, z, GROUND_BLOCKS[0], R)) return false // the stair: never hop it
   if (!hop && onFurniture(x, z)) return false
   return !COLUMNS.some(([cx, cz, cr]) => Math.hypot(x - cx, z - cz) < cr + R)
@@ -193,9 +209,9 @@ export const SPOTS: Spot[] = [
   { id: 'tmobile', x: 4.6, z: -24.2, r: 1.8, text: 'T-Mobile: “Unstoppable. Together.” Explore what’s possible.' },
   { id: 'citadel', x: 10.3, z: -24.2, r: 2, text: 'Citadel | Citadel Securities: Welcome! Scan the QR to connect.' },
   { id: 'aramco', x: 15.3, z: -24.5, r: 2.6, text: 'Aramco: presenting the Social Good track, “A Marina’s Mission.”' },
-  { id: 'nsa', x: 17.2, z: -20, r: 2.4, text: 'National Security Agency: IntelligenceCareers.gov/NSA' },
-  { id: 'meta', x: 17.1, z: -12, r: 2.4, text: 'Meta: “Make Every Connection Matter.” Come say hi at the table.' },
-  { id: 'impiricus', x: 17.2, z: -4, r: 2.4, text: 'Impiricus: the Agentic Commercialization Platform for Healthcare. self.build()' },
+  { id: 'nsa', x: 17.2 + ex(-20), z: -20, r: 2.4, text: 'National Security Agency: IntelligenceCareers.gov/NSA' },
+  { id: 'meta', x: 17.1 + ex(-12), z: -12, r: 2.4, text: 'Meta: “Make Every Connection Matter.” Come say hi at the table.' },
+  { id: 'impiricus', x: 17.2 + ex(-4), z: -4, r: 2.4, text: 'Impiricus: the Agentic Commercialization Platform for Healthcare. self.build()' },
   { id: 'spacex', x: 17.2, z: 7.5, r: 2.2, text: 'SpaceX: ask about building rockets.' },
   { id: 'balcony', x: -14, z: -8, y: L1, r: 5, text: 'Up on the 2nd floor: the whole Seaside Market below you.' },
   { id: 'mezz', x: 4, z: 4.6, y: L1, r: 6, text: 'The entrance mezzanine: look out over the hacking floor and the photo booth.' },
@@ -243,14 +259,14 @@ export function cameraCeiling(x: number, z: number, py: number): number {
       (z > MEZZ_Z - 0.3 && (x > MEZZ_X0 - 0.3 || z > MEZZ_WEST_Z - 0.3)) ||
       (x < BALCONY.left.x1 + 0.3 && z < BALCONY.left.z1 + 0.3) ||
       (x < BALCONY.back.x1 + 0.3 && z < BALCONY.back.z1 + 0.3) ||
-      x > X1 - 3.7
+      x > eastX(z) - 3.7
     if (underSlab) return L1 - 0.9
   }
   return CEIL - 1
 }
 
 /** The room's floor rectangle: [x0, z0, x1, z1]. */
-export const HALL_BOUNDS: [number, number, number, number] = [X0, Z0, X1, Z1]
+export const HALL_BOUNDS: [number, number, number, number] = [X0, Z0, XB, Z1]
 
 /** Spots to stand at when calibrating GPS on site (?calibrate). Far apart = better. */
 export const CALIBRATION_SPOTS: { name: string; h: [number, number] }[] = [
@@ -265,7 +281,7 @@ export const CALIBRATION_SPOTS: { name: string; h: [number, number] }[] = [
 /** The checkerboard back wall is curved: it bows out (north) by SAG metres at the middle. */
 export const SAG = 3.5
 export function wallZ(x: number) {
-  const u = (x - CX) / ((X1 - X0) / 2)
+  const u = (x - CXB) / ((XB - X0) / 2)
   return Z0 - SAG * (1 - Math.min(1, u * u))
 }
 

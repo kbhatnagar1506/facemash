@@ -391,6 +391,7 @@ export function Player({
     // Keep the shadow-casting sun centered on the player.
     // Morning: the sun is low in the east, so it rakes in through Klaus's east windows.
     light.current.position.set(p.x + 110, 55, p.y + 25)
+    light.current.intensity = view.mode === 'inside' ? 1.1 : 2 // softer indoors
     light.current.target.position.set(p.x, 0, p.y)
 
     sendAcc.current += dt

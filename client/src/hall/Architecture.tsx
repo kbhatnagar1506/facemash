@@ -1,7 +1,7 @@
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { BALCONY, CEIL, COLUMNS, CX, SAG, ceilY, wallZ, DOORS_Z, HALL, L1, MEZZ_WEST_Z, MEZZ_X0, MEZZ_Z, STAIR, X0, X1, Z0, Z1 } from './layout'
+import { BALCONY, CEIL, COLUMNS, CX, CXB, SAG, SLANT, XB, ceilY, eastX, wallZ, DOORS_Z, HALL, L1, MEZZ_WEST_Z, MEZZ_X0, MEZZ_Z, STAIR, X0, X1, Z0, Z1 } from './layout'
 import { Entrance } from './Entrance'
 import { addTerrazzo } from './detail'
 import { ceilingTiles, checkerWall, glassPanes, netTexture, terrazzo, textCard } from './textures'
@@ -17,8 +17,8 @@ const HANDRAIL = '#b07a45'
 function Floor() {
   const map = useMemo(terrazzo, [])
   return (
-    <mesh rotation-x={-Math.PI / 2} position={[CX, 0, 0]} receiveShadow>
-      <planeGeometry args={[HALL.w, HALL.d]} />
+    <mesh rotation-x={-Math.PI / 2} position={[CXB, 0, 0]} receiveShadow>
+      <planeGeometry args={[XB - X0, HALL.d]} />
       <meshStandardMaterial map={map} roughness={0.32} metalness={0} onUpdate={addTerrazzo} />
     </mesh>
   )
@@ -67,14 +67,15 @@ function Slab({ x0, x1, z0, z1, top, thick = 0.5 }: { x0: number; x1: number; z0
 function Walls() {
   const back = useMemo(() => checkerWall(18, 11, [2, 3, 6, 7, 10, 11, 14, 15]), [])
   const leftUpper = useMemo(() => checkerWall(24, 7, [3, 4, 9, 10, 15, 16, 21], 9), [])
-  const glassLen = DOORS_Z - 4.7 - Z0
-  const glassR = useMemo(() => glassPanes(15), [])
+  const slantLen = Math.hypot(XB - X1, MEZZ_Z - Z0)
+  const glassR = useMemo(() => glassPanes(12), [])
+  const glassFront = useMemo(() => glassPanes(6), [])
   const h = CEIL
   const curvedWall = useMemo(() => {
-    const g = new THREE.PlaneGeometry(HALL.w, h, 48, 1)
+    const g = new THREE.PlaneGeometry(XB - X0, h, 48, 1)
     const p = g.getAttribute('position')
     for (let i = 0; i < p.count; i++) {
-      const x = p.getX(i) + CX
+      const x = p.getX(i) + CXB
       p.setXYZ(i, x, p.getY(i) + h / 2, wallZ(x))
     }
     g.computeVertexNormals()
@@ -87,12 +88,12 @@ function Walls() {
         <meshLambertMaterial map={back} />
       </mesh>
       {/* floor and ceiling carry on into the curve */}
-      <mesh rotation-x={-Math.PI / 2} position={[CX, 0.001, Z0 - SAG / 2]}>
-        <planeGeometry args={[HALL.w, SAG]} />
+      <mesh rotation-x={-Math.PI / 2} position={[CXB, 0.001, Z0 - SAG / 2]}>
+        <planeGeometry args={[XB - X0, SAG]} />
         <meshStandardMaterial color="#e3dfd6" roughness={0.35} />
       </mesh>
-      <mesh rotation-x={Math.PI / 2} position={[CX, h, Z0 - SAG / 2]}>
-        <planeGeometry args={[HALL.w, SAG]} />
+      <mesh rotation-x={Math.PI / 2} position={[CXB, h, Z0 - SAG / 2]}>
+        <planeGeometry args={[XB - X0, SAG]} />
         <meshLambertMaterial color="#efece6" side={THREE.DoubleSide} />
       </mesh>
       {/* left wall: white corridor wall at ground/2nd floor, checker panels above */}
@@ -113,17 +114,30 @@ function Walls() {
       ))}
       {/* right wall: tall dark windows at ground level, white above */}
       {/* glass wall north of the entrance doors, plain wall around the doorway */}
-      {/* the glass itself */}
-      <mesh position={[X1, 2.3, (Z0 + DOORS_Z - 4.7) / 2]} rotation-y={-Math.PI / 2}>
-        <planeGeometry args={[glassLen, 4.6]} />
+      {/* the glass: straight through the lobby end, then splayed outward to the back */}
+      <mesh position={[X1, 2.3, (MEZZ_Z + DOORS_Z - 4.7) / 2]} rotation-y={-Math.PI / 2}>
+        <planeGeometry args={[DOORS_Z - 4.7 - MEZZ_Z, 4.6]} />
+        <meshStandardMaterial map={glassFront} roughness={0.15} metalness={0.1} />
+      </mesh>
+      <mesh position={[(X1 + XB) / 2, 2.3, (MEZZ_Z + Z0) / 2]} rotation-y={-Math.PI / 2 - SLANT}>
+        <planeGeometry args={[slantLen, 4.6]} />
         <meshStandardMaterial map={glassR} roughness={0.15} metalness={0.1} />
       </mesh>
       <mesh position={[X1, (L1 - 0.5) / 2, (DOORS_Z - 4.7 + Z1) / 2]} rotation-y={-Math.PI / 2}>
         <planeGeometry args={[Z1 - DOORS_Z + 4.7, L1 - 0.5]} />
         <meshLambertMaterial color="#efece6" />
       </mesh>
-      <mesh position={[X1, L1 + (h - L1) / 2, 0]} rotation-y={-Math.PI / 2}>
-        <planeGeometry args={[HALL.d, h - L1]} />
+      <mesh position={[X1, L1 + (h - L1) / 2, (MEZZ_Z + Z1) / 2]} rotation-y={-Math.PI / 2}>
+        <planeGeometry args={[Z1 - MEZZ_Z, h - L1]} />
+        <meshLambertMaterial color="#ecebe7" />
+      </mesh>
+      <mesh position={[(X1 + XB) / 2, L1 + (h - L1) / 2, (MEZZ_Z + Z0) / 2]} rotation-y={-Math.PI / 2 - SLANT}>
+        <planeGeometry args={[slantLen, h - L1]} />
+        <meshLambertMaterial color="#ecebe7" />
+      </mesh>
+      {/* the strip between the glass and the 2nd floor along the splayed wall */}
+      <mesh position={[(X1 + XB) / 2, (4.6 + L1) / 2, (MEZZ_Z + Z0) / 2]} rotation-y={-Math.PI / 2 - SLANT}>
+        <planeGeometry args={[slantLen, L1 - 4.6 + 0.02]} />
         <meshLambertMaterial color="#ecebe7" />
       </mesh>
       {/* entrance (south) wall above the mezzanine; the lobby level is <Entrance /> */}
@@ -142,17 +156,17 @@ function Ceiling() {
   // Grid of recessed downlights (the atrium photos show dozens).
   const lights = useMemo(() => {
     const out: [number, number, number][] = []
-    for (let x = X0 + 3; x < X1; x += 4.2) for (let z = Z0 + 3; z < MEZZ_Z; z += 4.4) out.push([x, ceilY(z) - 0.05, z])
+    for (let x = X0 + 3; x < XB; x += 4.2) for (let z = Z0 + 3; z < MEZZ_Z; z += 4.4) if (x < eastX(z) - 1.5) out.push([x, ceilY(z) - 0.05, z])
     for (const [x, z] of MEZZ_LIGHTS) out.push([x, L1 - 0.52, z])
     for (let x = X0 + 2.5; x < BALCONY.left.x1 + 1; x += 3.5) for (let z = Z0 + 2.5; z < STAIR.zTop; z += 4) out.push([x, L1 - 0.52, z])
     return out
   }, [])
   const slopedCeiling = useMemo(() => {
-    const g = new THREE.PlaneGeometry(HALL.w, HALL.d, 1, 8)
+    const g = new THREE.PlaneGeometry(XB - X0, HALL.d, 1, 8)
     g.rotateX(Math.PI / 2)
     const p = g.getAttribute('position')
     for (let i = 0; i < p.count; i++) {
-      const x = p.getX(i) + CX
+      const x = p.getX(i) + CXB
       const z = p.getZ(i)
       p.setXYZ(i, x, ceilY(z), z)
     }
@@ -162,7 +176,7 @@ function Ceiling() {
   const crease = useMemo(() => {
     // a slim soffit strip running diagonally across the ceiling (as in the photos)
     const A = [X0 + 2, Z0 + 26] as const
-    const B = [X1 - 2, Z0 + 6] as const
+    const B = [XB - 2, Z0 + 6] as const
     const pos: number[] = []
     const N = 20
     const w = 0.35
@@ -190,7 +204,7 @@ function Ceiling() {
     for (let i = 0; i < segX; i++)
       for (let j = 0; j < segA; j++) {
         const pt = (ii: number, jj: number) => {
-          const x = X0 + ((X1 - X0) * ii) / segX
+          const x = X0 + ((XB - X0) * ii) / segX
           const a = (jj / segA) * (Math.PI / 2)
           return [x, CEIL - R + Math.sin(a) * R, wallZ(x) + (1 - Math.cos(a)) * R]
         }
@@ -347,6 +361,27 @@ function LeftBalcony() {
 }
 
 /** Decorative upper floors: stacked balconies left and right, and the back bridge. */
+/** East-side floor slab over the splayed part of the wall (z from the back wall to the mezzanine edge). */
+function SlantSlab({ top, thick }: { top: number; thick: number }) {
+  const geo = useMemo(() => {
+    const sh = new THREE.Shape([
+      new THREE.Vector2(X1 - 3.4, -MEZZ_Z),
+      new THREE.Vector2(X1, -MEZZ_Z),
+      new THREE.Vector2(XB, -Z0),
+      new THREE.Vector2(XB - 3.4, -Z0),
+    ])
+    const g = new THREE.ExtrudeGeometry(sh, { depth: thick, bevelEnabled: false })
+    g.rotateX(-Math.PI / 2)
+    g.translate(0, top - thick, 0)
+    return g
+  }, [top, thick])
+  return (
+    <mesh geometry={geo} castShadow receiveShadow>
+      <meshLambertMaterial color={WHITE} />
+    </mesh>
+  )
+}
+
 function UpperFloors() {
   const levels = [9.6, 14.2]
   return (
@@ -364,20 +399,22 @@ function UpperFloors() {
             <Slab x0={X0} x1={-14} z0={Z0} z1={Z1} top={y} thick={0.6} />
           )}
           <Railing from={[-14, Z0 + 0.3]} to={[-14, Z1 - 0.3]} y={y} />
-          {/* right stacked balconies */}
-          <Slab x0={(X1 - 3.4)} x1={X1} z0={Z0} z1={Z1} top={y} thick={0.6} />
-          <Railing from={[(X1 - 3.4), Z0 + 0.3]} to={[(X1 - 3.4), Z1 - 0.3]} y={y} />
+          {/* right stacked balconies (following the splayed east wall at the back) */}
+          <Slab x0={(X1 - 3.4)} x1={X1} z0={MEZZ_Z} z1={Z1} top={y} thick={0.6} />
+          <SlantSlab top={y} thick={0.6} />
+          <Railing from={[(X1 - 3.4), MEZZ_Z]} to={[(X1 - 3.4), Z1 - 0.3]} y={y} />
+          <Railing from={[(XB - 3.4), Z0 + 0.3]} to={[(X1 - 3.4), MEZZ_Z]} y={y} />
           <Slab x0={-14} x1={(X1 - 3.4)} z0={Z1 - 3} z1={Z1} top={y} thick={0.6} />
           <Railing from={[-14, Z1 - 3]} to={[(X1 - 3.4), Z1 - 3]} y={y} />
         </group>
       ))}
       <UpperStair />
       {/* right 2nd floor too (over the sponsor booths) */}
-      <Slab x0={(X1 - 3.4)} x1={X1} z0={Z0} z1={MEZZ_Z} top={L1} thick={0.55} />
-      <Railing from={[(X1 - 3.4), Z0 + 0.3]} to={[(X1 - 3.4), MEZZ_Z - 0.3]} y={L1} />
+      <SlantSlab top={L1} thick={0.55} />
+      <Railing from={[(XB - 3.4), Z0 + 0.3]} to={[(X1 - 3.4), MEZZ_Z - 0.3]} y={L1} />
       {/* bridge across the back at the 3rd floor (seen from the entrance) */}
-      <Slab x0={-14} x1={(X1 - 3.4)} z0={Z0} z1={Z0 + 3.2} top={levels[0]} thick={0.6} />
-      <Railing from={[-14, Z0 + 3.2]} to={[(X1 - 3.4), Z0 + 3.2]} y={levels[0]} />
+      <Slab x0={-14} x1={(XB - 3.4)} z0={Z0} z1={Z0 + 3.2} top={levels[0]} thick={0.6} />
+      <Railing from={[-14, Z0 + 3.2]} to={[(XB - 3.4), Z0 + 3.2]} y={levels[0]} />
       {/* projecting study box on the left upper level (photo 6) */}
       <mesh position={[-10.5, 11.2, -10]} castShadow>
         <boxGeometry args={[7, 2.6, 6]} />

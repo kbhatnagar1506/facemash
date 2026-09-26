@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-import { X0, Z0, wallZ } from './layout'
+import { SLANT, X0, Z0, ex, wallZ } from './layout'
 import { metaScreen } from './textures'
 
 // Every sponsor and organizer table in the Klaus atrium, from the on-site photos.
@@ -725,6 +725,8 @@ function EastRow({ art }: { art: Art }) {
   const west = -Math.PI / 2
   return (
     <group>
+      <group position={[20.7 + ex(-20), 0, -20]} rotation-y={-SLANT}>
+        <group position={[-20.7, 0, 20]}>
       {/* NSA */}
       <group position={[20.7, 0, -20]} rotation-y={west}>
         <Cloth w={2.6} d={0.9} color="#18264a" front={art.nsa} seed={3} />
@@ -738,7 +740,11 @@ function EastRow({ art }: { art: Art }) {
       ))}
       <Bin x={21.3} z={-22.6} />
 
+        </group>
+      </group>
       {/* Meta: roll-up and the round navy table, full of people */}
+      <group position={[20.7 + ex(-12), 0, -12]} rotation-y={-SLANT}>
+        <group position={[-20.7, 0, 12]}>
       {/* Meta's long table along the windows, in a Meta cloth */}
       <group position={[20.7, 0, -12.5]} rotation-y={west}>
         <Cloth w={2.4} d={0.9} color="#2d434d" front={art.metaLong} seed={15} />
@@ -779,6 +785,10 @@ function EastRow({ art }: { art: Art }) {
       {/* the white Meta roll-up right beside the long table */}
       <RollUp map={art.meta} x={20.6} z={-10.6} rot={-1.28} w={1} h={2.3} />
 
+        </group>
+      </group>
+      <group position={[20.7 + ex(-2.5), 0, -2.5]} rotation-y={-SLANT}>
+        <group position={[-20.7, 0, 2.5]}>
       {/* Impiricus: two roll-ups either side, black cloth, then a tan folding table + big box */}
       <RollUp map={art.impRoll} x={20.6} z={-6.3} rot={west} w={0.9} h={2.1} dark />
       <group position={[20.8, 0, -4]} rotation-y={west}>
@@ -798,6 +808,8 @@ function EastRow({ art }: { art: Art }) {
         <Box p={[0, 1.2, 0]} s={[0.3, 2.4, 1.1]} color="#b98d5c" />
       </group>
 
+        </group>
+      </group>
       {/* SpaceX: plain black cloth, banner on the glass behind */}
       <group position={[20.7, 0, 7.5]} rotation-y={west}>
         <Cloth w={2.4} d={0.9} color="#0d0d10" seed={13} loose={1.5} />

@@ -1,7 +1,7 @@
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { DOORS_Z, X1, Z0 } from './layout'
+import { SLANT, X1, XB, Z0 } from './layout'
 
 // Light and air in the Klaus atrium: morning sunbeams raking in through the
 // east windows, dust drifting through them, and pools of sun on the terrazzo.
@@ -62,18 +62,19 @@ function SunWash() {
   }, [])
   const air = useRef<THREE.MeshBasicMaterial>(null!)
   useFrame(({ clock }) => {
-    if (air.current) air.current.opacity = 0.2 + 0.05 * Math.sin(clock.elapsedTime * 0.5) // clouds passing
+    if (air.current) air.current.opacity = 0.07 + 0.02 * Math.sin(clock.elapsedTime * 0.5) // clouds passing
   })
-  const z0 = Z0 + 1
-  const z1 = DOORS_Z - 5
-  const len = z1 - z0
+  // along the splayed stretch of east glass (back wall to the mezzanine edge)
+  const len = Math.hypot(XB - X1, 3 - Z0) - 2
   const depth = 18 // metres the light spreads into the room
+  const z0 = -len / 2
+  const z1 = len / 2
   return (
-    <group>
+    <group position={[(X1 + XB) / 2 - X1, 0, (3 + Z0) / 2]} rotation-y={-SLANT}>
       {/* warm wash spreading across the floor from the east windows */}
       <mesh rotation-x={-Math.PI / 2} position={[X1 - depth / 2, 0.02, (z0 + z1) / 2]}>
         <planeGeometry args={[depth, len]} />
-        <meshBasicMaterial map={floorTex} transparent opacity={0.55} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
+        <meshBasicMaterial map={floorTex} transparent opacity={0.22} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
       </mesh>
       {/* layered haze just inside the glass: the light spreads and softens into the room */}
       {[0.4, 2.2, 4.6, 7.5].map((d, i) => (
@@ -83,7 +84,7 @@ function SunWash() {
             ref={i === 0 ? air : undefined}
             map={hazeTex}
             transparent
-            opacity={[0.22, 0.12, 0.08, 0.05][i]}
+            opacity={[0.07, 0.04, 0.025, 0.015][i]}
             depthWrite={false}
             blending={THREE.AdditiveBlending}
             side={THREE.DoubleSide}
