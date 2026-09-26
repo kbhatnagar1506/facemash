@@ -1,6 +1,6 @@
 #!/bin/bash
 # GT Campus Quest game server: the Go WebSocket server behind Caddy (automatic HTTPS).
-IMAGE="us-central1-docker.pkg.dev/patchguard-reakon/cloud-run-source-deploy/gt-campus-quest@sha256:5beaa0c90b35ffe7f952afdd248b8d1c0de6b1b6d9e9a44949eca7eb11129289"
+IMAGE="us-central1-docker.pkg.dev/patchguard-reakon/cloud-run-source-deploy/gt-campus-quest@sha256:4b7060ad126f2c83211410a52011db96e3a36d2536536339d09d7e1c7266091f"
 HOST="35-188-1-8.sslip.io"
 export HOME=/home/chronos
 docker-credential-gcr configure-docker --registries us-central1-docker.pkg.dev
