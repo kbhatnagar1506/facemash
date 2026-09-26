@@ -64,7 +64,7 @@ function byTile<T>(items: T[], at: (t: T) => [number, number]) {
   return m
 }
 /** Tile keys within LOAD_RADIUS of the player, re-checked twice a second. */
-function useNearTiles(focus: React.MutableRefObject<{ x: number; z: number }>) {
+function useNearTiles(focus: React.MutableRefObject<{ x: number; z: number }>, active: boolean) {
   const calc = () => {
     const out: string[] = []
     const { x, z } = focus.current
@@ -82,6 +82,9 @@ function useNearTiles(focus: React.MutableRefObject<{ x: number; z: number }>) {
   const [keys, setKeys] = useState(calc)
   const acc = useRef(0)
   useFrame((_, dt) => {
+    // frozen while you're inside Klaus: the hall uses its own coordinates, and building
+    // campus tiles there would steal frames from the entrance cinematic
+    if (!active) return
     acc.current += dt
     if (acc.current < 0.5) return
     acc.current = 0
@@ -468,8 +471,8 @@ function EventBeacon({ campus, onOpen }: { campus: Campus; onOpen: () => void })
   )
 }
 
-export function World({ campus, onOpenEvent, focus }: { campus: Campus; onOpenEvent: () => void; focus: React.MutableRefObject<{ x: number; z: number }> }) {
-  const near = useNearTiles(focus)
+export function World({ campus, onOpenEvent, focus, active = true }: { campus: Campus; onOpenEvent: () => void; focus: React.MutableRefObject<{ x: number; z: number }>; active?: boolean }) {
+  const near = useNearTiles(focus, active)
   return (
     <group>
       <Ground campus={campus} />

@@ -36,13 +36,24 @@ export function HackGTHall({ active }: { active: boolean }) {
     const a = setTimeout(prep, 500)
     const b = setTimeout(prep, 2500) // pick up late-loading textures/props
     const c = setTimeout(() => root.current && (snap = snapshot(root.current)), 3000)
-    const d = setTimeout(() => {
+    // never merge in the middle of the entrance cinematic (it's a one-off ~100 ms job)
+    let cine = false
+    const onCine = (e: Event) => (cine = !!(e as CustomEvent).detail)
+    window.addEventListener('cinematic', onCine)
+    let d: ReturnType<typeof setTimeout>
+    const tryBatch = () => {
       if (!root.current || !snap || location.search.includes('nobatch')) return
+      if (cine) {
+        d = setTimeout(tryBatch, 1000)
+        return
+      }
       const r = batchStatic(root.current, snap)
       console.info(`[hall] batched ${r.folded} static meshes into ${r.batches} draws`)
-    }, 3800)
+    }
+    d = setTimeout(tryBatch, 3800)
     return () => {
       ;[a, b, c, d].forEach(clearTimeout)
+      window.removeEventListener('cinematic', onCine)
     }
   }, [gl, scene, camera])
   return (

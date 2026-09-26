@@ -219,7 +219,7 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
             lobby under the low ceiling isn't left dim when the sun can't reach it */}
         {room === 'hackgt' && <directionalLight position={[-6, 30, 30]} intensity={0.55} color="#fff3e2" />}
         <group visible={room === 'campus'}>
-          <World campus={campus} onOpenEvent={() => setEventOpen(true)} focus={info} />
+          <World campus={campus} onOpenEvent={() => setEventOpen(true)} focus={info} active={room === 'campus'} />
           <Shells campus={campus} info={info} onOpen={() => setEventOpen(true)} active={room === 'campus'} />
         </group>
         {hallWanted && (
