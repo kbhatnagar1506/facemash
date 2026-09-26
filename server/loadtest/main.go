@@ -27,6 +27,7 @@ func main() {
 	spread := flag.Float64("spread", 300, "side of the wander square (m)")
 	secs := flag.Int("secs", 20, "test length")
 	room := flag.String("room", "campus", "campus or hackgt")
+	origin := flag.String("origin", "http://localhost:8080", "Origin header (the live server only accepts the Vercel site)")
 	flag.Parse()
 
 	var msgs, bytes, conns, failed int64
@@ -36,7 +37,7 @@ func main() {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			c, _, err := websocket.DefaultDialer.Dial(*addr, map[string][]string{"Origin": {"http://localhost:8080"}})
+			c, _, err := websocket.DefaultDialer.Dial(*addr, map[string][]string{"Origin": {*origin}})
 			if err != nil {
 				atomic.AddInt64(&failed, 1)
 				return
