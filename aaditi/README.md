@@ -1,8 +1,6 @@
-# aaditi · Muse web
+# aaditi · Muse admin
 
-When you pass people within a set radius at an event, your **muse** agent starts talking to their agents at the same time. **OpenClaw** monitors every conversation, and **jev** classifies it afterwards. If you have things in common, Muse suggests you meet. It gives a similarity score across thoughts, current career and what you're building, plus a first conversation topic.
-
-This folder is the UI for that: a black, vector-space style web.
+**Muse:** when you pass people within a set radius at an event, your muse agent starts talking to their agents at the same time. **OpenClaw** monitors every conversation and **jev** classifies it. If you have things in common, the platform suggests you meet, with a similarity % (thoughts, current career, what you're building) and a first conversation topic.
 
 ```bash
 cd aaditi
@@ -10,23 +8,19 @@ npm install
 npm run dev        # http://localhost:5174
 ```
 
-## The web (`/`)
+## `/`: admin architecture wireframe (black)
 
-- **Center node: you and your data.** A ring of your sources (GitHub, Notes, Posts, Goals, Calendar, Resume, Reading, Past chats) around you. These are the only things muse is allowed to say about you.
-- **Every other node is a person whose agent muse talked to.** Distance from you is similarity, like nearest neighbors in a vector space: the closer, the better the match. Color shows jev's call: teal = strong match, indigo = worth meeting, gray = low overlap, amber = agents talking right now, purple = jev classifying.
-- **Live:** new people enter the radius (they appear on the outer "not scored yet" orbit), their agent chats with muse (animated amber link), jev scores the chat, and the node glides inward to its similarity distance.
-- **Tap a person** and the node expands:
-  - the topics you share branch off it, and dashed links show which of *your* sources muse cited to them
-  - the panel shows the jev score (overall %, thoughts, current career, what you're building), a **suggested first topic**, and a "Suggest meeting" action
-  - the **agent-to-agent chat** (muse ⇄ their agent), where every reply has a **timestamp** and a **one-line source** under it: `↳ from your GitHub · commit 4f68987 …` or `↳ from Ethan's history · …`. If an agent says something with no source, OpenClaw strikes it out and leaves it out of scoring.
-- **Tap one of your sources** to see every time muse used it and with whom. Those people light up in the web.
-- **Tap "you"** for your sources and a ranked list of matches.
-- Drag to pan, scroll or use +/− to zoom, Esc to close. On phones the panel is a bottom sheet.
+- **Center hub:** (1) lifetime users to date, (2) hours of activity to date (ticks live), (3) active users now. Plus live chats, claims OpenClaw withheld, and chats jev has scored.
+- **Every lifetime user** connects to the hub. **White box = active now, grey = inactive.** Each box shows the name, role, what they're building, the event they're at (or were last at), hours to date and chats today.
+- **Active user → chat box → other account:** each live agent-to-agent conversation sits between the two users it connects, with arrows in from one side and out to the other. Inside:
+  - every reply has a **timestamp** and a **one-line source**: `↳ from Ethan's history · GitHub · server/README.md`
+  - a claim with no source in the owner's history is struck out: `⊘ OpenClaw: no source … withheld from scoring`
+  - when the agents finish, jev classifies: **MATCH %**, thoughts / career / building bars, and a **first topic**
+- A user can be in several chats at once (Ethan, Hana).
+- Drag to pan, scroll or −/+ to zoom, ⤢ zooms to a chat, "fit" resets. Click a user or chat to highlight its connections, Esc to clear.
 
-The people, chats and scores are sample data (`src/muse/data.ts`). Your sources are drawn from this repo's own history (facemash / GT Campus Quest).
-
-Code: `src/muse/`. `data.ts` has the people, scripts and scores, `timeline.ts` sets when replies land and where nodes sit, `Muse.tsx` draws the web and camera, `Panel.tsx` is the expanded node, and `muse.css` the theme.
+Sample data: `src/admin/data.ts`. Page: `src/admin/Admin.tsx`. Styles: `src/admin/admin.css`.
 
 ## `/console`
 
-An earlier multi-tenant terminal console (many agents, many chats, source-verification lines), kept for reference.
+An earlier multi-tenant terminal console, kept for reference.
