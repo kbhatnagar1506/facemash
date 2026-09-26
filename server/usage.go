@@ -234,6 +234,7 @@ func (t *usageTracker) observe(now time.Time, present map[int64]usagePresence) {
 	t.last = now
 	for uid, p := range present {
 		s := t.open[uid]
+		step := dt
 		if s == nil {
 			start := p.joined
 			if start.IsZero() || start.After(now) || now.Sub(start) > 3*usageSample {
@@ -241,14 +242,15 @@ func (t *usageTracker) observe(now time.Time, present map[int64]usagePresence) {
 			}
 			s = &usageSession{row: usageSessionRow{ID: usageID(), UserID: uid, Started: start}}
 			t.open[uid] = s
+			step = min(dt, now.Sub(start)) // a new session: only the time since its hello
 		}
 		s.row.Seen = now
 		s.row.Ended = nil // back within usageGap: the same session goes on
 		if p.hall {
-			s.row.Hall += dt.Seconds()
+			s.row.Hall += step.Seconds()
 		}
 		if now.Sub(p.moved) <= usageIdle {
-			s.row.Active += dt.Seconds()
+			s.row.Active += step.Seconds()
 		}
 		s.dirty = true
 	}

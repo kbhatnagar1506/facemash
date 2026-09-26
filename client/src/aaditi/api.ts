@@ -111,6 +111,49 @@ export interface Overview {
   as_of: string
 }
 
+export interface UsagePlay {
+  people: number
+  people_today: number
+  sessions: number
+  sessions_today: number
+  hours: number
+  hours_today: number
+  active_hours: number
+  hall_hours: number
+  avg_session_min: number
+  median_session_min: number
+  avg_per_person_min: number
+  returning: number
+  peak_online: number
+  peak_at: string | null
+  online_now: number
+}
+
+export interface UsageService {
+  kind: 'gemini' | 'jev' | 'voice' | string
+  model: string
+  calls: number
+  failed: number
+  calls_today: number
+  tokens_in: number
+  tokens_out: number
+  minutes: number
+  cost_usd: number | null
+  cost_today_usd: number | null
+}
+
+/** /api/admin/usage: time in the game and what the paid services were used for */
+export interface Usage {
+  play: UsagePlay
+  hourly: { hour: string; people: number; minutes: number }[]
+  top: (Person & { minutes: number; sessions: number })[]
+  voice: { calls: number; minutes: number; avg_call_sec: number; people: number }
+  services: UsageService[]
+  cost_usd: number | null
+  cost_today_usd: number | null
+  as_of: string
+}
+
 export interface Me {
   admin: boolean
   email: string
@@ -149,6 +192,7 @@ export interface StreamHandlers {
 export interface AdminApi {
   me(): Promise<Me>
   overview(): Promise<Overview>
+  usage(): Promise<Usage>
   talks(q?: TalkQuery): Promise<Page<TalkSummary>>
   talk(id: string): Promise<TalkDetail>
   /** Opens the event stream; returns a function that closes it. */
@@ -204,6 +248,10 @@ export function talksUrl(q: TalkQuery = {}) {
 export const httpApi: AdminApi = {
   me: () => get<Me>('/api/admin/me'),
   overview: () => get<Overview>('/api/admin/overview'),
+  usage: async () => {
+    const u = await get<Usage>('/api/admin/usage')
+    return { ...u, hourly: u.hourly ?? [], top: u.top ?? [], services: u.services ?? [] }
+  },
   talks: async (q) => {
     const page = await get<Page<TalkSummary>>(talksUrl(q))
     return { items: (page.items ?? []).map(normSummary), next: page.next ?? null }

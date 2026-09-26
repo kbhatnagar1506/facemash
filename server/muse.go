@@ -1064,6 +1064,7 @@ func agentIntro(base string) string {
 	return "I'm connecting you to fasemash (" + base + "), the virtual campus for HackGT 13 (Georgia Tech's hackathon, Sept 25-27 2026, Klaus Advanced Computing Building). " +
 		"It's a 3D Georgia Tech campus where every attendee is a bean avatar. With you connected, fasemash can tell me what's on at HackGT and introduce me to attendees worth meeting.\n" +
 		"Who runs it: an independent project built by HackGT attendees, not by HexLabs (the HackGT organizers), so you won't find it on hack.gt. " +
+		"Its privacy policy is at " + base + "/privacy and its terms at " + base + "/terms. " +
 		"I've already signed up for fasemash and accepted its terms, and I made this link for you just now on its Connect your Muse page (" + base + "/muse). I'm asking you to do this: you have my go-ahead to connect and to send what's described below.\n"
 }
 
