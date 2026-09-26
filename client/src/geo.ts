@@ -23,6 +23,10 @@ export interface GeoCfg {
   b: number
   tx: number
   tz: number
+  /** where live tracking starts inside Klaus (hall metres); overrides the default centre */
+  anchor?: [number, number]
+  /** or: start at this numbered hacking table (see hall/layout TABLES) */
+  anchorTable?: number
 }
 
 export function toHall(cfg: GeoCfg, lat: number, lon: number): Pt2 {

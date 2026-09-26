@@ -11,7 +11,7 @@ import { requestMotion, useMotion } from './motion'
 import { defaultLook, encodeLook, loadLook } from './look'
 import { Hud } from './Hud'
 import { Shells } from './Shells'
-import { CALIBRATION_SPOTS, HallCollider, HALL_BOUNDS, HALL_SPAWN, HALL_YAW, PERSON_SCALE, cameraCeiling, eastX, westX } from './hall/layout'
+import { CALIBRATION_SPOTS, HallCollider, HALL_BOUNDS, HALL_SPAWN, HALL_YAW, PERSON_SCALE, TABLE, TABLES, cameraCeiling, eastX, westX } from './hall/layout'
 // the Klaus hall is big: it downloads in its own chunk, only once you're near Klaus
 const HackGTHall = lazy(() => import('./HackGTHall').then((m) => ({ default: m.HackGTHall })))
 import { toHall, useLiveLocation, type GeoCfg } from './geo'
@@ -290,18 +290,26 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
     save('gt.motion', ok)
   }
 
+  // Where live tracking starts: a known spot we set before the event (the table the
+  // judging happens at, from server/geo.json: anchorTable or anchor), else the centre of
+  // the atrium's table area. You appear there the moment live tracking starts, and
+  // steps + GPS take over (like Doorstep's known-entrance anchor).
+  const anchor = useMemo<[number, number]>(() => {
+    const t = geoCfg?.anchorTable != null ? TABLES.find((q) => q.n === geoCfg.anchorTable) : undefined
+    if (t) return [t.x, t.z + TABLE.d / 2 + 0.9] // standing at the table's front edge
+    return geoCfg?.anchor ?? [6.8, -1] // middle of the hacking tables
+  }, [geoCfg])
   useEffect(() => {
-    // Walking in through the main doors is a perfect anchor (like Doorstep's entrance
-    // detection): start tracking from exactly there, then steps + GPS take over.
-    if (room === 'hackgt') {
-      kf.current = { x: HALL_SPAWN[0], z: HALL_SPAWN[1], p: 2, t: Date.now(), rejects: 0 }
-      gps.current = null
+    lastMeas.current = ''
+    if (room === 'hackgt' && live) {
+      kf.current = { x: anchor[0], z: anchor[1], p: 2, t: Date.now(), rejects: 0 }
+      gps.current = { x: anchor[0], z: anchor[1] }
+      if (net) net.correction = { x: anchor[0], z: anchor[1] } // appear there now
     } else {
       kf.current = null
       gps.current = null
     }
-    lastMeas.current = ''
-  }, [room])
+  }, [room, live, anchor, net])
   // Send what the device reports to the server so the atrium can be mapped from
   // real coordinates (and so we can see why live location isn't moving someone).
   const lastSample = useRef(0)
