@@ -192,7 +192,7 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
         <fog attach="fog" args={['#bfe6ff', 180, 700]} />
         {/* campus: sky + grass bounce; inside Klaus: warm neutral bounce off the terrazzo */}
         <hemisphereLight
-          args={room === 'hackgt' ? ['#fff6e8', '#d8d0c2', 1.05] : ['#dff3ff', '#7faf65', 1.15]}
+          args={room === 'hackgt' ? ['#fff4e2', '#d8d0c2', 1.15] : ['#e8f2ff', '#7faf65', 1.1]}
           key={room}
         />
         <group visible={room === 'campus'}>

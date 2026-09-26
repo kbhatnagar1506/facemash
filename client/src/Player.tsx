@@ -246,7 +246,8 @@ export function Player({
     }
 
     // Keep the shadow-casting sun centered on the player.
-    light.current.position.set(p.x + 60, 120, p.y + 40)
+    // Morning: the sun is low in the east, so it rakes in through Klaus's east windows.
+    light.current.position.set(p.x + 110, 55, p.y + 25)
     light.current.target.position.set(p.x, 0, p.y)
 
     sendAcc.current += dt
@@ -260,8 +261,8 @@ export function Player({
     <>
       <directionalLight
         ref={light}
-        intensity={1.7}
-        color="#fff6e5"
+        intensity={2}
+        color="#ffe1b3"
         castShadow
         shadow-mapSize={[2048, 2048]}
         shadow-camera-left={-90}
