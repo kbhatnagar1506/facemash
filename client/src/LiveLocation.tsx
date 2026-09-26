@@ -8,7 +8,7 @@ export function LivePill({
   live: boolean
   status: LiveStatus
   fix: Fix | null
-  where: 'in' | 'out' | null
+  where: 'in' | 'out' | 'stuck' | null
   room: 'campus' | 'hackgt'
   onToggle: () => void
 }) {
@@ -23,7 +23,9 @@ export function LivePill({
           ? 'Finding you…'
           : fix.acc > 60
             ? `GPS too rough (±${Math.round(fix.acc)} m). Turn on Precise Location + Wi-Fi`
-            : where === 'out'
+            : where === 'stuck'
+              ? 'GPS paused, using keys until it updates'
+              : where === 'out'
               ? `Not in ${place}, using keys`
               : `Live ±${Math.round(fix.acc)} m`
   const on = live && status === 'live' && where === 'in' && !!fix && fix.acc <= 60

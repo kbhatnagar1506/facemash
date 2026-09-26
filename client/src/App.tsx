@@ -10,7 +10,7 @@ import { Remotes } from './Remotes'
 import { defaultLook, encodeLook, loadLook } from './look'
 import { Hud } from './Hud'
 import { Shells } from './Shells'
-import { CALIBRATION_SPOTS, HallCollider, HALL_BOUNDS, HALL_SPAWN, HALL_YAW, PERSON_SCALE, cameraCeiling } from './hall/layout'
+import { CALIBRATION_SPOTS, HallCollider, HALL_BOUNDS, HALL_SPAWN, HALL_YAW, PERSON_SCALE, cameraCeiling, eastX, westX } from './hall/layout'
 // the Klaus hall is big: it downloads in its own chunk, only once you're near Klaus
 const HackGTHall = lazy(() => import('./HackGTHall').then((m) => ({ default: m.HackGTHall })))
 import { toHall, useLiveLocation, type GeoCfg } from './geo'
@@ -139,12 +139,24 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
       .catch(() => {})
   }, [])
   const gps = useRef<{ x: number; z: number } | null>(null)
-  const [where, setWhere] = useState<'in' | 'out' | null>(null)
+  const [where, setWhere] = useState<'in' | 'out' | 'stuck' | null>(null)
+  // A small Kalman filter over the GPS fixes, in hall metres: each fix counts in
+  // proportion to its accuracy, the estimate is allowed to drift at walking speed
+  // between fixes, and jumps a person couldn't make (indoor multipath) are ignored
+  // unless they persist.
+  const kf = useRef<{ x: number; z: number; p: number; t: number; rejects: number } | null>(null)
   useEffect(() => {
     // Live location is only used inside the Klaus atrium; campus is always keys.
     if (room !== 'hackgt' || !live || !fix || fix.acc > 60 || !geoCfg) {
       gps.current = null
+      kf.current = null
       setWhere(null)
+      return
+    }
+    // frozen GPS (same position for >10 s): hand control back to the keys until it moves
+    if (fix.since && Date.now() - fix.since > 10000) {
+      gps.current = null
+      setWhere('stuck')
       return
     }
     let [x, z] = toHall(geoCfg, fix.lat, fix.lon)
@@ -152,14 +164,35 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
     const slack = 12 // indoor GPS drifts; allow a little outside the walls
     if (x < b[0] - slack || x > b[2] + slack || z < b[1] - slack || z > b[3] + slack) {
       gps.current = null
+      kf.current = null
       setWhere('out')
       return
     }
-    x = Math.min(b[2] - 1, Math.max(b[0] + 1, x))
+    // keep it inside the building: between the (angled) west and east walls, off the end walls
     z = Math.min(b[3] - 1, Math.max(b[1] + 1, z))
-    // smooth out jitter; big jumps (new room, first fix) go straight through
-    const prev = gps.current
-    gps.current = prev && Math.hypot(prev.x - x, prev.z - z) < 15 ? { x: prev.x + (x - prev.x) * 0.5, z: prev.z + (z - prev.z) * 0.5 } : { x, z }
+    x = Math.min(eastX(z) - 0.9, Math.max(westX(z) + 0.9, x))
+    const r = fix.acc * fix.acc // measurement variance (m²)
+    const k = kf.current
+    if (!k) kf.current = { x, z, p: r, t: fix.at, rejects: 0 }
+    else {
+      const dt = Math.max(0.2, (fix.at - k.t) / 1000)
+      k.p += (1.6 * dt) ** 2 + 0.5 // you can have walked up to ~1.6 m/s since the last fix
+      const d = Math.hypot(x - k.x, z - k.z)
+      const implausible = d > 3 * Math.sqrt(k.p + r) && d / dt > 3
+      if (implausible && k.rejects < 3) {
+        k.rejects++ // a multipath spike: skip it
+      } else {
+        if (implausible) k.p = r // it kept saying so: you really moved, re-anchor
+        const g = k.p / (k.p + r)
+        k.x += (x - k.x) * g
+        k.z += (z - k.z) * g
+        k.p *= 1 - g
+        k.rejects = 0
+      }
+      k.t = fix.at
+    }
+    const e = kf.current!
+    gps.current = { x: Math.min(eastX(e.z) - 0.9, Math.max(westX(e.z) + 0.9, e.x)), z: e.z }
     setWhere('in')
   }, [fix, live, room, geoCfg])
   useEffect(() => {

@@ -62,6 +62,8 @@ export interface Fix {
   lon: number
   acc: number
   at: number
+  /** when the reported position last actually changed (frozen fixes keep an old value) */
+  since?: number
 }
 
 export type LiveStatus = 'off' | 'waiting' | 'live' | 'denied' | 'unavailable'
@@ -81,15 +83,38 @@ export function useLiveLocation(enabled: boolean) {
       return
     }
     setStatus('waiting')
-    const id = navigator.geolocation.watchPosition(
-      (p) => {
-        setStatus('live')
-        setFix({ lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy, at: Date.now() })
-      },
-      (e) => setStatus(e.code === e.PERMISSION_DENIED ? 'denied' : 'waiting'),
-      { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 },
-    )
-    return () => navigator.geolocation.clearWatch(id)
+    // iOS sometimes keeps replaying one cached position (seen on-site: the same coords
+    // 15× over 80 s). Ask for fresh fixes only, and if the position hasn't changed for
+    // 12 s, restart the watch to kick the location service awake.
+    let id = 0
+    let lastKey = ''
+    let lastChange = Date.now()
+    const start = () =>
+      navigator.geolocation.watchPosition(
+        (p) => {
+          setStatus('live')
+          const key = `${p.coords.latitude},${p.coords.longitude}`
+          if (key !== lastKey) {
+            lastKey = key
+            lastChange = Date.now()
+          }
+          setFix({ lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy, at: Date.now(), since: lastChange })
+        },
+        (e) => setStatus(e.code === e.PERMISSION_DENIED ? 'denied' : 'waiting'),
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 },
+      )
+    id = start()
+    const kick = setInterval(() => {
+      if (Date.now() - lastChange > 12000) {
+        navigator.geolocation.clearWatch(id)
+        id = start()
+        lastChange = Date.now() - 6000 // give the restart a few seconds before kicking again
+      }
+    }, 3000)
+    return () => {
+      clearInterval(kick)
+      navigator.geolocation.clearWatch(id)
+    }
   }, [enabled])
   return { fix, status }
 }
