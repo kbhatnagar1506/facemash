@@ -2,10 +2,23 @@ import { useEffect, useRef, useState } from 'react'
 import { loadGoogle, signInWithGoogle, type Me } from '../account'
 
 // The door into the game: sign in with Google (which also creates your account the first
-// time) or carry on as a guest. Signing in is what saves your bean and where you were.
+// time). There is no guest mode; signing in is what saves your bean and where you were.
 
-/** `next` is where to go once signed in (it can depend on the account). */
-export function SignInSheet({ clientId, next, onClose }: { clientId: string; next: string | ((me: Me) => string); onClose: () => void }) {
+/** `next` is where to go once signed in (it can depend on the account). `title`/`sub` let a
+ *  page other than the landing say why it's asking (e.g. /muse). */
+export function SignInSheet({
+  clientId,
+  next,
+  onClose,
+  title = 'Enter HackGT 13',
+  sub = 'Sign in to keep your bean and pick up where you left off.',
+}: {
+  clientId: string
+  next: string | ((me: Me) => string)
+  onClose: () => void
+  title?: string
+  sub?: string
+}) {
   const button = useRef<HTMLDivElement>(null)
   const panel = useRef<HTMLDivElement>(null)
   const [state, setState] = useState<'loading' | 'ready' | 'busy' | 'error'>('loading')
@@ -66,8 +79,8 @@ export function SignInSheet({ clientId, next, onClose }: { clientId: string; nex
             <path d="M3.5 3.5l7 7m0-7l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
           </svg>
         </button>
-        <h2 id="sheet-title">Enter HackGT 13</h2>
-        <p className="sheet-sub">Sign in to keep your bean and pick up where you left off.</p>
+        <h2 id="sheet-title">{title}</h2>
+        <p className="sheet-sub">{sub}</p>
         <div className={state === 'busy' ? 'gbtn busy' : 'gbtn'} ref={button} aria-busy={state === 'loading' || state === 'busy'} />
         {state === 'error' && (
           <p className="sheet-error" role="alert">
@@ -75,7 +88,7 @@ export function SignInSheet({ clientId, next, onClose }: { clientId: string; nex
           </p>
         )}
         <p className="sheet-legal">
-          By continuing you agree to our <a href="/terms">Terms</a> and <a href="/privacy">Privacy Policy</a>.
+          By continuing you agree to our <a href="/terms">Terms</a> and <a href="/privacy">Privacy{'\u00a0'}Policy</a>.
         </p>
       </div>
     </div>
