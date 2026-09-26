@@ -201,10 +201,15 @@ func (f *mfFake) serve(side string, w http.ResponseWriter, r *http.Request) {
 		reply(200, map[string]any{"items": items, "next_cursor": next})
 	case r.Method == "POST" && op == "spaces/*/search":
 		var in struct {
-			Query string `json:"query"`
-			Limit int    `json:"limit"`
+			Query             string `json:"query"`
+			Limit             int    `json:"limit"`
+			IncludeSuperseded bool   `json:"include_superseded"`
 		}
 		json.Unmarshal(body, &in)
+		if !in.IncludeSuperseded { // the fast path: without it MAPI walks supersession per hit
+			f.problem(w, 422, "test_needs_include_superseded")
+			return
+		}
 		type hit struct {
 			m     *mfMem
 			score float64

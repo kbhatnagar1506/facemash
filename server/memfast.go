@@ -818,7 +818,9 @@ func (f *memFast) askNow(ctx context.Context, tenant string, id int64, q string)
 	var res struct {
 		Results []fastHit `json:"results"`
 	}
-	body := map[string]any{"query": q, "limit": fastAskLimit, "coverage": false}
+	// include_superseded skips MAPI's per-hit supersession walk (about 0.3 s instead of 0.7 s at
+	// p50): these spaces never hold superseded rows, since a changed section is erased and rewritten.
+	body := map[string]any{"query": q, "limit": fastAskLimit, "coverage": false, "include_superseded": true}
 	if err := f.mapi.do(ctx, tenant, http.MethodPost, fastSpacePath(sid, "/search"), body, &res, false); err != nil {
 		if ctx.Err() == nil {
 			log.Printf("memfast: #%d ask: %v (%.1fms)", id, err, ms(time.Since(start)))
