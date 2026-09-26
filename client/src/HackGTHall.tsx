@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { useThree } from '@react-three/fiber'
 import { Architecture } from './hall/Architecture'
 import { detailEverything } from './hall/detail'
+import { batchStatic, snapshot } from './hall/batch'
 import { Atmosphere } from './hall/Atmosphere'
 import { Decor } from './hall/Decor'
 import { WestWall } from './hall/WestWall'
@@ -29,11 +30,18 @@ export function HackGTHall({ active }: { active: boolean }) {
       gl.compile(scene, camera)
       root.current.visible = was
     }
+    // Then fold everything that stayed put into a few big batches (far fewer draw calls).
+    let snap: ReturnType<typeof snapshot> | null = null
     const a = setTimeout(prep, 500)
     const b = setTimeout(prep, 2500) // pick up late-loading textures/props
+    const c = setTimeout(() => root.current && (snap = snapshot(root.current)), 3000)
+    const d = setTimeout(() => {
+      if (!root.current || !snap || location.search.includes('nobatch')) return
+      const r = batchStatic(root.current, snap)
+      console.info(`[hall] batched ${r.folded} static meshes into ${r.batches} draws`)
+    }, 3800)
     return () => {
-      clearTimeout(a)
-      clearTimeout(b)
+      ;[a, b, c, d].forEach(clearTimeout)
     }
   }, [gl, scene, camera])
   return (
