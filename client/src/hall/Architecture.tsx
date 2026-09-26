@@ -1,8 +1,7 @@
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { MeshReflectorMaterial } from '@react-three/drei'
-import { dataMap, detailMap } from '../realTextures'
+import { addTerrazzo } from './detail'
 import { BALCONY, CEIL, COLUMNS, CX, CXB, SAG, SLANT, WEST_ZS, XB, ceilY, eastX, wallZ, westX, DOORS_Z, HALL, L1, MEZZ_WEST_Z, MEZZ_X0, MEZZ_Z, STAIR, X0, X1, Z0, Z1 } from './layout'
 import { Entrance } from './Entrance'
 import { ceilingTiles, checkerWall, glassPanes, terrazzo } from './textures'
@@ -77,34 +76,11 @@ const BRONZE = '#6f655b'
 const HANDRAIL = '#b07a45'
 
 function Floor() {
-  // Polished terrazzo that actually reflects: our big colour rectangles as the base,
-  // Poly Haven's gravel-in-concrete photo for real relief, roughness and speckle
-  // (tiled every 1.4 m), and a blurred live mirror of the room on top.
   const map = useMemo(terrazzo, [])
-  const rx = (XB - X0) / 1.4
-  const ry = HALL.d / 1.4
-  const nor = useMemo(() => dataMap('gravel_embedded_concrete_nor_gl_1k', rx, ry), [rx, ry])
-  const speck = useMemo(() => detailMap('gravel_embedded_concrete_diff_1k', rx, ry, 0.5, 0.9), [rx, ry])
   return (
     <mesh rotation-x={-Math.PI / 2} position={[CXB, 0, 0]} receiveShadow>
       <planeGeometry args={[XB - X0, HALL.d]} />
-      <MeshReflectorMaterial
-        userData={{ detail: true, terrazzo: true }}
-        map={map}
-        aoMap={speck}
-        aoMapIntensity={1}
-        normalMap={nor}
-        normalScale={[0.25, 0.25]}
-        roughness={0.35}
-        metalness={0}
-        resolution={512}
-        blur={[500, 200]}
-        mixBlur={0.9}
-        mixStrength={0.55}
-        mixContrast={1}
-        mirror={0.3}
-        depthScale={0}
-      />
+      <meshStandardMaterial map={map} roughness={0.22} metalness={0} onUpdate={addTerrazzo} />
     </mesh>
   )
 }

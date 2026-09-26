@@ -1,4 +1,3 @@
 Textures and HDRI from Poly Haven (https://polyhaven.com), CC0 public domain:
-- gravel_embedded_concrete (Klaus floor relief + speckle)
 - leafy_grass, asphalt_02, brick_pavement_02 (campus ground detail)
 - entrance_hall HDRI (indoor reflections and fill light)
