@@ -125,15 +125,19 @@ export function Player({
     cam.updateProjectionMatrix()
   }, [view, camera])
 
-  // Skip the cinematic with any key or click.
+  // Skip the cinematic deliberately (Esc / Space / Enter or a click), never by a held
+  // movement key or the E you pressed to walk in, and not in its first half second.
   useEffect(() => {
     const skip = () => {
-      if (intro.current >= 0) intro.current = 1
+      if (intro.current > 0.1) intro.current = 1
     }
-    window.addEventListener('keydown', skip)
+    const key = (e: KeyboardEvent) => {
+      if (!e.repeat && (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter')) skip()
+    }
+    window.addEventListener('keydown', key)
     window.addEventListener('pointerdown', skip)
     return () => {
-      window.removeEventListener('keydown', skip)
+      window.removeEventListener('keydown', key)
       window.removeEventListener('pointerdown', skip)
     }
   }, [])
@@ -333,8 +337,8 @@ export function Player({
       puff.current.scale.setScalar((0.4 + k * 1.6) * ps)
       ;(puff.current.material as THREE.MeshBasicMaterial).opacity = 0.55 * (1 - k)
     } else puff.current.visible = false
-    // sprint camera: widen the view a little when running
-    {
+    // sprint camera: widen the view a little when running (the cinematic sets its own lens)
+    if (intro.current < 0) {
       const cam = camera as THREE.PerspectiveCamera
       const base = view.mode === 'inside' ? 60 : 40
       const running = moving && (keys.has('ShiftLeft') || keys.has('ShiftRight') || hop.current > 0)
@@ -359,6 +363,12 @@ export function Player({
       camera.position.copy(pos.getPoint(prm))
       introLook.current.lerp(look.getPoint(prm), 1 - Math.exp(-dt * 5))
       camera.lookAt(introLook.current)
+      // a slow lens push-in over the flight, and a gentle bank through the climb
+      const cam = camera as THREE.PerspectiveCamera
+      const e = intro.current * intro.current * (3 - 2 * intro.current)
+      cam.fov = 66 - 12 * e
+      cam.updateProjectionMatrix()
+      camera.rotateZ(Math.sin(Math.PI * u) * 0.07)
       if (intro.current >= 1) {
         intro.current = -1
         snap.current = true // hard cut to the player camera
@@ -396,26 +406,30 @@ export function Player({
     // Keep the shadow-casting sun centered on the player.
     // Morning: the sun is low in the east, so it rakes in through Klaus's east windows.
     const indoor = view.mode === 'inside'
+    const half = indoor ? 34 : 90
+    // snap the shadow frustum to whole shadow-map texels so shadows don't shimmer
+    const texel = (half * 2) / light.current.shadow.mapSize.x
+    const sx = Math.round(p.x / texel) * texel
+    const sz = Math.round(p.y / texel) * texel
     if (indoor) {
       // Indoors: a higher sun with a tight, sharp shadow map around the player so
       // tables, chairs, people and railings all throw crisp shadows on the terrazzo.
-      light.current.position.set(p.x + 34, 52, p.y + 14)
+      light.current.position.set(sx + 34, 52, sz + 14)
       light.current.intensity = 1.9
     } else {
-      light.current.position.set(p.x + 110, 55, p.y + 25)
+      light.current.position.set(sx + 110, 55, sz + 25)
       light.current.intensity = 2
     }
-    light.current.target.position.set(p.x, 0, p.y)
+    light.current.target.position.set(sx, 0, sz)
     const sc = light.current.shadow.camera
-    const half = indoor ? 34 : 90
     if (sc.right !== half) {
       sc.left = sc.bottom = -half
       sc.right = sc.top = half
       sc.far = indoor ? 160 : 400
       sc.updateProjectionMatrix()
-      light.current.shadow.bias = indoor ? -0.0002 : -0.0004
-      light.current.shadow.normalBias = indoor ? 0.03 : 0
     }
+    light.current.shadow.bias = indoor ? -0.0002 : -0.0006
+    light.current.shadow.normalBias = indoor ? 0.03 : 0.08
 
     sendAcc.current += dt
     if (sendAcc.current >= 1 / SEND_HZ) {

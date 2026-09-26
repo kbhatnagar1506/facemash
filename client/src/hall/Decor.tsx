@@ -386,10 +386,21 @@ function PhotoBooth() {
 
 function ExitShell({ active }: { active: boolean }) {
   const g = useRef<THREE.Group>(null!)
-  useFrame(({ clock }) => {
-    g.current.position.y = 1.6 + Math.sin(clock.elapsedTime * 2) * 0.15
-  })
+  const tag = useRef<HTMLDivElement>(null!)
   const [x, z] = HALL_EXIT
+  useFrame(({ clock, camera }) => {
+    g.current.position.y = 1.6 + Math.sin(clock.elapsedTime * 2) * 0.15
+    // the camera often sits right over the exit at the spawn: hide the tag when it's
+    // too close (it would fill the screen) or behind the camera
+    if (tag.current) {
+      const dx = x - camera.position.x
+      const dz = z - camera.position.z
+      const dir = new THREE.Vector3()
+      camera.getWorldDirection(dir)
+      const show = Math.hypot(dx, dz) > 4.5 && dx * dir.x + dz * dir.z > 0
+      tag.current.style.opacity = show ? '1' : '0'
+    }
+  })
   return (
     <group position={[x, 0, z]}>
       <mesh rotation-x={-Math.PI / 2} position={[0, 0.03, 0]}>
@@ -398,7 +409,7 @@ function ExitShell({ active }: { active: boolean }) {
       </mesh>
       <group ref={g}>
         <Html center distanceFactor={10} zIndexRange={[15, 0]} style={{ display: active ? undefined : 'none' }}>
-          <div className="shell-tag">🐚 Back to campus</div>
+          <div ref={tag} className="shell-tag" style={{ transition: 'opacity .25s' }}>🐚 Back to campus</div>
         </Html>
       </group>
     </group>

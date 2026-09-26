@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import { Billboard, Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-import type { Campus, Pt } from './map'
+import { Collider, type Campus, type Pt } from './map'
 import { withCutaway } from './cutaway'
 import { asphaltTexture, detailTexture, grassTexture, paverTexture, worldUV } from './campusTextures'
 
@@ -157,15 +157,75 @@ function Ground({ campus }: { campus: Campus }) {
   )
 }
 
+/**
+ * Street trees: the OSM trees plus a row along the footpaths every ~16 m (alternating
+ * sides), kept clear of buildings, roads, paths and the HackGT entrance shells.
+ */
+function useTreePoints(campus: Campus) {
+  return useMemo(() => {
+    const pts: [number, number][] = campus.trees.map(([x, z]) => [x, z])
+    const coll = new Collider(campus)
+    // coarse grid of road/path samples for "too close to a road" checks
+    const CELL = 8
+    const grid = new Map<string, [number, number, number][]>()
+    for (const r of campus.roads)
+      for (let i = 1; i < r.pts.length; i++) {
+        const [ax, az] = r.pts[i - 1]
+        const [bx, bz] = r.pts[i]
+        const L = Math.hypot(bx - ax, bz - az)
+        for (let t = 0; t <= L; t += 2) {
+          const x = ax + ((bx - ax) * t) / L
+          const z = az + ((bz - az) * t) / L
+          const k = `${Math.floor(x / CELL)},${Math.floor(z / CELL)}`
+          const list = grid.get(k) ?? []
+          list.push([x, z, r.w / 2])
+          grid.set(k, list)
+        }
+      }
+    const clearOfRoads = (x: number, z: number, pad: number) => {
+      const gx = Math.floor(x / CELL)
+      const gz = Math.floor(z / CELL)
+      for (let i = -1; i <= 1; i++)
+        for (let j = -1; j <= 1; j++)
+          for (const [rx, rz, hw] of grid.get(`${gx + i},${gz + j}`) ?? []) if (Math.hypot(x - rx, z - rz) < hw + pad) return false
+      return true
+    }
+    const shells = campus.event?.entrances ?? []
+    const taken = (x: number, z: number) => pts.some(([px, pz]) => Math.abs(px - x) < 6 && Math.abs(pz - z) < 6)
+    for (const r of campus.roads) {
+      if (!r.foot) continue
+      let side = 1
+      for (let i = 1; i < r.pts.length; i++) {
+        const [ax, az] = r.pts[i - 1]
+        const [bx, bz] = r.pts[i]
+        const L = Math.hypot(bx - ax, bz - az)
+        const nx = -(bz - az) / L
+        const nz = (bx - ax) / L
+        for (let t = 8; t < L; t += 16) {
+          const off = r.w / 2 + 2.6
+          const x = ax + ((bx - ax) * t) / L + nx * off * side
+          const z = az + ((bz - az) * t) / L + nz * off * side
+          side = -side
+          if (coll.blocked(x, z, 2.5) || !clearOfRoads(x, z, 1.8)) continue
+          if (shells.some(([sx, sz]) => Math.hypot(x - sx, z - sz) < 9) || taken(x, z)) continue
+          pts.push([x, z])
+        }
+      }
+    }
+    return pts
+  }, [campus])
+}
+
 function Trees({ campus }: { campus: Campus }) {
   const ramp = useToonRamp()
-  const n = campus.trees.length
+  const trees = useTreePoints(campus)
+  const n = trees.length
 
   const place = (mesh: THREE.InstancedMesh | null, top: boolean) => {
     if (!mesh) return
     const m = new THREE.Matrix4()
     const c = new THREE.Color()
-    campus.trees.forEach(([x, z], i) => {
+    trees.forEach(([x, z], i) => {
       // Deterministic per-tree size/tint from its position.
       const k = Math.abs(Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1
       const s = 0.8 + k * 0.6

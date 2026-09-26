@@ -49,11 +49,15 @@ function qr(g: CanvasRenderingContext2D, x: number, y: number, s: number, seed =
 
 /** A tablecloth front: base colour + whatever is printed on it. 512 px per metre-ish. */
 function print(bg: string, draw?: (g: CanvasRenderingContext2D, w: number, h: number) => void, w = 1024, h = 400) {
-  return paint(w, h, (g) => {
+  // drawn at 1.5× so logos and small print stay crisp on the cloth
+  const t = paint(w * 1.5, h * 1.5, (g) => {
+    g.scale(1.5, 1.5)
     g.fillStyle = bg
     g.fillRect(0, 0, w, h)
     draw?.(g, w, h)
   })
+  t.anisotropy = 16
+  return t
 }
 
 /* ------------------------------------------------------------ drape geometry */
@@ -89,7 +93,7 @@ export const DRAPED_H = 0.95
 export function Cloth({ w, d, color, front, h = DRAPED_H, seed = 1, loose = 1 }: { w: number; d: number; color: string; front?: THREE.Texture; h?: number; seed?: number; loose?: number }) {
   const geos = useMemo(
     () => ({
-      front: drape(w, h, seed, loose),
+      front: drape(w, h, seed, loose * 0.45), // shallower folds up front so the print reads
       back: drape(w, h, seed + 3, loose * 0.7),
       side: drape(d, h, seed + 7, loose * 0.8),
     }),
@@ -102,7 +106,8 @@ export function Cloth({ w, d, color, front, h = DRAPED_H, seed = 1, loose = 1 }:
         <meshLambertMaterial color={color} />
       </mesh>
       <mesh geometry={geos.front} position={[0, h / 2, d / 2]} castShadow receiveShadow>
-        <meshLambertMaterial color={front ? '#ffffff' : color} map={front} side={THREE.DoubleSide} />
+        {/* the print glows a little so logos pop out of the folds and shadow */}
+        <meshLambertMaterial color={front ? '#ffffff' : color} map={front} emissiveMap={front ?? null} emissive={front ? '#ffffff' : '#000000'} emissiveIntensity={0.28} side={THREE.DoubleSide} />
       </mesh>
       <mesh geometry={geos.back} position={[0, h / 2, -d / 2]} rotation-y={Math.PI}>
         <meshLambertMaterial color={color} side={THREE.DoubleSide} />

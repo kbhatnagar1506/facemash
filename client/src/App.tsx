@@ -321,7 +321,7 @@ function Cinematic() {
         <strong>HackGT 13</strong>
         <span>Klaus Advanced Computing Building · Seaside Market</span>
       </div>
-      <div className="cine-skip">Press any key to skip</div>
+      <div className="cine-skip">Esc or click to skip</div>
     </div>
   )
 }
