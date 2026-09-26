@@ -4,7 +4,7 @@ import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import { BeanBody } from './Bean'
 import type { AvatarState } from './Avatar'
-import { ACCENT_COLORS, BODY_COLORS, EYES, HATS, ITEMS, PATTERNS, defaultLook, loadLook, randomLook, saveLook, type Look } from './look'
+import { ACCENT_COLORS, BODY_COLORS, EYES, HATS, ITEMS, PATTERNS, SPONSOR_BEANS, defaultLook, loadLook, randomLook, saveLook, type Look } from './look'
 
 // /avatar: build your jellybean. A turntable preview you can spin, and big friendly
 // pickers for colour, pattern, face and hat. "Save & play" stores it and drops you
@@ -107,6 +107,7 @@ function Gallery() {
     { label: 'hats', looks: HATS.map((h, i) => ({ ...base, body: BODY_COLORS[i % BODY_COLORS.length], hat: h, item: 'none' })) },
     { label: 'items', looks: ITEMS.map((it, i) => ({ ...base, body: BODY_COLORS[(i + 3) % BODY_COLORS.length], item: it })) },
     { label: 'faces', looks: EYES.map((e, i) => ({ ...base, body: BODY_COLORS[(i + 6) % BODY_COLORS.length], eyes: e, item: 'none' })) },
+    { label: 'sponsors', looks: SPONSOR_BEANS.map((sb) => sb.look) },
     { label: 'patterns', looks: PATTERNS.map((p, i) => ({ ...base, body: BODY_COLORS[(i + 1) % BODY_COLORS.length], accent: ACCENT_COLORS[(i + 1) % ACCENT_COLORS.length], pattern: p, item: 'none' })) },
   ]
   const only = new URLSearchParams(location.search).get('row')
@@ -191,6 +192,22 @@ export function AvatarStudio() {
           Name
           <input value={name} maxLength={16} placeholder="Bean" onChange={(e) => setName(e.target.value)} />
         </label>
+
+        <section>
+          <h3>Sponsor beans</h3>
+          <div className="studio-chips">
+            {SPONSOR_BEANS.map((sb) => (
+              <button
+                key={sb.id}
+                className={look.logo === sb.id ? 'chip on' : 'chip'}
+                style={{ borderColor: 'var(--ink)', background: look.logo === sb.id ? '#ffd23f' : sb.look.body, color: look.logo === sb.id ? 'var(--ink)' : '#fff' }}
+                onClick={() => setLook({ ...sb.look })}
+              >
+                {sb.name}
+              </button>
+            ))}
+          </div>
+        </section>
 
         <section>
           <h3>Body</h3>

@@ -8,6 +8,7 @@ import { Atmosphere } from './hall/Atmosphere'
 import { Decor } from './hall/Decor'
 import { WestWall } from './hall/WestWall'
 import { EastGlass } from './hall/EastGlass'
+import { SponsorBeans } from './hall/SponsorBeans'
 
 // The HackGT hall is its own multiplayer room: the Klaus atrium, rebuilt from
 // on-site photos. It is drawn instead of the campus, centred on the origin.
@@ -51,6 +52,7 @@ export function HackGTHall({ active }: { active: boolean }) {
       <Decor active={active} />
       <WestWall />
       <EastGlass />
+      {active && <SponsorBeans />}
     </group>
   )
 }

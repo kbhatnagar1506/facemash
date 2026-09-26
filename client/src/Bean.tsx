@@ -1,7 +1,7 @@
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import type { Look, Pattern } from './look'
+import type { Logo, Look, Pattern } from './look'
 import type { AvatarState } from './Avatar'
 
 // A cute jellybean (Fall Guys–style): a soft capsule body with a white face visor
@@ -9,24 +9,101 @@ import type { AvatarState } from './Avatar'
 // it walks, breathes when idle, waves and sits. About 2.4 units tall with a hat.
 
 const patternCache = new Map<string, THREE.Texture>()
-function patternTexture(body: string, accent: string, pattern: Pattern) {
-  const key = `${body}|${accent}|${pattern}`
+/** A sponsor logo printed on the belly (front of the bean = both edges of the texture). */
+function drawLogo(g: CanvasRenderingContext2D, S: number, logo: Logo, accent: string) {
+  const y = S * 0.7
+  // the texture wraps ~1.5× wider than tall: squash horizontally so the logo lands in proportion
+  const at = (x: number, draw: () => void) => {
+    g.save()
+    g.translate(x, y)
+    g.scale(0.66, 1)
+    draw()
+    g.restore()
+  }
+  const badge = (text: string, fg: string, bg: string, size: number, font = 'Arial Black, Arial') => () => {
+    g.font = `900 ${size}px ${font}`
+    const w = g.measureText(text).width + size * 0.8
+    g.fillStyle = bg
+    g.beginPath()
+    g.roundRect(-w / 2, -size * 0.72, w, size * 1.44, size * 0.4)
+    g.fill()
+    g.fillStyle = fg
+    g.textAlign = 'center'
+    g.textBaseline = 'middle'
+    g.fillText(text, 0, size * 0.04)
+  }
+  const draws: Record<Exclude<Logo, 'none'>, () => void> = {
+    hackgt: badge('HackGT', '#1b3b6f', '#ffd23f', 34),
+    mlh: () => {
+      g.fillStyle = '#ffffff'
+      g.beginPath()
+      g.roundRect(-72, -32, 144, 64, 16)
+      g.fill()
+      g.font = '900 44px Arial Black, Arial'
+      g.textAlign = 'center'
+      g.textBaseline = 'middle'
+      ;['M', 'L', 'H'].forEach((ch, i) => {
+        g.fillStyle = ['#e73427', '#f5a800', '#1d539f'][i]
+        g.fillText(ch, (i - 1) * 40, 2)
+      })
+    },
+    visa: badge('VISA', '#1a1f71', '#ffffff', 40, 'Arial Black, Arial'),
+    tmobile: badge('T', '#e20074', '#ffffff', 60),
+    citadel: badge('CITADEL', '#ffffff', '#0f2f66', 26),
+    aramco: badge('aramco', '#ffffff', '#00843d', 32, 'Arial'),
+    notability: badge('n', '#ffffff', '#1d1d20', 58, 'Arial Black, Arial'),
+    nsa: badge('NSA', '#18264a', '#c9a14a', 40),
+    meta: () => {
+      g.strokeStyle = '#ffffff'
+      g.lineWidth = 14
+      g.lineCap = 'round'
+      g.beginPath()
+      for (let i = 0; i <= 64; i++) {
+        const t = (i / 64) * Math.PI * 2
+        const d = 1 + Math.sin(t) ** 2
+        const px = (46 * Math.cos(t)) / d
+        const py = (46 * Math.sin(t) * Math.cos(t)) / d
+        if (i) g.lineTo(px, py)
+        else g.moveTo(px, py)
+      }
+      g.stroke()
+    },
+    impiricus: badge('IMPIRICUS', '#ffffff', accent, 22),
+    spacex: () => {
+      g.fillStyle = '#111114'
+      g.font = '900 34px Arial Black, Arial'
+      g.textAlign = 'center'
+      g.textBaseline = 'middle'
+      g.fillText('SPACEX', 0, 0)
+    },
+  }
+  const d = draws[logo as Exclude<Logo, 'none'>]
+  if (!d) return
+  at(0, d)
+  at(S, d) // wrap: half on each edge meets at the front seam
+}
+
+function patternTexture(body: string, accent: string, pattern: Pattern, logo: Logo = 'none') {
+  const key = `${body}|${accent}|${pattern}|${logo}`
   const hit = patternCache.get(key)
   if (hit) return hit
-  const S = 256
+  const hasLogo = logo !== 'none'
+  const S = hasLogo ? 512 : 256
   const c = document.createElement('canvas')
   c.width = c.height = S
   const g = c.getContext('2d')!
+  if (hasLogo) g.scale(2, 2) // patterns are drawn in 256-space
+  const P = 256
   g.fillStyle = body
-  g.fillRect(0, 0, S, S)
+  g.fillRect(0, 0, P, P)
   g.fillStyle = accent
   // canvas top = top of the bean, bottom = its feet
-  if (pattern === 'split') g.fillRect(0, S * 0.6, S, S * 0.4)
-  else if (pattern === 'stripes') for (let y = S * 0.42; y < S; y += 34) g.fillRect(0, y, S, 15)
+  if (pattern === 'split') g.fillRect(0, P * 0.6, P, P * 0.4)
+  else if (pattern === 'stripes') for (let y = P * 0.42; y < P; y += 34) g.fillRect(0, y, P, 15)
   else if (pattern === 'dots')
-    for (let y = 18; y < S; y += 36)
-      for (let x = (y / 36) % 2 ? 18 : 0; x < S + 20; x += 36) {
-        if (y < S * 0.46 && (x < S * 0.2 || x > S * 0.8)) continue // keep the face clear
+    for (let y = 18; y < P; y += 36)
+      for (let x = (y / 36) % 2 ? 18 : 0; x < P + 20; x += 36) {
+        if (y < P * 0.46 && (x < P * 0.2 || x > P * 0.8)) continue // keep the face clear
         // the texture wraps ~1.5× wider than it is tall, so squash to land round
         g.beginPath()
         g.ellipse(x, y, 7, 10.5, 0, 0, Math.PI * 2)
@@ -34,9 +111,9 @@ function patternTexture(body: string, accent: string, pattern: Pattern) {
       }
   else if (pattern === 'zigzag') {
     g.beginPath()
-    g.moveTo(0, S)
-    for (let x = 0; x <= S; x += 16) g.lineTo(x, (x / 16) % 2 ? S * 0.6 : S * 0.7)
-    g.lineTo(S, S)
+    g.moveTo(0, P)
+    for (let x = 0; x <= P; x += 16) g.lineTo(x, (x / 16) % 2 ? P * 0.6 : P * 0.7)
+    g.lineTo(P, P)
     g.fill()
   } else if (pattern === 'hearts') {
     const heart = (x: number, y: number, r: number) => {
@@ -46,14 +123,18 @@ function patternTexture(body: string, accent: string, pattern: Pattern) {
       g.bezierCurveTo(x + r * 0.6, y - r * 1.2, x + r * 1.4, y - r * 0.2, x, y + r * 0.9)
       g.fill()
     }
-    for (let y = S * 0.55; y < S; y += 40)
-      for (let x = ((y / 40) % 2) * 20; x < S + 20; x += 40) {
+    for (let y = P * 0.55; y < P; y += 40)
+      for (let x = ((y / 40) % 2) * 20; x < P + 20; x += 40) {
         g.save()
         g.translate(x, y)
         g.scale(0.66, 1) // pre-squash: the wrap stretches it back to a proper heart
         heart(0, 0, 12)
         g.restore()
       }
+  }
+  if (hasLogo) {
+    g.setTransform(1, 0, 0, 1, 0, 0)
+    drawLogo(g, S, logo, accent)
   }
   const t = new THREE.CanvasTexture(c)
   t.colorSpace = THREE.SRGBColorSpace
@@ -552,7 +633,7 @@ export function BeanBody({ look, state, shadows = true }: { look: Look; state: R
   const cheerFace = useRef<THREE.Group>(null!)
   const phase = useRef(0)
   const holdsLaptop = look.item === 'laptop'
-  const map = useMemo(() => patternTexture(look.body, look.accent, look.pattern), [look.body, look.accent, look.pattern])
+  const map = useMemo(() => patternTexture(look.body, look.accent, look.pattern, look.logo ?? 'none'), [look.body, look.accent, look.pattern, look.logo])
 
   useFrame(({ clock }, dt) => {
     const { moving, sit, wave } = state.current
