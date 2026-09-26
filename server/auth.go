@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -294,6 +295,11 @@ type accounts struct {
 	jev    *jevLook    // outfits picked from agent memory (jevlook.go); nil when off
 	talk   *agentTalk  // agents talking when attendees meet (agenttalk.go); nil when off
 	voice  *voiceGuide // voice onboarding (voice.go); nil when off
+
+	dbDown    atomic.Bool // the database isn't reachable yet (accounts.go: connect, gate)
+	ready     chan struct{}
+	readyOnce sync.Once
+	saves     saver // the game's queued profile and position writes
 }
 
 // mountAuth adds /api/me, /api/auth/google and /api/auth/logout. With no client IDs

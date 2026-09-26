@@ -1002,7 +1002,7 @@ func purgeFixture(t *testing.T, s interface {
 	mk("otherevent", "bot1@facemash.test") // bot1 in a second tenant too
 	mk("otherevent", "real@gatech.edu")
 	for _, id := range []int64{real, bot1, lookalike1} {
-		if err := s.SaveMemory(ctx, "hackgt13", id, []byte(`{"user_md":"hi"}`), nil); err != nil {
+		if _, err := s.SaveMemory(ctx, "hackgt13", id, []byte(`{"user_md":"hi"}`), nil); err != nil {
 			t.Fatal(err)
 		}
 		if err := s.CreateToken(ctx, "hackgt13", id, museLabel, hashToken(fmt.Sprintf("tok-%d", id))); err != nil {

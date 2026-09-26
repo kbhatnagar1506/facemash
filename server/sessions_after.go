@@ -36,8 +36,14 @@ func newRevocations(s Store) *revocations {
 	r := &revocations{after: map[int64]time.Time{}}
 	if rs, ok := s.(revokeStore); ok {
 		r.store = rs
-		r.refresh()
+		_, pg := s.(*pgStore) // Postgres may still be coming up (accounts.connect): load in the background
+		if !pg {
+			r.refresh()
+		}
 		go func() {
+			if pg {
+				r.refresh()
+			}
 			for range time.Tick(revokeRefresh) {
 				r.refresh()
 			}

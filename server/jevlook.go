@@ -102,7 +102,13 @@ type jevLook struct {
 
 	mu   sync.Mutex
 	byID map[string]suggestedLook // "<tenant>/<id>"; also persisted when the store is Postgres
-	pg   *pgStore
+	pg   *pgStore                 // set once, before the routes that use it open (accounts.connect)
+
+	// "delete my memory" vs a suggestion still being made from it: forget records when, and
+	// put drops anything that was started before that. writeMu makes each check-and-write
+	// (and each forget) one step, database row included.
+	writeMu sync.Mutex
+	forgot  map[string]time.Time
 }
 
 // openJev: on when JEV_API_KEY (or JEV_API_KEY_FILE) is set; nil (off) otherwise.
@@ -117,21 +123,21 @@ func openJev(acc *accounts) *jevLook {
 		return nil
 	}
 	j := &jevLook{key: key, http: &http.Client{Timeout: jevTimeout}, sem: make(chan struct{}, 2), byID: map[string]suggestedLook{}}
-	if pg, ok := acc.store.(*pgStore); ok {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if _, err := pg.pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS look_suggestions (
-			tenant_id text NOT NULL, user_id bigint NOT NULL, look text NOT NULL, why jsonb NOT NULL,
-			memory_hash text NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
-			PRIMARY KEY (tenant_id, user_id),
-			FOREIGN KEY (tenant_id, user_id) REFERENCES memberships(tenant_id, user_id) ON DELETE CASCADE)`); err != nil {
-			log.Printf("jev: suggestions table: %v (kept in memory only)", err)
-		} else {
-			j.pg = pg
-		}
-	}
 	log.Printf("jev: on (%s), outfits picked from agent memory", jevModel)
 	return j
+}
+
+// usePostgres keeps suggestions in the database too (called once it's up, accounts.connect).
+func (j *jevLook) usePostgres(ctx context.Context, pg *pgStore) error {
+	if _, err := pg.pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS look_suggestions (
+		tenant_id text NOT NULL, user_id bigint NOT NULL, look text NOT NULL, why jsonb NOT NULL,
+		memory_hash text NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
+		PRIMARY KEY (tenant_id, user_id),
+		FOREIGN KEY (tenant_id, user_id) REFERENCES memberships(tenant_id, user_id) ON DELETE CASCADE)`); err != nil {
+		return err
+	}
+	j.pg = pg
+	return nil
 }
 
 // jevState: the parts of an upload that say who someone is, most telling first, trimmed.
@@ -184,13 +190,16 @@ func (j *jevLook) suggest(tenant string, id int64, obj map[string]any) {
 	}
 	sum := sha256.Sum256([]byte(state))
 	hash := hex.EncodeToString(sum[:])
-	if cur, ok := j.get(context.Background(), tenant, id); ok && cur.hash == hash {
+	started := time.Now()
+	gctx, gcancel := context.WithTimeout(context.Background(), 3*time.Second)
+	cur, ok := j.get(gctx, tenant, id)
+	gcancel()
+	if ok && cur.hash == hash {
 		return
 	}
 	go func() {
 		j.sem <- struct{}{}
 		defer func() { <-j.sem }()
-		start := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), jevTimeout)
 		defer cancel()
 		look, why, err := j.decide(ctx, state)
@@ -198,8 +207,11 @@ func (j *jevLook) suggest(tenant string, id int64, obj map[string]any) {
 			log.Printf("jev: #%d outfit: %v", id, err)
 			return
 		}
-		j.put(ctx, tenant, id, suggestedLook{Look: look, Why: why, At: time.Now().UTC(), hash: hash})
-		log.Printf("jev: #%d outfit picked in %.0fms", id, float64(time.Since(start).Milliseconds()))
+		if !j.put(ctx, tenant, id, suggestedLook{Look: look, Why: why, At: time.Now().UTC(), hash: hash}, started) {
+			log.Printf("jev: #%d outfit dropped: they deleted their memory meanwhile", id)
+			return
+		}
+		log.Printf("jev: #%d outfit picked in %.0fms", id, float64(time.Since(started).Milliseconds()))
 	}()
 }
 
@@ -251,7 +263,14 @@ func jevToLook(ans map[string]lookPick) (string, error) {
 	return fmt.Sprintf("b=%s;a=%s;p=%s;e=%s;h=%s;i=%s", val["b"], val["a"], val["p"], val["e"], val["h"], val["i"]), nil
 }
 
-func (j *jevLook) put(ctx context.Context, tenant string, id int64, s suggestedLook) {
+// put keeps a suggestion made from memory read at `from`; false (and nothing kept) when the
+// person deleted their memory since then.
+func (j *jevLook) put(ctx context.Context, tenant string, id int64, s suggestedLook, from time.Time) bool {
+	j.writeMu.Lock()
+	defer j.writeMu.Unlock()
+	if f, ok := j.forgot[memKey(tenant, id)]; ok && !from.After(f) {
+		return false
+	}
 	j.mu.Lock()
 	j.byID[memKey(tenant, id)] = s
 	j.mu.Unlock()
@@ -264,6 +283,7 @@ func (j *jevLook) put(ctx context.Context, tenant string, id int64, s suggestedL
 			log.Printf("jev: saving #%d: %v", id, err)
 		}
 	}
+	return true
 }
 
 func (j *jevLook) get(ctx context.Context, tenant string, id int64) (suggestedLook, bool) {
@@ -291,6 +311,20 @@ func (j *jevLook) forget(ctx context.Context, tenant string, id int64) {
 	if j == nil {
 		return
 	}
+	j.writeMu.Lock()
+	defer j.writeMu.Unlock()
+	now := time.Now()
+	if j.forgot == nil || len(j.forgot) > 10_000 {
+		// only suggestions still being made matter, and those are at most jevTimeout old
+		old := j.forgot
+		j.forgot = map[string]time.Time{}
+		for k, t := range old {
+			if now.Sub(t) < 2*jevTimeout {
+				j.forgot[k] = t
+			}
+		}
+	}
+	j.forgot[memKey(tenant, id)] = now
 	j.mu.Lock()
 	delete(j.byID, memKey(tenant, id))
 	j.mu.Unlock()
@@ -314,7 +348,9 @@ func mountJev(mux *http.ServeMux, acc *accounts, j *jevLook) {
 			json.NewEncoder(w).Encode(map[string]any{"look": nil})
 			return
 		}
-		s, ok := j.get(r.Context(), acc.tenant, id)
+		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+		defer cancel()
+		s, ok := j.get(ctx, acc.tenant, id)
 		if !ok {
 			json.NewEncoder(w).Encode(map[string]any{"look": nil})
 			return
