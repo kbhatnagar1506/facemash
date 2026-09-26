@@ -293,3 +293,16 @@ kbd {
 @keyframes perm-up { from { opacity: 0; transform: translateY(40px); } }
 @media (prefers-reduced-motion: reduce) { .perm-backdrop, .perm-card { animation-duration: 0.01s; } }
 .studio-dressed { font: 800 12px var(--round); font-style: normal; color: var(--ink); background: #fff; border: 2px solid var(--ink); border-radius: 999px; padding: 3px 10px; justify-self: start; margin-top: 4px; }
+
+/* agent talk switch (talk/TalkLayer.tsx) */
+.talk-switch {
+  display: flex; align-items: center; gap: 9px; max-width: min(300px, calc(100vw - 24px)); text-align: left;
+  font: 800 13px/1.2 var(--round); padding: 6px 12px 6px 7px; border-radius: 999px; cursor: pointer;
+  background: var(--paper); border: 3px solid var(--ink); color: var(--ink);
+}
+.talk-switch small { display: block; font-weight: 700; font-size: 11px; color: #1f8a4c; }
+.talk-knob { flex: none; width: 34px; height: 20px; border-radius: 99px; background: #c9ccd4; position: relative; transition: background .2s; }
+.talk-knob::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: transform .2s; }
+.talk-switch.on .talk-knob { background: #2e9b4f; }
+.talk-switch.on .talk-knob::after { transform: translateX(14px); }
+@media (prefers-reduced-motion: reduce) { .talk-knob, .talk-knob::after { transition: none; } }

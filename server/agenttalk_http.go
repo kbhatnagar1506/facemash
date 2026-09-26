@@ -1,6 +1,9 @@
 package main
 
 // Agent talk over HTTP (agenttalk.go has the design):
+//   GET/POST /api/talk/optin          {"on": true|false}: the game's switch ("Let my agent talk
+//                                     to people nearby"), and how many talks you have left
+//                                     today. Same rules as prefs: session cookie + same-origin.
 //   GET/POST /api/talk/prefs          your own switches (opt_in defaults to off). Session
 //                                     cookie + same-origin POST only: an agent's bearer token
 //                                     can't turn this on.
@@ -218,6 +221,17 @@ func (t *agentTalk) view(ctx context.Context, tenant string, uid int64, id strin
 	return out, nil
 }
 
+// nearOpted tells the proximity scan about a switch at once (it also reloads every few s).
+func (t *agentTalk) nearOpted(id int64, p talkPrefs) {
+	if t == nil {
+		return
+	}
+	t.mu.Lock()
+	n := t.near
+	t.mu.Unlock()
+	n.setOpted(id, p.OptIn && !p.Busy)
+}
+
 // prefsChanged: consent for going_through changes what the brief may hold.
 func (t *agentTalk) prefsChanged(tenant string, id int64, old, cur talkPrefs) {
 	if t == nil || old.OkayToShare == cur.OkayToShare {
@@ -317,9 +331,63 @@ func mountTalk(mux *http.ServeMux, acc *accounts, t *agentTalk, originOK func(*h
 				writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "try again in a moment"})
 				return
 			}
+			t.nearOpted(id, p)
 			go t.prefsChanged(acc.tenant, id, old, p)
 		}
 		writeJSON(w, http.StatusOK, p)
+	})
+
+	mux.HandleFunc("/api/talk/optin", func(w http.ResponseWriter, r *http.Request) {
+		if ts == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent talk is not available"})
+			return
+		}
+		if r.Method != http.MethodPost && r.Method != http.MethodGet {
+			w.Header().Set("Allow", "GET, POST")
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "GET or POST"})
+			return
+		}
+		if r.Method == http.MethodPost && !sameSite(r) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "bad origin"})
+			return
+		}
+		id, ok := acc.sess.read(r) // the session cookie only: an agent's token can never switch this on
+		if !ok {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "sign in first"})
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		p, err := ts.talkPrefs(ctx, acc.tenant, id)
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "try again in a moment"})
+			return
+		}
+		if r.Method == http.MethodPost {
+			var in struct {
+				On *bool `json:"on"`
+			}
+			b, _ := io.ReadAll(io.LimitReader(r.Body, 256))
+			if json.Unmarshal(bytes.TrimSpace(b), &in) != nil || in.On == nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "send JSON {\"on\": true|false}"})
+				return
+			}
+			old := p
+			p.OptIn = *in.On
+			if err := ts.talkSavePrefs(ctx, acc.tenant, id, p); err != nil {
+				writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "try again in a moment"})
+				return
+			}
+			t.nearOpted(id, p)
+			go t.prefsChanged(acc.tenant, id, old, p)
+		}
+		out := map[string]any{"on": p.OptIn, "busy": p.Busy, "live": t.on()}
+		if t != nil {
+			if left, lim, err := t.talksLeft(ctx, acc.tenant, id); err == nil && lim > 0 {
+				out["left"], out["limit"] = left, lim
+			}
+		}
+		writeJSON(w, http.StatusOK, out)
 	})
 
 	mux.HandleFunc("/api/talk/encounter", func(w http.ResponseWriter, r *http.Request) {

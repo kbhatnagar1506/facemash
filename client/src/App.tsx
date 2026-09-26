@@ -19,6 +19,7 @@ const HackGTHall = lazy(() => import('./HackGTHall').then((m) => ({ default: m.H
 import { toHall, useLiveLocation, type GeoCfg } from './geo'
 import { Calibrate, LivePill, MotionPill } from './LiveLocation'
 import type { EventInfo } from './HackGTWelcome'
+import { TalkLayer } from './talk/TalkLayer'
 
 const COLORS = ['#e0564f', '#4f7fd6', '#e89a3c', '#5aa56a', '#9b6bd1', '#d9c24a', '#3fa7b3', '#f06ba8']
 
@@ -489,6 +490,7 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
         onLeaveHall={leaveHall}
       />
       <div className="live-ui">
+        {ticket && <TalkLayer net={net} myLook={encodeLook(myLook)} />}
         {room === 'hackgt' && <LivePill
           live={live}
           status={status}

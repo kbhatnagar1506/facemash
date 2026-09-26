@@ -64,6 +64,19 @@ fi
 # jev (TypeSafe) picks outfits from agent memory: JEV_API_KEY in jev.env (root 0600)
 JEVENV=""
 [ -f /mnt/stateful_partition/gt/jev.env ] && JEVENV="--env-file /mnt/stateful_partition/gt/jev.env"
+# Agent talk (two opted-in attendees within 3 m for 3 s: their agents chat, jev judges, names
+# only after both say yes). Needs jev (jev.env above) and Gemini: the key locked to this VM's
+# IP in gemini-game.key (root 0600), mounted read-only and named by GEMINI_API_KEY_FILE, so it
+# is in no container's environment. Optional talk.env for extra knobs (ADMIN_EMAILS for the
+# admin test trigger, TALK_CONFIG_FILE). Without the key file, agent talk is off and the
+# server behaves as before (the opt-in switch still saves).
+TALKENV=""
+TALKKEY=/mnt/stateful_partition/gt/gemini-game.key
+if [ -f "$TALKKEY" ]; then
+  chown root:root "$TALKKEY" 2>/dev/null; chmod 600 "$TALKKEY" 2>/dev/null
+  TALKENV="-e GEMINI_API_KEY_FILE=/secrets/gemini-game.key --mount type=bind,source=$TALKKEY,target=/secrets/gemini-game.key,readonly"
+fi
+[ -f /mnt/stateful_partition/gt/talk.env ] && TALKENV="$TALKENV --env-file /mnt/stateful_partition/gt/talk.env"
 GOOGLE_CLIENT_ID=$(curl -sf -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/attributes/google-client-id || true)
 # --memory: one big upload can't take the VM (Caddy and dockerd keep theirs); GOMEMLIMIT makes
 # the Go GC work harder well before that limit.
@@ -72,7 +85,7 @@ docker run -d --restart=always --name game --network gt $GUARDMOUNT \
   -e DIRECT_URL="https://$HOST" -e ALLOWED_ORIGINS='https://gt-campus-quest*.vercel.app,https://fasemash.tech,https://www.fasemash.tech' \
   -e GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \
   -e DB_INSTANCE='patchguard-reakon:us-central1:facemash-db' -e DB_NAME=facemash \
-  -e DB_IAM_USER='751583582765-compute@developer' $DBENV $MAPIENV $JEVENV \
+  -e DB_IAM_USER='751583582765-compute@developer' $DBENV $MAPIENV $JEVENV $TALKENV \
   -e TENANT=hackgt13 -e TENANT_NAME='HackGT 13' \
   -v /mnt/stateful_partition/gt/geo.json:/app/geo.json:ro \
   -v /mnt/stateful_partition/gt/data:/data \

@@ -87,6 +87,15 @@ type talkConfig struct {
 		MinGapMS       int  `json:"min_gap_ms"`
 		RequireOnline  bool `json:"require_online"`
 	} `json:"limits"`
+	// Proximity: the web trigger (agenttalk_near.go).
+	Proximity struct {
+		RadiusM        float64 `json:"radius_m"`         // within this many metres...
+		DwellMS        int     `json:"dwell_ms"`         // ...for this long starts a talk
+		FloorGapM      float64 `json:"floor_gap_m"`      // more height apart than this: different floors
+		ScanMS         int     `json:"scan_ms"`          // how often positions are checked
+		OptinRefreshMS int     `json:"optin_refresh_ms"` // how often who opted in is reloaded
+		RetryMS        int     `json:"retry_ms"`         // a pair that couldn't start (busy, offline) waits this long
+	} `json:"proximity"`
 	Phase1 talkPhase `json:"phase1"`
 	Phase2 talkPhase `json:"phase2"`
 	Pick   struct {
@@ -188,6 +197,8 @@ func (c *talkConfig) validate() error {
 		return errors.New("prompts.agent, prompts.brief and prompts.icebreaker are required")
 	case len(c.Lines.Close) == 0 || c.Lines.NotInMemory == "":
 		return errors.New("lines.close and lines.not_in_memory are required")
+	case c.Proximity.RadiusM < 0 || c.Proximity.DwellMS < 0 || c.Proximity.FloorGapM < 0 || c.Proximity.ScanMS < 0:
+		return errors.New("proximity values can't be negative")
 	case c.Pick.MaxOptions < 1 || c.Pick.MaxOptions > 255:
 		return errors.New("pick.max_options must be 1..255 (jev's limit)")
 	}

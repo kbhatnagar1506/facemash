@@ -45,7 +45,7 @@ type talkLine struct {
 	Text        string   `json:"text"`
 	Cites       []string `json:"cites,omitempty"`
 	NotInMemory bool     `json:"not_in_memory,omitempty"`
-	Dropped     int      `json:"dropped,omitempty"` // sentences the guard took out
+	Dropped     int      `json:"dropped,omitempty"`      // sentences the guard took out
 	DroppedText []string `json:"dropped_text,omitempty"` // (scrubbed) for retuning the guard; never shown
 	Model       string   `json:"model,omitempty"`
 	AtMS        float64  `json:"at_ms"`              // when it went out, from the start of the talk
@@ -117,6 +117,8 @@ type talkStore interface {
 	talkMemory(ctx context.Context, tenant string, id int64) ([]byte, error)
 	talkPrefs(ctx context.Context, tenant string, id int64) (talkPrefs, error)
 	talkSavePrefs(ctx context.Context, tenant string, id int64, p talkPrefs) error
+	// talkOptedIn: everyone in the tenant with agent talk on and not busy (the proximity scan).
+	talkOptedIn(ctx context.Context, tenant string) ([]int64, error)
 	talkBrief(ctx context.Context, tenant string, id int64) (*talkBrief, error)
 	talkSaveBrief(ctx context.Context, tenant string, id int64, b talkBrief) error
 	talkDeleteBrief(ctx context.Context, tenant string, id int64) error
@@ -202,6 +204,23 @@ func (s *pgStore) talkSavePrefs(ctx context.Context, tenant string, id int64, p 
 		ON CONFLICT (tenant_id, user_id) DO UPDATE SET opt_in = EXCLUDED.opt_in, busy = EXCLUDED.busy,
 		  okay_to_share = EXCLUDED.okay_to_share, updated_at = now()`, tenant, id, p.OptIn, p.Busy, p.OkayToShare)
 	return err
+}
+
+func (s *pgStore) talkOptedIn(ctx context.Context, tenant string) ([]int64, error) {
+	rows, err := s.pool.Query(ctx, `SELECT user_id FROM talk_prefs WHERE tenant_id = $1 AND opt_in AND NOT busy`, tenant)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
 }
 
 func (s *pgStore) talkBrief(ctx context.Context, tenant string, id int64) (*talkBrief, error) {
@@ -332,6 +351,20 @@ func (m *memStore) talkSavePrefs(_ context.Context, tenant string, id int64, p t
 	}
 	m.talkTables().prefs[memKey(tenant, id)] = p
 	return nil
+}
+
+func (m *memStore) talkOptedIn(_ context.Context, tenant string) ([]int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []int64
+	for k, p := range m.talkTables().prefs {
+		if p.OptIn && !p.Busy && len(k) > len(tenant) && k[:len(tenant)+1] == tenant+"/" {
+			var id int64
+			fmt.Sscanf(k[len(tenant)+1:], "%d", &id)
+			out = append(out, id)
+		}
+	}
+	return out, nil
 }
 
 func (m *memStore) talkBrief(_ context.Context, tenant string, id int64) (*talkBrief, error) {

@@ -153,6 +153,7 @@ type agentTalk struct {
 	building map[string]chan struct{} // brief builds in flight
 	sem      chan struct{}
 	briefSem chan struct{}
+	near     *talkNear // the proximity trigger, once watchProximity started it
 }
 
 func (t *agentTalk) on() bool { return t != nil && t.gem != nil && t.jev != nil }
@@ -214,11 +215,17 @@ func talkID() string {
 	return "tk_" + base64.RawURLEncoding.EncodeToString(b)
 }
 
-func talkDayStart(now time.Time) time.Time {
+// talkLoc: the event's time zone, loaded once (LoadLocation reads tzdata from disk).
+var talkLoc = sync.OnceValue(func() *time.Location {
 	loc, err := time.LoadLocation(eventTZ)
 	if err != nil {
-		loc = time.UTC
+		return time.UTC
 	}
+	return loc
+})
+
+func talkDayStart(now time.Time) time.Time {
+	loc := talkLoc()
 	n := now.In(loc)
 	return time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, loc)
 }

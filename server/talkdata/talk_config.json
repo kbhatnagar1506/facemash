@@ -1,5 +1,5 @@
 {
-  "version": "2026-09-26.1",
+  "version": "2026-09-26.2",
   "models": {
     "agent": {"model": "gemini-3.1-flash-lite", "thinking": "minimal"},
     "agent_fallback": {"model": "gemini-3.8-flash", "thinking": "low"},
@@ -20,6 +20,14 @@
     "answer_max_words": 32,
     "min_gap_ms": 250,
     "require_online": true
+  },
+  "proximity": {
+    "radius_m": 3,
+    "dwell_ms": 3000,
+    "floor_gap_m": 2,
+    "scan_ms": 500,
+    "optin_refresh_ms": 5000,
+    "retry_ms": 20000
   },
   "phase1": {
     "questions": 5,
@@ -117,8 +125,8 @@
     "not_in_memory": "My human hasn't told me about that one yet.",
     "ask": "Meet them?",
     "why": {
-      "you_fixed_theirs": "Your human has already solved what they're stuck on.",
-      "they_fixed_yours": "They've already solved what your human is stuck on.",
+      "you_fixed_theirs": "You've already solved what they're stuck on.",
+      "they_fixed_yours": "They've already solved what you're stuck on.",
       "same_problem": "You're both stuck on the same thing right now.",
       "team": "You two could make a strong team.",
       "rare": "You share something rare.",

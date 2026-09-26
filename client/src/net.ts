@@ -27,6 +27,13 @@ export interface ChatLine {
 
 type Listener = () => void
 
+/** Agent talk frames the server pushes to this account (see talk/talkState.ts). */
+export interface TalkFrame {
+  t: 'encounter' | 'agents' | 'verdict' | 'reveal' | 'closed' | 'reconnected'
+  id?: string
+  [k: string]: unknown
+}
+
 export class Net {
   /** Players currently in view (the server streams only nearby players: area of interest). */
   players = new Map<number, NetPlayer>()
@@ -42,6 +49,8 @@ export class Net {
 
   private ws: WebSocket | null = null
   private listeners = new Set<Listener>()
+  private talkListeners = new Set<(f: TalkFrame) => void>()
+  private everConnected = false
   private hello: { name: string; color: string; x: number; z: number; room: Room; look?: string; ticket?: string }
   private lastSent = ''
   private chatKey = 0
@@ -123,7 +132,12 @@ export class Net {
     switch (msg.t) {
       case 'welcome':
       case 'room':
-        if (msg.t === 'welcome') this.myId = msg.id
+        if (msg.t === 'welcome') {
+          this.myId = msg.id
+          // back after a drop: an agent talk may have moved on without us
+          if (this.everConnected) this.emitTalk({ t: 'reconnected' })
+          this.everConnected = true
+        }
         this.connected = true
         this.room = msg.room
         this.players.clear()
@@ -171,6 +185,13 @@ export class Net {
       case 'correct':
         this.correction = { x: msg.x, z: msg.z }
         break
+      case 'encounter':
+      case 'agents':
+      case 'verdict':
+      case 'reveal':
+      case 'closed':
+        this.emitTalk(msg as TalkFrame)
+        break
     }
   }
 
@@ -217,6 +238,18 @@ export class Net {
     return () => {
       this.listeners.delete(fn)
     }
+  }
+
+  /** Agent talk pushes (only ever this account's own talks). */
+  onTalk(fn: (f: TalkFrame) => void) {
+    this.talkListeners.add(fn)
+    return () => {
+      this.talkListeners.delete(fn)
+    }
+  }
+
+  private emitTalk(f: TalkFrame) {
+    for (const fn of this.talkListeners) fn(f)
   }
 
   private emit() {

@@ -522,6 +522,9 @@ func main() {
 		mountJev(mux, acct, acct.jev)
 		acct.talk = openAgentTalk(acct, hubSink{hub}, *talkConfig) // GEMINI_API_KEY(_FILE) + JEV_API_KEY(_FILE)
 		mountTalk(mux, acct, acct.talk, originOK, *devTalk)
+		if acct.talk != nil {
+			acct.talk.watchProximity(hub) // two opted-in players within 3 m for 3 s (talk_config.json)
+		}
 		if *devLogin {
 			mountDevLogin(mux, acct)
 		}
