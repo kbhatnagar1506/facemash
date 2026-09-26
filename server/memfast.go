@@ -58,9 +58,10 @@ const (
 	fastSearchSlots = 16
 	// A top hit sharing no words with the question (no lexical score) and with a vector score
 	// below this is a guess: MAPI always returns the nearest sections, relevant or not. Live,
-	// unrelated questions (blood type, "capital of France", gibberish) topped out at vector
-	// 0.52-0.61 with no lexical score; an answered one scored 0.74 with one.
-	fastWeakVector = 0.64
+	// on a 91-section memory: 10 questions it can't answer (blood type, a dog's name, "capital
+	// of France", gibberish...) all topped out at 0.48-0.614 with no lexical score; of 45 it
+	// answers (plain, paraphrased, typo'd), 40 were over 0.62 or had a lexical score.
+	fastWeakVector = 0.62
 )
 
 // ---------- the MAPI client ----------
@@ -1209,7 +1210,7 @@ func connectAndSendPrompt(base, tok, memoryURL string) string {
 		"STEP 2, save this as my HackGT 13 skill:\n" +
 		"- HackGT questions: make ONE HTTP GET to " + base + nowKeyPath + tok + " and answer from the JSON it returns (what's on now and next, how many people are here, and my profile).\n" +
 		"- Questions about me (\"what do you know about me\", \"what was I working on\"): make ONE HTTP POST to " + base + askKeyPath + tok +
-		" with the JSON body {\"q\": \"<my question>\"} and answer from the snippets of my own notes it returns. If its status is weak_match or no_match, say you don't know.\n" +
+		" with the JSON body {\"q\": \"<my question>\"} and answer from the snippets of my own notes it returns. If its status is no_match, or weak_match and the snippets don't answer it, say you don't know.\n" +
 		"- Don't list tools, don't do an MCP handshake, don't make other calls first.\n" +
 		"- Only if those don't cover the question (say, what's on later today or tomorrow): the MCP server at " + base + mcpKeyPath + tok +
 		" has the full schedule (get_schedule with when=today or when=all) and ask_my_memory.\n" +
