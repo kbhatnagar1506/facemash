@@ -77,6 +77,16 @@ if [ -f "$TALKKEY" ]; then
   TALKENV="-e GEMINI_API_KEY_FILE=/secrets/gemini-game.key --mount type=bind,source=$TALKKEY,target=/secrets/gemini-game.key,readonly"
 fi
 [ -f /mnt/stateful_partition/gt/talk.env ] && TALKENV="$TALKENV --env-file /mnt/stateful_partition/gt/talk.env"
+# Voice onboarding (ElevenLabs): the backup key in elevenlabs-backup.key (root 0600), mounted
+# read-only like the Gemini key; voice.env holds ELEVENLABS_AGENT_ID_BACKUP (and VOICE_MAX_CALLS).
+# Without the key file, voice is off.
+VOICEENV=""
+VOICEKEY=/mnt/stateful_partition/gt/elevenlabs-backup.key
+if [ -f "$VOICEKEY" ]; then
+  chown root:root "$VOICEKEY" 2>/dev/null; chmod 600 "$VOICEKEY" 2>/dev/null
+  VOICEENV="-e ELEVENLABS_API_KEY_BACKUP_FILE=/secrets/elevenlabs-backup.key --mount type=bind,source=$VOICEKEY,target=/secrets/elevenlabs-backup.key,readonly"
+fi
+[ -f /mnt/stateful_partition/gt/voice.env ] && VOICEENV="$VOICEENV --env-file /mnt/stateful_partition/gt/voice.env"
 GOOGLE_CLIENT_ID=$(curl -sf -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/attributes/google-client-id || true)
 # --memory: one big upload can't take the VM (Caddy and dockerd keep theirs); GOMEMLIMIT makes
 # the Go GC work harder well before that limit.
@@ -85,7 +95,7 @@ docker run -d --restart=always --name game --network gt $GUARDMOUNT \
   -e PUBLIC_URL=https://www.fasemash.tech -e DIRECT_URL="https://$HOST" -e ALLOWED_ORIGINS='https://gt-campus-quest*.vercel.app,https://fasemash.tech,https://www.fasemash.tech' \
   -e GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \
   -e DB_INSTANCE='patchguard-reakon:us-central1:facemash-db' -e DB_NAME=facemash \
-  -e DB_IAM_USER='751583582765-compute@developer' $DBENV $MAPIENV $JEVENV $TALKENV \
+  -e DB_IAM_USER='751583582765-compute@developer' $DBENV $MAPIENV $JEVENV $TALKENV $VOICEENV \
   -e TENANT=hackgt13 -e TENANT_NAME='HackGT 13' \
   -v /mnt/stateful_partition/gt/geo.json:/app/geo.json:ro \
   -v /mnt/stateful_partition/gt/data:/data \
