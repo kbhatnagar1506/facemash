@@ -19,7 +19,7 @@ export const stamp = (t: number) => {
 
 export const ago = (t: number, now: number) => {
   const s = Math.max(0, Math.round((now - t) / 1000))
-  return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m` : `${Math.floor(s / 3600)}h`
+  return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m` : s < 172_800 ? `${Math.floor(s / 3600)}h` : `${Math.floor(s / 86_400)}d`
 }
 
 const FRAMES = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'

@@ -5,6 +5,7 @@ import { ChatPane } from './ui/ChatPane'
 import { Sidebar } from './ui/Sidebar'
 import { VerifyLog } from './ui/VerifyLog'
 import { stamp, useNow } from './ui/time'
+import './terminal.css'
 
 const SCOPES = [...TENANTS.map((t) => t.id), 'all']
 const MAX_PANES = 6

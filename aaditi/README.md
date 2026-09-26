@@ -1,15 +1,6 @@
-# aaditi · Agent Console
+# aaditi
 
-A black, terminal-style console for watching many AI agents run many chats at once, across isolated tenants.
-
-- **Multi-tenant:** three tenants (`acme`, `globex`, `initech`), each with its own agents, users, sessions and source namespace (`src[acme]`). The console is scoped to one tenant at a time, and `/open`-ing another tenant's chat is denied. The `* all` scope is the cross-tenant ops view.
-- **Multi-agent, multi-chat:** up to 6 chat panes live side by side. Agents stream their replies, and the sidebar shows every agent and session with its state (typing / replying / waiting / paused).
-- **Timestamps:** every message has `[HH:MM:SS]`. Hover it for the full date with milliseconds and UTC offset. Agent replies also show their response latency (`+3.2s`).
-- **Source line under every message:** `└─ src[tenant]` lists the records pulled about the user (SSO session, CRM, billing, orders, KYC, …). Each one goes from `pulling` to `verifying` and ends as ✓ verified, ✗ mismatch (the claim contradicts the record) or ? unverified (no record). Each shows what it found and how long the check took. The **verify log** on the right is the audit trail of every lookup in scope.
-
-The data is simulated in `src/store.ts` and `src/data.ts`. No backend is needed yet.
-
-## Run
+Two views of AI agents at work. Run both from here:
 
 ```bash
 cd aaditi
@@ -17,21 +8,24 @@ npm install
 npm run dev        # http://localhost:5174
 ```
 
-## Console
+## `/`: Agent activity wireframe (one user account)
 
-| input | does |
-| --- | --- |
-| plain text | operator note into the focused chat (checked against `auth:operator` and tenant scope) |
-| `/tenant acme\|globex\|initech\|all` | switch scope (or Alt+1..3, Alt+0) |
-| `/open c-05` · `/close` | open or close a pane |
-| `/pause` · `/resume` | stop or restart the focused chat |
-| `/list` | sessions in scope |
-| Tab / Shift+Tab | cycle focused pane |
-| ↑ / ↓ | command history |
+A lo-fi, black wireframe of every agent conversation running on behalf of **one user account** (Priya Nair). Her agents talk to airlines, banks, landlords, recruiters and support bots for her.
 
-## Layout
+- **Account bar:** the one identity all agents act as, with a pause-all kill switch.
+- **Summary:** chats in flight, how many need you, how many times your info was shared, and how many claims were flagged.
+- **Chat grid:** one card per conversation: agent ⇄ counterparty, bot or human, channel, goal and status (Needs you / Active / Waiting on them / Done). Filter by status.
+- **Timestamps** on every message (hover for full date), and time since last activity on each card.
+- **Source line under every message:** for the user's agent, *which of your info it shared* and the record it was verified against. For the other side, *their claims checked against your records*. ✓ verified · ✗ contradicts your records (FLAG) · ? no record · … pending.
+- **Needs you:** approvals for anything outside an agent's permissions (spend over the limit, sensitive info). Approve or decline, and the agent carries on.
+- **Your info agents can use:** a ledger of the user's data, its source of truth, when it was last verified, and which chats used it. Click one to filter the grid.
+- **Thread view:** the full transcript in a drawer, with a composer for taking the chat over yourself.
+- Blue numbered pins match the **design notes** at the bottom. Toggle them with "Notes".
 
-- `src/data.ts`: tenants, agents, users, and scripted exchanges with the sources each one checks
-- `src/store.ts`: simulated live backend. A source's status is a function of time (`srcStatus(src, now)`)
-- `src/ui/`: `ChatPane`, `Message` (message + source line), `Sidebar`, `VerifyLog`
-- `src/terminal.css`: the black theme. Panes use container queries to stack on narrow widths.
+Code: `src/wireframe/` (`data.ts` holds the mock account, info ledger and threads, `Wireframe.tsx` the page, `wireframe.css` the styles).
+
+## `/console`: Multi-tenant agent console
+
+A black terminal console for watching many agents across isolated tenants (`acme`, `globex`, `initech`). Up to 6 live chat panes, per-message timestamps, a source-verification line under each message, and a verify log. Commands: `/tenant`, `/open`, `/close`, `/pause`, `/resume`, `/list`; plain text sends an operator note.
+
+Code: `src/App.tsx`, `src/store.ts` (simulated live backend), `src/data.ts`, `src/ui/`, `src/terminal.css`.
