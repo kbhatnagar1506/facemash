@@ -135,7 +135,7 @@ export function Landing() {
   // page title and browser chrome colour while the landing is up
   useEffect(() => {
     const prev = document.title
-    document.title = 'HackGT 13'
+    document.title = 'facemash · meet the right people at HackGT 13'
     const meta = document.createElement('meta')
     meta.name = 'theme-color'
     meta.content = PAPER
@@ -315,7 +315,7 @@ export function Landing() {
       <header className="landing-nav" ref={nav}>
         <a className="brand" href="/">
           <BeanMark />
-          HackGT 13
+          facemash
         </a>
         <nav className="nav-links" aria-label="Site">
           <a className="nav-link" href="/avatar">
@@ -421,6 +421,29 @@ export function Landing() {
           </div>
         </section>
       </main>
+
+      {/* What the app is, in plain words (also what Google's consent screen review reads) */}
+      <footer className="about" aria-labelledby="about-title">
+        <div className="about-inner">
+          <img className="about-logo" src="/facemash-logo.png" alt="facemash logo" width="64" height="64" />
+          <h2 id="about-title">About facemash</h2>
+          <p>
+            facemash helps people at HackGT 13 find the attendees they'd be glad to meet, and then actually meet them face
+            to face. You design a bean, walk a 3D Georgia Tech campus and the Klaus atrium with everyone else at the event,
+            and can connect your own Muse assistant so it can answer questions about the event and about you.
+          </p>
+          <p>
+            Signing in with Google is optional. We use your name and email only to create your account and save your bean
+            and progress, and your profile photo to show that you're signed in. You are never shown to other attendees
+            unless you choose to be. facemash is a project built at HackGT 13 and is not run by HackGT.
+          </p>
+          <nav className="about-links" aria-label="About">
+            <a href="/privacy">Privacy Policy</a>
+            <a href="/terms">Terms of Service</a>
+            <a href="/play">Enter</a>
+          </nav>
+        </div>
+      </footer>
       {sheet && me?.googleClientId && <SignInSheet clientId={me.googleClientId} next={nextForMember} onClose={() => setSheet(false)} />}
     </div>
   )
