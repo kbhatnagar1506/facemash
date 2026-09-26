@@ -1055,6 +1055,136 @@ html.scroll-page #root {
   line-height: 1.5;
 }
 
+/* ---------- /muse voice guide (VoiceCard.tsx) ---------- */
+.landing .vc-alt {
+  min-width: 0;
+  height: auto;
+  min-height: 48px;
+  padding: 10px 12px;
+  color: var(--blue);
+  font-size: 15px;
+  line-height: 1.25;
+  white-space: normal;
+  box-shadow: inset 0 0 0 1.5px rgba(59, 99, 196, 0.35);
+}
+.vc-alt svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+.landing .vc-count {
+  margin: 10px 0 0;
+  color: var(--blue);
+  font: 600 14px/1.2 var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.vc-stage {
+  display: grid;
+  place-items: center;
+  height: 196px;
+  margin: 14px 0 4px;
+}
+.vc-mic {
+  display: grid;
+  place-items: center;
+  width: 132px;
+  height: 132px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--blue);
+  color: #fff;
+  box-shadow: 0 0 0 10px rgba(59, 99, 196, 0.12), 0 14px 34px rgba(59, 99, 196, 0.35);
+  cursor: pointer;
+  transition: transform 0.2s var(--ease-press), background 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+.vc-mic:hover {
+  background: var(--blue-press);
+}
+.vc-mic:active {
+  transform: scale(0.95);
+}
+.vc-mic:focus-visible {
+  outline: 3px solid var(--gold);
+  outline-offset: 4px;
+}
+.vc-mic svg {
+  width: 52px;
+  height: 52px;
+}
+.vc-bean {
+  --lvl: 0;
+  display: grid;
+  place-items: center;
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 201, 60, 0.35) 0, rgba(255, 201, 60, 0) 70%);
+  transform: scale(calc(1 + var(--lvl) * 0.18));
+  transition: transform 0.08s linear;
+}
+.vc-bean svg {
+  width: 96px;
+  height: 96px;
+}
+.vc-listening svg {
+  animation: vc-breathe 2.4s ease-in-out infinite;
+}
+.vc-connecting,
+.vc-saving {
+  animation: muse-pulse 1.4s ease-in-out infinite;
+}
+.landing .vc-status {
+  min-height: 1.4em;
+  margin: 4px 0 18px;
+  color: var(--ink-2);
+  font-size: 15px;
+}
+.vc-heard {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0 20px;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+.vc-heard li {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--paper);
+}
+.vc-heard span {
+  display: block;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.landing .vc-heard p {
+  margin: 4px 0 0;
+  color: var(--ink);
+  font-size: 14.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.vc .muse-fine a {
+  color: inherit;
+}
+@keyframes vc-breathe {
+  50% {
+    transform: scale(1.06);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vc-listening svg,
+  .vc-connecting,
+  .vc-saving {
+    animation: none;
+  }
+  .vc-bean {
+    transition: none;
+  }
+}
+
 /* ---------- /privacy, /terms ---------- */
 .legal-page {
   min-height: 100vh;

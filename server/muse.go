@@ -390,6 +390,47 @@ func dayRange(days []schedDay) string {
 // ---------- HTTP: auth, MCP, REST, OpenAPI, tokens ----------
 
 // mountMuse adds the connector endpoints. base is the public origin (for URLs we hand out).
+// ingestMemory is the one way a memory about someone gets in, whoever brought it (their
+// agent's upload, or what they told the voice guide, voice.go): scrub it, keep the latest
+// copy, queue it for their private index (memfast.go) and pick their bean an outfit from
+// it (jevlook.go). Always for one (tenant, person), which the caller got from a token or a
+// session, never from the body. raw, when given, is obj as it arrived: kept byte for byte
+// unless something had to be redacted. It returns the stored JSON and how many items were
+// redacted.
+func ingestMemory(ctx context.Context, acc *accounts, tenant string, id int64, obj map[string]any, raw []byte, what string) ([]byte, int, error) {
+	// guardrail: credentials and sensitive numbers never get stored or indexed, whatever
+	// the agent sent (redact.go); only the counts are logged
+	counts := map[string]int{}
+	obj = redactJSON(obj, counts).(map[string]any)
+	redacted := 0
+	for _, n := range counts {
+		redacted += n
+	}
+	if redacted > 0 {
+		log.Printf("muse: #%d %s: %d item(s) redacted %v", id, what, redacted, counts)
+	}
+	body := raw
+	if redacted > 0 || body == nil {
+		var err error
+		if body, err = json.Marshal(obj); err != nil {
+			return nil, redacted, err
+		}
+	}
+	var exported *time.Time
+	if s, _ := obj["exported_at"].(string); s != "" {
+		if t, err := time.Parse(time.RFC3339, s); err == nil {
+			exported = &t
+		}
+	}
+	if err := acc.store.SaveMemory(ctx, tenant, id, body, exported); err != nil {
+		log.Printf("muse: memory for #%d: %v", id, err)
+		return nil, redacted, err
+	}
+	acc.fast.uploaded(ctx, tenant, id) // and into their private memory index, in the background
+	acc.jev.suggest(tenant, id, obj)   // and an outfit for their bean, picked from it
+	return body, redacted, nil
+}
+
 func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base string, originOK func(*http.Request) bool) {
 	// this server's own public address, for big uploads that shouldn't pass through Vercel
 	direct := strings.TrimRight(envOr("DIRECT_URL", base), "/")
@@ -599,18 +640,18 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 		}
 		defer func() { <-reading }()
 		start := time.Now()
-		body, err := io.ReadAll(io.LimitReader(r.Body, maxMemory+1))
-		label := fmt.Sprintf("POST /api/memory %.1fKB", float64(len(body))/1024)
+		raw, err := io.ReadAll(io.LimitReader(r.Body, maxMemory+1))
+		label := fmt.Sprintf("POST /api/memory %.1fKB", float64(len(raw))/1024)
 		defer func() { calls.add(c.id, label, start, time.Since(start)) }()
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "couldn't read the body"})
 			return
 		}
-		if len(body) > maxMemory {
+		if len(raw) > maxMemory {
 			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "over 25 MB: send only the memory files, not everything"})
 			return
 		}
-		if len(body) > bigUpload {
+		if len(raw) > bigUpload {
 			if !takeSlot(r.Context(), parsingBig) {
 				busy(w)
 				return
@@ -618,37 +659,17 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 			defer func() { <-parsingBig }()
 		}
 		var obj map[string]any
-		if json.Unmarshal(body, &obj) != nil || obj == nil {
+		if json.Unmarshal(raw, &obj) != nil || obj == nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "send one JSON object"})
 			return
 		}
-		// guardrail: credentials and sensitive numbers never get stored or indexed, whatever
-		// the agent sent (redact.go); only the counts are logged
-		counts := map[string]int{}
-		obj = redactJSON(obj, counts).(map[string]any)
-		redacted := 0
-		for _, n := range counts {
-			redacted += n
-		}
-		if redacted > 0 {
-			body, _ = json.Marshal(obj)
-			log.Printf("muse: #%d memory upload: %d item(s) redacted %v", c.id, redacted, counts)
-		}
-		var exported *time.Time
-		if s, _ := obj["exported_at"].(string); s != "" {
-			if t, err := time.Parse(time.RFC3339, s); err == nil {
-				exported = &t
-			}
-		}
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
-		if err := acc.store.SaveMemory(ctx, c.tenant, c.id, body, exported); err != nil {
-			log.Printf("muse: memory for #%d: %v", c.id, err)
+		body, redacted, err := ingestMemory(ctx, acc, c.tenant, c.id, obj, raw, "memory upload")
+		if err != nil {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "try again in a moment"})
 			return
 		}
-		acc.fast.uploaded(ctx, c.tenant, c.id) // and into their private memory index, in the background
-		acc.jev.suggest(c.tenant, c.id, obj)   // and an outfit for their bean, picked from it
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "kb": float64(len(body)*10/1024) / 10, "redacted": redacted})
 	}
 	mux.HandleFunc("/api/memory", memoryHandler)

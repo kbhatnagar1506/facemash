@@ -10,6 +10,9 @@ export default defineConfig({
         // the 3D engine changes rarely: its own long-cached chunk, so app updates stay small
         manualChunks(id) {
           if (/node_modules\/(three|@react-three|postprocessing|n8ao)/.test(id)) return 'engine'
+          // the voice guide's SDK (and what it brings) loads only when someone opens it
+          // (VoiceCard.tsx): left to the default split, so it stays out of vendor
+          if (/node_modules\/(@elevenlabs|livekit-client|@livekit|events|jose|loglevel|machina|sdp-transform|sdp|typed-emitter|webrtc-adapter|tslib)\//.test(id)) return
           if (id.includes('node_modules')) return 'vendor'
         },
       },

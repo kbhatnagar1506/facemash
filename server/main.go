@@ -447,7 +447,13 @@ func main() {
 	mintFor := flag.String("muse-token", "", "print a connector token for this email (a test account is made if needed) and exit")
 	sessionFor := flag.String("session-for", "", "print a session cookie value for this email's test account and exit (for testing signed-in flows before Google sign-in is on)")
 	devLogin := flag.Bool("dev-login", false, "local testing only: /api/dev/login?email= signs in a test account (localhost requests only)")
+	voiceProvision := flag.Bool("voice-provision", false, "create or update the ElevenLabs voice agent ("+voiceAgentName+"), print its id and exit")
+	voiceKey := flag.String("voice-key", "", "with -voice-provision: which ElevenLabs key's account, primary or backup (default: the first that works)")
 	flag.Parse()
+	if *voiceProvision {
+		provisionVoice(*voiceKey)
+		return
+	}
 	base := strings.TrimRight(envOr("PUBLIC_URL", "https://gt-campus-quest.vercel.app"), "/")
 	if *mintFor != "" {
 		mintTestToken(*mintFor, *keyFile, base)
@@ -511,9 +517,11 @@ func main() {
 	if acct != nil {
 		acct.fast = openMemFast(acct) // MAPI_READ_URL/MAPI_WRITE_URL + a tenant key; nil (off) otherwise
 		acct.jev = openJev(acct)      // JEV_API_KEY(_FILE); nil (off) otherwise
+		acct.voice = openVoice()      // ELEVENLABS_API_KEY(_FILE) + ELEVENLABS_AGENT_ID; nil (off) otherwise
 		mountAuth(mux, clientIDs, acct, originOK)
 		mountMuse(mux, acct, hub, *eventFile, base, originOK)
 		mountJev(mux, acct, acct.jev)
+		mountVoice(mux, acct, acct.voice, originOK)
 		if *devLogin {
 			mountDevLogin(mux, acct)
 		}

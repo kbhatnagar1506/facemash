@@ -8,6 +8,8 @@ export interface Me {
   user: { name: string; given: string; email: string; picture: string } | null
   profile?: { name: string; color: string; look: string }
   progress?: { room: 'campus' | 'hackgt'; x: number; z: number; y: number; r: number; at: string } | null
+  /** the voice guide is on (for people without a Muse) */
+  voice?: boolean
   /** identifies you to the game socket, which lives on another host */
   ticket?: string
 }
