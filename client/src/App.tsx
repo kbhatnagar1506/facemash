@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
+import { PerformanceMonitor } from '@react-three/drei'
 import { Bloom, EffectComposer, N8AO, SMAA, Vignette } from '@react-three/postprocessing'
 import { Collider, loadCampus, type Campus } from './map'
 import { Net } from './net'
@@ -98,6 +99,9 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
   }, [])
   const hallCollider = useMemo(() => new HallCollider(), [])
   const [room, setRoom] = useState<'campus' | 'hackgt'>('campus')
+  // rendering quality (see <PerformanceMonitor>)
+  const [dpr, setDpr] = useState(() => Math.min(1.5, window.devicePixelRatio))
+  const [lite, setLite] = useState(false)
   // The hall loads (and pre-compiles) once you get within 300 m of Klaus, then stays.
   const [hallWanted, setHallWanted] = useState(false)
   useEffect(() => {
@@ -205,7 +209,7 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
     <>
       <Canvas
         shadows="soft"
-        dpr={[1, 1.5]}
+        dpr={dpr}
         camera={{ fov: 40, near: 1, far: 800, position: [start[0], 25, start[1] + 20] }}
       >
         <color attach="background" args={['#bfe6ff']} />
@@ -244,15 +248,33 @@ function Game({ campus, name, color }: { campus: Campus; name: string; color: st
         {/* A fresh composer per room: indoors adds ambient occlusion, which reads the depth
             buffer and can't share it with a multisampled target (that blit fails and freezes
             the frame), so the hall uses SMAA for edges instead of MSAA. */}
+        {/* Adaptive quality: if frames start dropping, render at a lower pixel ratio (and drop
+            ambient occlusion); climb back up when there's headroom. Keeps it smooth everywhere. */}
+        <PerformanceMonitor
+          bounds={() => [45, 58]}
+          flipflops={4}
+          onDecline={() => {
+            setDpr(1)
+            setLite(true)
+          }}
+          onIncline={() => {
+            setDpr(Math.min(1.5, window.devicePixelRatio))
+            setLite(false)
+          }}
+          onFallback={() => {
+            setDpr(1)
+            setLite(true)
+          }}
+        />
         {room === 'hackgt' ? (
-          <EffectComposer key="hall" multisampling={0}>
-            <N8AO halfRes aoRadius={1.4} distanceFalloff={0.6} intensity={2.6} color="#2a2420" />
+          <EffectComposer key={lite ? 'hall-lite' : 'hall'} multisampling={0}>
+            {lite ? <></> : <N8AO halfRes quality="performance" aoRadius={1.4} distanceFalloff={0.6} intensity={2.6} color="#2a2420" />}
             <Bloom mipmapBlur intensity={0.35} luminanceThreshold={0.99} luminanceSmoothing={0.03} />
             <Vignette offset={0.3} darkness={0.55} />
             <SMAA />
           </EffectComposer>
         ) : (
-          <EffectComposer key="campus" multisampling={4}>
+          <EffectComposer key="campus" multisampling={dpr > 1.2 ? 2 : 4}>
             <Bloom mipmapBlur intensity={0.25} luminanceThreshold={0.99} luminanceSmoothing={0.03} />
             <Vignette offset={0.3} darkness={0.55} />
           </EffectComposer>

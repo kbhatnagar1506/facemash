@@ -373,7 +373,6 @@ function StreetFurniture({ campus, near }: { campus: Campus; near: Set<string> }
             <instancedMesh
               key={gi}
               args={[g, gi ? kit.glow : kit.dark, pts.length]}
-              castShadow={gi === 0}
               ref={(mesh) => {
                 if (!mesh) return
                 const m = new THREE.Matrix4()
@@ -388,7 +387,6 @@ function StreetFurniture({ campus, near }: { campus: Campus; near: Set<string> }
         <instancedMesh
           key={`b${k}`}
           args={[kit.bench, kit.wood, pts.length]}
-          castShadow
           receiveShadow
           ref={(mesh) => {
             if (!mesh) return
