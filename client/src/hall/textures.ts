@@ -234,9 +234,8 @@ export function curtain(base = '#2f86d6') {
 }
 
 /**
- * The east window wall as real glass: white mullions and transoms stay solid,
- * panes are see-through with a faint green-blue tint and diagonal reflection
- * streaks, so the courtyard behind shows through.
+ * The east window wall as frosted glass: white mullions and transoms, opaque
+ * pale blue-green panes with diagonal reflection glints (you can't see outside).
  */
 export function glassPanes(panes: number, h = 4.6) {
   const P = 128
@@ -244,9 +243,23 @@ export function glassPanes(panes: number, h = 4.6) {
   c.width = panes * P
   c.height = Math.round((h / 3) * P)
   const g = c.getContext('2d')!
-  g.clearRect(0, 0, c.width, c.height)
-  g.fillStyle = 'rgba(200,228,232,0.16)' // tint
+  // Frosted glass: opaque, pale blue-green, brighter toward the top like it's catching the sky.
+  const frost = g.createLinearGradient(0, 0, 0, c.height)
+  frost.addColorStop(0, '#dbe9ec')
+  frost.addColorStop(0.55, '#c3d6da')
+  frost.addColorStop(1, '#aec4c9')
+  g.fillStyle = frost
   g.fillRect(0, 0, c.width, c.height)
+  // fine frosting grain
+  const img = g.getImageData(0, 0, c.width, c.height)
+  const rr = rng(41)
+  for (let i = 0; i < img.data.length; i += 4) {
+    const v = (rr() - 0.5) * 10
+    img.data[i] += v
+    img.data[i + 1] += v
+    img.data[i + 2] += v
+  }
+  g.putImageData(img, 0, 0)
   const r = rng(17)
   for (let i = 0; i < panes; i++) {
     // two soft diagonal glints per pane
@@ -257,7 +270,7 @@ export function glassPanes(panes: number, h = 4.6) {
       g.rotate(-0.5)
       const grd = g.createLinearGradient(-14, 0, 14, 0)
       grd.addColorStop(0, 'rgba(255,255,255,0)')
-      grd.addColorStop(0.5, `rgba(255,255,255,${0.18 + r() * 0.12})`)
+      grd.addColorStop(0.5, `rgba(255,255,255,${0.35 + r() * 0.2})`)
       grd.addColorStop(1, 'rgba(255,255,255,0)')
       g.fillStyle = grd
       g.fillRect(-14 - k * 10, -c.height, 28 - k * 14, c.height * 2)
@@ -272,57 +285,5 @@ export function glassPanes(panes: number, h = 4.6) {
   // door hardware on every third pane (the photos show push-bar doors along the glass)
   g.fillStyle = '#b9bdc3'
   for (let i = 1; i < panes; i += 3) g.fillRect(i * P + 12, c.height * 0.5, P - 24, 5)
-  return tex(c)
-}
-
-/** What you see through the east glass: a sunny courtyard, trees and the far wing of Klaus. */
-export function courtyard(w: number, h = 12) {
-  const PX = 40
-  const c = document.createElement('canvas')
-  c.width = Math.min(4096, Math.round(w * PX))
-  c.height = Math.round(h * PX)
-  const g = c.getContext('2d')!
-  const W = c.width
-  const H = c.height
-  const sky = g.createLinearGradient(0, 0, 0, H * 0.75)
-  sky.addColorStop(0, '#8fcaf0')
-  sky.addColorStop(1, '#e3f1f7')
-  g.fillStyle = sky
-  g.fillRect(0, 0, W, H)
-  const r = rng(29)
-  // far wing of Klaus across the courtyard: cream wall, rows of blue windows, gold roof line
-  const top = H * 0.2
-  g.fillStyle = '#efe6cf'
-  g.fillRect(0, top, W, H * 0.62 - top)
-  g.fillStyle = '#d9b44a'
-  g.fillRect(0, top - 10, W, 12)
-  for (let row = 0; row < 3; row++)
-    for (let x = 20; x < W; x += 70) {
-      const y = top + 26 + row * 70
-      const grd = g.createLinearGradient(0, y, 0, y + 40)
-      grd.addColorStop(0, '#9cc3dc')
-      grd.addColorStop(1, '#4f7593')
-      g.fillStyle = grd
-      g.fillRect(x, y, 44, 40)
-    }
-  // lawn and a brick path
-  g.fillStyle = '#86c469'
-  g.fillRect(0, H * 0.62, W, H)
-  g.fillStyle = '#d8c39b'
-  g.fillRect(0, H * 0.8, W, H * 0.07)
-  // trees in front of the far wing
-  for (let i = 0; i < W / 90; i++) {
-    const x = r() * W
-    const base = H * (0.66 + r() * 0.05)
-    const s = 40 + r() * 50
-    g.fillStyle = '#7a5a3e'
-    g.fillRect(x - 5, base - s * 0.6, 10, s * 0.6)
-    for (const [dx, dy, rr, col] of [[0, -s, s * 0.7, '#4f8f45'], [-s * 0.35, -s * 0.8, s * 0.5, '#5fa352'], [s * 0.35, -s * 0.85, s * 0.5, '#6db35c']] as const) {
-      g.fillStyle = col
-      g.beginPath()
-      g.arc(x + dx, base + dy, rr, 0, Math.PI * 2)
-      g.fill()
-    }
-  }
   return tex(c)
 }

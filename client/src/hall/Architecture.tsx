@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { BALCONY, CEIL, COLUMNS, CX, SAG, wallZ, DOORS_Z, HALL, L1, MEZZ_WEST_Z, MEZZ_X0, MEZZ_Z, STAIR, X0, X1, Z0, Z1 } from './layout'
 import { Entrance } from './Entrance'
-import { ceilingTiles, checkerWall, courtyard, glassPanes, netTexture, terrazzo, textCard } from './textures'
+import { ceilingTiles, checkerWall, glassPanes, netTexture, terrazzo, textCard } from './textures'
 
 const WHITE = '#f4f2ee'
 
@@ -106,7 +106,6 @@ function Walls() {
   const leftUpper = useMemo(() => checkerWall(14, 5, [2, 5, 8, 11], 9), [])
   const glassLen = DOORS_Z - 4.7 - Z0
   const glassR = useMemo(() => glassPanes(15), [])
-  const outside = useMemo(() => courtyard(glassLen + 16), [glassLen])
   const h = CEIL
   const curvedWall = useMemo(() => {
     const g = new THREE.PlaneGeometry(HALL.w, h, 48, 1)
@@ -151,19 +150,10 @@ function Walls() {
       ))}
       {/* right wall: tall dark windows at ground level, white above */}
       {/* glass wall north of the entrance doors, plain wall around the doorway */}
-      {/* the courtyard outside, a few metres beyond the glass (parallax as you walk) */}
-      <mesh position={[X1 + 6, 6, (Z0 + DOORS_Z - 4.7) / 2]} rotation-y={-Math.PI / 2}>
-        <planeGeometry args={[glassLen + 16, 12]} />
-        <meshBasicMaterial map={outside} />
-      </mesh>
-      <mesh position={[X1 + 3, 0.01, (Z0 + DOORS_Z - 4.7) / 2]} rotation-x={-Math.PI / 2}>
-        <planeGeometry args={[6, glassLen + 16]} />
-        <meshLambertMaterial color="#d6d2c8" />
-      </mesh>
       {/* the glass itself */}
       <mesh position={[X1, 2.3, (Z0 + DOORS_Z - 4.7) / 2]} rotation-y={-Math.PI / 2}>
         <planeGeometry args={[glassLen, 4.6]} />
-        <meshLambertMaterial map={glassR} transparent side={THREE.DoubleSide} />
+        <meshStandardMaterial map={glassR} roughness={0.15} metalness={0.1} />
       </mesh>
       <mesh position={[X1, (L1 - 0.5) / 2, (DOORS_Z - 4.7 + Z1) / 2]} rotation-y={-Math.PI / 2}>
         <planeGeometry args={[Z1 - DOORS_Z + 4.7, L1 - 0.5]} />
