@@ -1037,3 +1037,20 @@ html.scroll-page #root {
 .lat-wait {
   color: var(--ink-3);
 }
+.muse-optional {
+  display: grid;
+  gap: 8px;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  text-align: left;
+}
+.muse-optional strong {
+  font: 700 15px var(--display);
+}
+.landing .muse-optional p {
+  margin: 0 0 4px;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  line-height: 1.5;
+}

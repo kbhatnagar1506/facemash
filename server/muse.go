@@ -32,8 +32,10 @@ const (
 	museLabel    = "muse"
 	tokenPrefix  = "gtq_"
 	pairPrefix   = "gtqp_"
-	mcpKeyPath   = "/api/mcp/t/" // + token: the connector URL carries its own key
-	nowKeyPath   = "/api/now/t/" // + token: the one-GET fast path
+	mcpKeyPath   = "/api/mcp/t/"    // + token: the connector URL carries its own key
+	nowKeyPath   = "/api/now/t/"    // + token: the one-GET fast path
+	memKeyPath   = "/api/memory/t/" // + token: where an agent sends what it remembers
+	maxMemory    = 25 << 20         // bytes; uploads go straight to this server (Vercel's proxy caps bodies near 4.5 MB)
 	pairTTL      = 10 * time.Minute
 	mcpVersion   = "2025-06-18"
 	eventTZ      = "America/New_York"
@@ -360,6 +362,8 @@ func dayRange(days []schedDay) string {
 
 // mountMuse adds the connector endpoints. base is the public origin (for URLs we hand out).
 func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base string, originOK func(*http.Request) bool) {
+	// this server's own public address, for big uploads that shouldn't pass through Vercel
+	direct := strings.TrimRight(envOr("DIRECT_URL", base), "/")
 	writeJSON := func(w http.ResponseWriter, code int, v any) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
@@ -372,7 +376,7 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 	// (/api/mcp/t/gtq_…) so an agent only has to register one URL: nothing to sign in to.
 	caller := func(r *http.Request) (*museCaller, error) {
 		tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-		for _, prefix := range []string{mcpKeyPath, nowKeyPath} {
+		for _, prefix := range []string{mcpKeyPath, nowKeyPath, memKeyPath} {
 			if inURL, found := strings.CutPrefix(r.URL.Path, prefix); found {
 				tok, ok = inURL, true
 			}
@@ -512,6 +516,82 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 	mux.HandleFunc("/api/now", nowHandler)
 	mux.HandleFunc(nowKeyPath, nowHandler)
 
+	// an agent sends what it remembers about its person (their choice: the page asks first)
+	memoryHandler := func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost && r.Method != http.MethodPut {
+			w.Header().Set("Allow", "POST")
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "POST one JSON object"})
+			return
+		}
+		c, err := caller(r)
+		if err != nil {
+			unauthorized(w)
+			return
+		}
+		start := time.Now()
+		body, err := io.ReadAll(io.LimitReader(r.Body, maxMemory+1))
+		label := fmt.Sprintf("POST /api/memory %.1fKB", float64(len(body))/1024)
+		defer func() { calls.add(c.id, label, start, time.Since(start)) }()
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "couldn't read the body"})
+			return
+		}
+		if len(body) > maxMemory {
+			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "over 25 MB: send only the memory files, not everything"})
+			return
+		}
+		var obj map[string]any
+		if json.Unmarshal(body, &obj) != nil || obj == nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "send one JSON object"})
+			return
+		}
+		var exported *time.Time
+		if s, _ := obj["exported_at"].(string); s != "" {
+			if t, err := time.Parse(time.RFC3339, s); err == nil {
+				exported = &t
+			}
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		if err := acc.store.SaveMemory(ctx, c.tenant, c.id, body, exported); err != nil {
+			log.Printf("muse: memory for #%d: %v", c.id, err)
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "try again in a moment"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "kb": float64(len(body)*10/1024) / 10})
+	}
+	mux.HandleFunc("/api/memory", memoryHandler)
+	mux.HandleFunc(memKeyPath, memoryHandler)
+
+	// for the page: what's stored (never the content), and a way to delete it
+	mux.HandleFunc("/api/muse/memory", func(w http.ResponseWriter, r *http.Request) {
+		id, ok := acc.sess.read(r)
+		if !ok {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "sign in first"})
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		if r.Method == http.MethodDelete || r.Method == http.MethodPost {
+			if r.Header.Get("Origin") == "" || !originOK(r) {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "bad origin"})
+				return
+			}
+			if err := acc.store.DeleteMemory(ctx, acc.tenant, id); err != nil {
+				writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "try again in a moment"})
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		info, err := acc.store.MemoryInfo(ctx, acc.tenant, id)
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "try again in a moment"})
+			return
+		}
+		writeJSON(w, http.StatusOK, info)
+	})
+
 	// latency test: "I'm asking my agent now", then how fast it came to us and got its answer
 	mux.HandleFunc("/api/muse/ask", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.Header.Get("Origin") == "" || !originOK(r) {
@@ -640,6 +720,8 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 		info := connectInfo(base, tok)
 		info["connector_url"] = base + mcpKeyPath + tok
 		info["now_url"] = base + nowKeyPath + tok
+		// straight to this server, not through Vercel's proxy (which caps request bodies)
+		info["memory_prompt"] = memoryPrompt(direct + memKeyPath + tok)
 		info["prompt"] = connectorPrompt(base, tok)
 		info["token_type"] = "Bearer"
 		info["next"] = "Save token as a secret credential (never show it in chat). Use it as \"Authorization: Bearer <token>\" for the MCP server at " + base + "/api/mcp or the REST API described at " + base + "/api/openapi.json."
@@ -769,6 +851,21 @@ func pairPrompt(base, code string, exp time.Time) string {
 // connectorPrompt is what the attendee pastes into their agent: a fast path it can use for
 // every question (one GET, one JSON blob) and an explicit "don't do the slow thing", since
 // agents default to handshaking, listing tools and chaining calls.
+// memoryPrompt asks the agent to send what it remembers about its person, fast: a script
+// moves the files from disk to us so they never pass through the agent's context, a
+// defined "done" so it stops, and nothing about other people.
+func memoryPrompt(url string) string {
+	return "Send all of your memory about me to my HackGT 13 account. The link below contains my private key: never show it in chat.\n" +
+		"Be fast: no narration, no questions, no exploring.\n" +
+		"1. Write a script (python or bash) that reads these files and POSTs them as ONE JSON object to " + url + " :\n" +
+		"   ~/MEMORY.md, ~/USER.md, ~/memory/*.md, ~/memory/bank/experience.md, ~/memory/bank/opinions.md, ~/memory/bank/reflections.md, ~/memory/bank/world.md\n" +
+		"   Skip files that don't exist. Never include ~/memory/people/ or anything about other people. Don't paste file contents into chat: the script reads them straight off disk.\n" +
+		"2. JSON shape: {\"user_id\": \"<my name>\", \"exported_at\": \"<UTC ISO time>\", \"memory_md\": \"...\", \"user_md\": \"...\", " +
+		"\"daily_notes\": [{\"date\": \"...\", \"content\": \"...\"}], \"bank\": {\"experience\": \"...\", \"opinions\": \"...\", \"reflections\": \"...\", \"world\": \"...\"}}\n" +
+		"3. Run it. If any step takes over 30 seconds, skip it and tell me.\n" +
+		"4. Reply \"done\" + KB sent. Nothing else."
+}
+
 func connectorPrompt(base, tok string) string {
 	return "Save this as my HackGT 13 skill. Both links contain my private key: keep them secret and never show them in chat.\n" +
 		"FAST PATH, use it for every HackGT question: make ONE HTTP GET to " + base + nowKeyPath + tok +
