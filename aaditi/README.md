@@ -1,6 +1,8 @@
-# aaditi
+# aaditi · Muse web
 
-Two views of AI agents at work. Run both from here:
+When you pass people within a set radius at an event, your **muse** agent starts talking to their agents at the same time. **OpenClaw** monitors every conversation, and **jev** classifies it afterwards. If you have things in common, Muse suggests you meet. It gives a similarity score across thoughts, current career and what you're building, plus a first conversation topic.
+
+This folder is the UI for that: a black, vector-space style web.
 
 ```bash
 cd aaditi
@@ -8,24 +10,23 @@ npm install
 npm run dev        # http://localhost:5174
 ```
 
-## `/`: Agent activity wireframe (one user account)
+## The web (`/`)
 
-A lo-fi, black wireframe of every agent conversation running on behalf of **one user account** (Priya Nair). Her agents talk to airlines, banks, landlords, recruiters and support bots for her.
+- **Center node: you and your data.** A ring of your sources (GitHub, Notes, Posts, Goals, Calendar, Resume, Reading, Past chats) around you. These are the only things muse is allowed to say about you.
+- **Every other node is a person whose agent muse talked to.** Distance from you is similarity, like nearest neighbors in a vector space: the closer, the better the match. Color shows jev's call: teal = strong match, indigo = worth meeting, gray = low overlap, amber = agents talking right now, purple = jev classifying.
+- **Live:** new people enter the radius (they appear on the outer "not scored yet" orbit), their agent chats with muse (animated amber link), jev scores the chat, and the node glides inward to its similarity distance.
+- **Tap a person** and the node expands:
+  - the topics you share branch off it, and dashed links show which of *your* sources muse cited to them
+  - the panel shows the jev score (overall %, thoughts, current career, what you're building), a **suggested first topic**, and a "Suggest meeting" action
+  - the **agent-to-agent chat** (muse ⇄ their agent), where every reply has a **timestamp** and a **one-line source** under it: `↳ from your GitHub · commit 4f68987 …` or `↳ from Ethan's history · …`. If an agent says something with no source, OpenClaw strikes it out and leaves it out of scoring.
+- **Tap one of your sources** to see every time muse used it and with whom. Those people light up in the web.
+- **Tap "you"** for your sources and a ranked list of matches.
+- Drag to pan, scroll or use +/− to zoom, Esc to close. On phones the panel is a bottom sheet.
 
-- **Account bar:** the one identity all agents act as, with a pause-all kill switch.
-- **Summary:** chats in flight, how many need you, how many times your info was shared, and how many claims were flagged.
-- **Chat grid:** one card per conversation: agent ⇄ counterparty, bot or human, channel, goal and status (Needs you / Active / Waiting on them / Done). Filter by status.
-- **Timestamps** on every message (hover for full date), and time since last activity on each card.
-- **Source line under every message:** for the user's agent, *which of your info it shared* and the record it was verified against. For the other side, *their claims checked against your records*. ✓ verified · ✗ contradicts your records (FLAG) · ? no record · … pending.
-- **Needs you:** approvals for anything outside an agent's permissions (spend over the limit, sensitive info). Approve or decline, and the agent carries on.
-- **Your info agents can use:** a ledger of the user's data, its source of truth, when it was last verified, and which chats used it. Click one to filter the grid.
-- **Thread view:** the full transcript in a drawer, with a composer for taking the chat over yourself.
-- Blue numbered pins match the **design notes** at the bottom. Toggle them with "Notes".
+The people, chats and scores are sample data (`src/muse/data.ts`). Your sources are drawn from this repo's own history (facemash / GT Campus Quest).
 
-Code: `src/wireframe/` (`data.ts` holds the mock account, info ledger and threads, `Wireframe.tsx` the page, `wireframe.css` the styles).
+Code: `src/muse/`. `data.ts` has the people, scripts and scores, `timeline.ts` sets when replies land and where nodes sit, `Muse.tsx` draws the web and camera, `Panel.tsx` is the expanded node, and `muse.css` the theme.
 
-## `/console`: Multi-tenant agent console
+## `/console`
 
-A black terminal console for watching many agents across isolated tenants (`acme`, `globex`, `initech`). Up to 6 live chat panes, per-message timestamps, a source-verification line under each message, and a verify log. Commands: `/tenant`, `/open`, `/close`, `/pause`, `/resume`, `/list`; plain text sends an operator note.
-
-Code: `src/App.tsx`, `src/store.ts` (simulated live backend), `src/data.ts`, `src/ui/`, `src/terminal.css`.
+An earlier multi-tenant terminal console (many agents, many chats, source-verification lines), kept for reference.
