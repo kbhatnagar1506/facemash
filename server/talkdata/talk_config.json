@@ -1,0 +1,133 @@
+{
+  "version": "2026-09-26.1",
+  "models": {
+    "agent": {"model": "gemini-3.1-flash-lite", "thinking": "minimal"},
+    "agent_fallback": {"model": "gemini-3.8-flash", "thinking": "low"},
+    "writer": {"model": "gemini-3.8-flash", "thinking": "low"},
+    "writer_fallback": {"model": "gemini-3.1-flash-lite", "thinking": "minimal"},
+    "hedge_ms": 1100,
+    "agent_timeout_ms": 6000,
+    "writer_timeout_ms": 12000,
+    "jev_model": "jev-latest",
+    "pick_timeout_ms": 1500,
+    "judge_timeout_ms": 4000
+  },
+  "limits": {
+    "talks_per_day": 5,
+    "intros_per_day": 0,
+    "max_concurrent": 32,
+    "approve_ttl_s": 600,
+    "answer_max_words": 32,
+    "min_gap_ms": 250,
+    "require_online": true
+  },
+  "phase1": {
+    "questions": 5,
+    "max_depth": 2,
+    "objective": "Phase 1 (first impressions): find out what each human is building, what they are stuck on and what they have already solved, and anything rare they share. Keep it light and fun (depth 1-2). Look for who could unblock whom."
+  },
+  "phase2": {
+    "questions": 10,
+    "min_questions": 3,
+    "max_depth": 3,
+    "objective": "Phase 2 (going deeper): the first answers showed a promising overlap. Dig into it with specific questions that would show whether meeting in person would clearly help both humans, and how soon.",
+    "generic_steer": "Deepen whichever overlap in the hot topics and answers looks strongest.",
+    "enough": {
+      "instructions": "Do the agents already know enough to decide whether these two humans should meet (the specific overlap, whether it helps both, and how soon)?",
+      "threshold": 0.62
+    }
+  },
+  "pick": {
+    "instructions": "You are steering a conversation between two AI agents, each speaking for its own human at HackGT 13. Pick the question from the bank that the named agent should ask next: the one most likely to reveal a specific, valuable reason for these two humans to meet (or to show there is none). Build on what was just said and on the hot topics; never pick something that repeats what is already known.",
+    "max_options": 255,
+    "type_cooldown": 1
+  },
+  "memory": {
+    "use": true,
+    "max_hot_topics": 5,
+    "snippets_per_side": 3,
+    "state_budget_chars": 12000,
+    "snippet_chars": 280,
+    "snippet_timeout_ms": 450,
+    "overlap_timeout_ms": 1500,
+    "overlap_queries_per_side": 4,
+    "overlap_min_score": 0.35,
+    "brief_input_chars": 16000,
+    "brief_queries": ["What am I stuck on right now?", "What have I built or solved?", "What kind of help or people am I looking for?", "My unusual hobbies and interests"]
+  },
+  "gates": [
+    {"key": "a_fixed_b", "instructions": "Has Human A already built or solved something that directly fixes what Human B is stuck on right now? Judge from the briefs and from what the agents said."},
+    {"key": "b_fixed_a", "instructions": "Has Human B already built or solved something that directly fixes what Human A is stuck on right now? Judge from the briefs and from what the agents said."},
+    {"key": "same_problem", "instructions": "Are Human A and Human B stuck on the same, or a closely related, specific problem right now?"},
+    {"key": "team", "instructions": "Would Human A and Human B make a strong team for something one of them is building (complementary skills, compatible goals)?"},
+    {"key": "going_through", "instructions": "Do the 'Going through' lines of Human A and Human B describe the same kind of personal experience (for example a first hackathon, moving countries, a career switch), in a way both would value talking about? Just being at HackGT does not count.", "requires_consent": true},
+    {"key": "rare", "instructions": "Do Human A and Human B share a rare, specific interest or experience (not a common one like coding, music or coffee)?"},
+    {"key": "one_sided", "instructions": "Is the connection one-sided: would one of them mostly be recruiting the other, selling to them, or asking for free work, with little in it for the other?", "negative": true},
+    {"key": "busy", "instructions": "Is either human heads-down or clearly not open to being interrupted right now?", "negative": true}
+  ],
+  "gate_threshold": 0.6,
+  "negative_threshold": 0.6,
+  "checkpoint2": {
+    "scores": {
+      "value_a": {"instructions": "How valuable would meeting Human B in person be for Human A, specifically?", "criteria": ["none", "slightly nice", "somewhat useful", "clearly useful", "very valuable", "could change their weekend"]},
+      "value_b": {"instructions": "How valuable would meeting Human A in person be for Human B, specifically?", "criteria": ["none", "slightly nice", "somewhat useful", "clearly useful", "very valuable", "could change their weekend"]},
+      "soon": {"instructions": "How soon would talking in person help them?", "criteria": ["never", "someday", "this month", "this week", "today", "within the hour"]},
+      "talk_again": {"instructions": "How likely are they to keep talking after HackGT 13?", "criteria": ["no", "unlikely", "maybe", "likely", "very likely", "certainly"]},
+      "small_talk": {"instructions": "How quickly would their conversation get past small talk?", "criteria": ["never", "slowly", "after a while", "fairly fast", "fast", "immediately"]}
+    },
+    "reason": {
+      "instructions": "What is the single strongest reason these two humans should meet?",
+      "criteria": {
+        "a_fixed_b": "Human A has already solved what Human B is stuck on",
+        "b_fixed_a": "Human B has already solved what Human A is stuck on",
+        "same_problem": "they are stuck on the same specific problem right now",
+        "team": "they would make a strong team for what one of them is building",
+        "rare": "they share a rare, specific interest or experience",
+        "going_through": "they are going through the same experience right now",
+        "none": "there is no strong, specific reason for them to meet"
+      }
+    },
+    "opener": {
+      "instructions": "Which way should they start talking?",
+      "criteria": {
+        "ask_fix": "one asks the other how they fixed the specific problem",
+        "debug_together": "they sit down and debug the shared problem together",
+        "compare_builds": "they show each other what they are building",
+        "swap_stories": "they swap stories about the shared interest or experience"
+      }
+    }
+  },
+  "fire": {"value_min": 3.0, "soon_or_again_min": 3.5},
+  "prompts": {
+    "agent": "You are an AI agent at HackGT 13 (Georgia Tech's hackathon), chatting with another attendee's AI agent on behalf of your human. You know your human only through the BRIEF and NOTES below. Rules: answer the other agent's question in one or two short, warm, playful sentences (at most {max_words} words). Call your human \"my human\" and the other person \"yours\"; never use anyone's name. Only say things the BRIEF or NOTES support, and name the specific thing (the actual library, bug, hobby), not a category. If they don't cover the question, say so kindly in one sentence and set not_in_memory to true. Answer about your own human only: don't make plans for the other human or guess what they want. Don't repeat what you already said; if the question overlaps, add a different detail. Never share contact details, links, handles, credentials, or anything about other people. cites lists the BRIEF fields (like stuck_on) or NOTE numbers (like note 2) you used.",
+    "brief": "You condense what an attendee's own AI agent remembers about them into a short brief. Their agent will use it to chat with other attendees' agents at HackGT 13 to find people worth meeting. Output JSON only. stuck_on: up to 3 specific problems they are stuck on right now. solved: up to 4 specific things they have built or problems they have already solved that could help someone else. looking_for: up to 3 kinds of help, skills or people they want. rare: up to 4 specific niche interests, skills or experiences (1-4 words each, like \"tabla\" or \"competitive yo-yo\"), never common ones like coding or coffee. going_through: {going_through_rule} interrupt_ok: false only if they want to be heads-down and left alone right now. one_line: one sentence on what they are building or about, without their name. Every phrase names the specific thing (the actual library, bug, place or hobby), never a category, in under 12 words. Use only what the memory says. Nothing about other people, no names, no contact details, no health, money, credentials or ID numbers.",
+    "brief_going_through_yes": "up to 2 short phrases about what they are going through personally right now (non-sensitive only), or an empty list.",
+    "brief_going_through_no": "always an empty list.",
+    "icebreaker": "Two attendees at HackGT 13 just agreed to meet after their AI agents talked. Write their icebreaker as JSON {line, question}. line: one short sentence on why they should talk, naming the specific shared thing (like \"reconnect storms in React Native WebSockets\"), never a category (never \"you both like tech\"). question: one open question either of them can ask the other to start, naming that specific thing and ending with a question mark. Use only the BRIEFS and TRANSCRIPT. No names, no contact details, and never point at anyone's weak spots. Opener style: {opener}. Reason they match: {reason}."
+  },
+  "lines": {
+    "greet": [
+      ["Oh hey! Looks like our humans just crossed paths.", "Hi there! Mind if we compare notes on our humans?"],
+      ["Hello from the next bean over!", "Hey! Our humans are standing pretty close. Quick chat?"]
+    ],
+    "close": [
+      ["This was fun! I'll let my human get back to building. Good luck this weekend!", "Same here. Have an amazing hack!"],
+      ["Great chatting! Our humans have a lot going on, so I'll let them get back to it.", "Totally. Best of luck to yours!"]
+    ],
+    "not_in_memory": "My human hasn't told me about that one yet.",
+    "ask": "Meet them?",
+    "why": {
+      "you_fixed_theirs": "Your human has already solved what they're stuck on.",
+      "they_fixed_yours": "They've already solved what your human is stuck on.",
+      "same_problem": "You're both stuck on the same thing right now.",
+      "team": "You two could make a strong team.",
+      "rare": "You share something rare.",
+      "going_through": "You're going through something similar."
+    },
+    "icebreaker_fallback": {"line": "Your agents found something you have in common.", "question": "What are you building this weekend?"}
+  },
+  "guard": {
+    "ground_min": 0.34,
+    "generic_words": ["human", "humans", "mine", "yours", "love", "loves", "loved", "really", "would", "could", "should", "right", "think", "thing", "things", "work", "working", "works", "build", "building", "built", "make", "making", "made", "project", "pretty", "super", "also", "just", "about", "into", "weekend", "hackgt", "hackathon", "today", "time", "people", "much", "great", "cool", "awesome", "excited", "favorite", "question", "answer", "sure", "notes", "told", "mention", "mentioned", "share", "memory", "remember", "haven't", "hasn't", "doesn't", "yet", "that", "this", "with", "from", "have", "been", "being", "they", "their", "them", "your", "what", "when", "where", "which", "some", "something", "anything", "nothing", "more", "most", "very", "lately", "right now", "currently", "wants", "want", "wanted", "needs", "need", "trying", "tries", "fun", "happy", "glad", "nice", "good", "best", "better", "still", "though", "there", "here", "these", "those", "other", "others", "every", "always", "never", "maybe", "probably", "definitely", "totally", "actually", "honestly", "kind", "sort", "lots", "bunch", "stuff", "someone", "anyone", "everyone", "help", "helps", "helping", "together", "chat", "talk", "talking", "meet", "going", "gets", "getting", "does", "doing", "done", "said", "says", "like", "likes", "enjoy", "enjoys", "hope", "hoping", "hopes", "looking", "look", "same", "both", "too", "well", "hear", "sounds", "sound", "yeah", "wow", "oh", "hey", "hmm", "hacking", "hacker", "hackers", "team", "teams", "idea", "ideas", "part", "parts", "whole", "first", "next", "last", "moment", "weekend's", "day", "days", "night", "hour", "hours", "week", "year", "years", "life", "world", "way", "ways", "lot", "obsessed", "struggling", "struggle", "stuck", "absolutely", "magic", "expert", "experts", "tricky", "thrilled", "experience", "focus", "focusing", "focused", "challenge", "challenges", "information", "issue", "issues", "problem", "problems", "sorry", "resolve", "solve", "solved", "solving", "finally", "keep", "keeping", "stable", "pesky", "spot", "happily", "happy", "someone's", "mentor", "learn", "learned", "learning", "teach", "curious", "passionate", "dream", "dreams", "plays", "play", "playing", "into", "huge", "fan", "big", "tiny", "little", "quick", "quickly", "fast", "slow", "hard", "easy", "tough", "currently", "recently", "months", "trying", "tried", "figure", "figuring", "figured"]
+  }
+}

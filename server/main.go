@@ -447,7 +447,13 @@ func main() {
 	mintFor := flag.String("muse-token", "", "print a connector token for this email (a test account is made if needed) and exit")
 	sessionFor := flag.String("session-for", "", "print a session cookie value for this email's test account and exit (for testing signed-in flows before Google sign-in is on)")
 	devLogin := flag.Bool("dev-login", false, "local testing only: /api/dev/login?email= signs in a test account (localhost requests only)")
+	devTalk := flag.Bool("dev-talk", false, "local testing only: POST /api/talk/encounter {a_uid, b_uid} starts an agent talk (localhost requests only)")
+	talkConfig := flag.String("talk-config", "", "agent talk config file (default: the built-in talkdata/talk_config.json)")
+	sim := talkSimFlags()
 	flag.Parse()
+	if sim.on() {
+		os.Exit(runTalkSim(sim, *talkConfig))
+	}
 	base := strings.TrimRight(envOr("PUBLIC_URL", "https://gt-campus-quest.vercel.app"), "/")
 	if *mintFor != "" {
 		mintTestToken(*mintFor, *keyFile, base)
@@ -514,6 +520,8 @@ func main() {
 		mountAuth(mux, clientIDs, acct, originOK)
 		mountMuse(mux, acct, hub, *eventFile, base, originOK)
 		mountJev(mux, acct, acct.jev)
+		acct.talk = openAgentTalk(acct, hubSink{hub}, *talkConfig) // GEMINI_API_KEY(_FILE) + JEV_API_KEY(_FILE)
+		mountTalk(mux, acct, acct.talk, originOK, *devTalk)
 		if *devLogin {
 			mountDevLogin(mux, acct)
 		}

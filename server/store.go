@@ -369,6 +369,7 @@ type memStore struct {
 	tokens  map[string]memToken   // hash → owner
 	memory  map[string]memMemory  // "<tenant>/<id>"
 	fast    *memFastTables        // the mapi_* tables (memfast_store.go), made on first use
+	talk    *memTalkTables        // agent talk's tables (agenttalk_store.go), made on first use
 }
 
 type memMemory struct {

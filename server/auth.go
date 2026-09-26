@@ -248,6 +248,7 @@ type accounts struct {
 	sess   sessions
 	fast   *memFast // attendees' memory in MAPI (memfast.go); nil when off
 	jev    *jevLook // outfits picked from agent memory (jevlook.go); nil when off
+	talk   *agentTalk // agents talking when attendees meet (agenttalk.go); nil when off
 }
 
 // mountAuth adds /api/me, /api/auth/google and /api/auth/logout. With no client IDs
