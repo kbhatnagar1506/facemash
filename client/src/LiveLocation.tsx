@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { solve, toCampus, type Fix, type GeoCfg, type LiveStatus, type Pt2 } from './geo'
 import type { MotionStatus } from './motion'
 
+// raw coordinates are for on-site calibration (?calibrate), not for everyone
+const RAW = typeof location !== 'undefined' && new URLSearchParams(location.search).has('calibrate')
+
 /** The 📍 pill: what live location is doing right now. Tap to turn it on/off. */
 export function LivePill({
   live, status, fix, where, room, onToggle,
@@ -33,7 +36,7 @@ export function LivePill({
   return (
     <button className={on ? 'live-pill on' : 'live-pill'} onClick={onToggle} title={live ? 'Turn live location off and steer yourself' : 'Move your bean with your phone\'s location'}>
       {live ? '📍' : '🧭'} {text}{live ? ' · tap to turn off' : ''}
-      {live && fix && <span className="live-raw">{fix.lat.toFixed(6)}, {fix.lon.toFixed(6)}</span>}
+      {live && fix && RAW && <span className="live-raw">{fix.lat.toFixed(6)}, {fix.lon.toFixed(6)}</span>}
     </button>
   )
 }
