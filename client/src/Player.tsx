@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { Avatar, type AvatarState } from './Avatar'
@@ -82,6 +82,7 @@ export function Player({
   const snap = useRef(false)
   const lean = useRef(0)
   const puff = useRef<THREE.Mesh>(null!)
+  const confetti = useRef<ConfettiHandle>(null)
   const puffT = useRef(1) // landing dust ring, 0..1
   const { camera, scene, gl } = useThree()
 
@@ -372,6 +373,8 @@ export function Player({
       if (intro.current >= 1) {
         intro.current = -1
         snap.current = true // hard cut to the player camera
+        // and a celebratory confetti pop around you as you arrive
+        confetti.current?.burst(p.x, height.current, p.y, view.mode === 'inside' ? (view.scale ?? 1) : 1)
         window.dispatchEvent(new CustomEvent('cinematic', { detail: false }))
       }
     } else if (view.mode === 'inside') {
@@ -454,6 +457,7 @@ export function Player({
         shadow-camera-far={400}
         shadow-bias={-0.0004}
       />
+      <Confetti ref={confetti} />
       <mesh ref={puff} rotation-x={-Math.PI / 2} visible={false}>
         <ringGeometry args={[0.35, 0.6, 32]} />
         <meshBasicMaterial color="#f4ecdc" transparent opacity={0} depthWrite={false} />
@@ -511,3 +515,77 @@ function timeToU(T: Float32Array, t: number) {
   const span = T[hi] - T[lo] || 1
   return (lo + (t - T[lo]) / span) / (T.length - 1)
 }
+
+/* ------------------------------------------------------------------ confetti */
+
+export interface ConfettiHandle {
+  burst: (x: number, y: number, z: number, scale: number) => void
+}
+
+const CONFETTI_N = 160
+const CONFETTI_COLORS = ['#f26b5b', '#f7c548', '#2bb3c0', '#7cc38b', '#b58be0', '#ff8fb1', '#3fb8f0', '#ffffff']
+
+/** A pop of paper confetti that bursts up around you, flutters and settles (2.8 s). */
+const Confetti = forwardRef<ConfettiHandle>(function Confetti(_, ref) {
+  const mesh = useRef<THREE.InstancedMesh>(null!)
+  const st = useRef<{ t: number; pos: Float32Array; vel: Float32Array; spin: Float32Array; s: number } | null>(null)
+  const tmp = useMemo(() => ({ m: new THREE.Matrix4(), q: new THREE.Quaternion(), e: new THREE.Euler(), p: new THREE.Vector3(), sc: new THREE.Vector3() }), [])
+  useImperativeHandle(ref, () => ({
+    burst(x, y, z, scale) {
+      const pos = new Float32Array(CONFETTI_N * 3)
+      const vel = new Float32Array(CONFETTI_N * 3)
+      const spin = new Float32Array(CONFETTI_N * 3)
+      for (let i = 0; i < CONFETTI_N; i++) {
+        const a = Math.random() * Math.PI * 2
+        const r = Math.random() * 0.5
+        pos.set([x + Math.cos(a) * r * scale, y + 1.2 * scale, z + Math.sin(a) * r * scale], i * 3)
+        const out = (1.2 + Math.random() * 2.2) * scale
+        vel.set([Math.cos(a) * out, (3.2 + Math.random() * 2.6) * scale, Math.sin(a) * out], i * 3)
+        spin.set([Math.random() * 8, Math.random() * 8, Math.random() * 8], i * 3)
+      }
+      st.current = { t: 0, pos, vel, spin, s: scale }
+      mesh.current.visible = true
+    },
+  }))
+  useEffect(() => {
+    mesh.current.visible = false // shown only during a burst (set imperatively, not via props)
+    const c = new THREE.Color()
+    for (let i = 0; i < CONFETTI_N; i++) mesh.current.setColorAt(i, c.set(CONFETTI_COLORS[i % CONFETTI_COLORS.length]))
+    if (mesh.current.instanceColor) mesh.current.instanceColor.needsUpdate = true
+  }, [])
+  useFrame((_, dt) => {
+    const s = st.current
+    if (!s) return
+    const d = Math.min(dt, 0.05)
+    s.t += d
+    const life = 2.8
+    const shrink = s.t > life - 0.6 ? Math.max(0, (life - s.t) / 0.6) : 1
+    for (let i = 0; i < CONFETTI_N; i++) {
+      const k = i * 3
+      // gravity, heavy air drag, and a sideways flutter as the paper falls
+      s.vel[k + 1] -= 6 * s.s * d
+      s.vel[k] *= 1 - 1.6 * d
+      s.vel[k + 2] *= 1 - 1.6 * d
+      s.vel[k + 1] = Math.max(s.vel[k + 1], -1.1 * s.s)
+      s.pos[k] += (s.vel[k] + Math.sin(s.t * 6 + i) * 0.35 * s.s) * d
+      s.pos[k + 1] = Math.max(0.02, s.pos[k + 1] + s.vel[k + 1] * d)
+      s.pos[k + 2] += (s.vel[k + 2] + Math.cos(s.t * 5 + i) * 0.35 * s.s) * d
+      tmp.e.set(s.spin[k] * s.t, s.spin[k + 1] * s.t, s.spin[k + 2] * s.t)
+      tmp.q.setFromEuler(tmp.e)
+      tmp.p.set(s.pos[k], s.pos[k + 1], s.pos[k + 2])
+      tmp.sc.setScalar(s.s * shrink)
+      mesh.current.setMatrixAt(i, tmp.m.compose(tmp.p, tmp.q, tmp.sc))
+    }
+    mesh.current.instanceMatrix.needsUpdate = true
+    if (s.t >= life) {
+      st.current = null
+      mesh.current.visible = false
+    }
+  })
+  return (
+    <instancedMesh ref={mesh} args={[undefined, undefined, CONFETTI_N]} frustumCulled={false}>
+      <planeGeometry args={[0.13, 0.08]} />
+      <meshBasicMaterial side={THREE.DoubleSide} toneMapped={false} />
+    </instancedMesh>
+  )
+})

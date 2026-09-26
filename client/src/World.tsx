@@ -157,6 +157,36 @@ function Ground({ campus }: { campus: Campus }) {
   )
 }
 
+/** A fast "is (x, z) at least `pad` metres clear of every road and path edge" test. */
+function roadClearance(campus: Campus) {
+  // coarse grid of road/path samples for "too close to a road" checks
+  const CELL = 8
+  const grid = new Map<string, [number, number, number][]>()
+  for (const r of campus.roads)
+    for (let i = 1; i < r.pts.length; i++) {
+      const [ax, az] = r.pts[i - 1]
+      const [bx, bz] = r.pts[i]
+      const L = Math.hypot(bx - ax, bz - az)
+      for (let t = 0; t <= L; t += 2) {
+        const x = ax + ((bx - ax) * t) / L
+        const z = az + ((bz - az) * t) / L
+        const k = `${Math.floor(x / CELL)},${Math.floor(z / CELL)}`
+        const list = grid.get(k) ?? []
+        list.push([x, z, r.w / 2])
+        grid.set(k, list)
+      }
+    }
+  const clearOfRoads = (x: number, z: number, pad: number) => {
+    const gx = Math.floor(x / CELL)
+    const gz = Math.floor(z / CELL)
+    for (let i = -1; i <= 1; i++)
+      for (let j = -1; j <= 1; j++)
+        for (const [rx, rz, hw] of grid.get(`${gx + i},${gz + j}`) ?? []) if (Math.hypot(x - rx, z - rz) < hw + pad) return false
+    return true
+  }
+  return clearOfRoads
+}
+
 /**
  * Street trees: the OSM trees plus a row along the footpaths every ~16 m (alternating
  * sides), kept clear of buildings, roads, paths and the HackGT entrance shells.
@@ -165,31 +195,7 @@ function useTreePoints(campus: Campus) {
   return useMemo(() => {
     const pts: [number, number][] = campus.trees.map(([x, z]) => [x, z])
     const coll = new Collider(campus)
-    // coarse grid of road/path samples for "too close to a road" checks
-    const CELL = 8
-    const grid = new Map<string, [number, number, number][]>()
-    for (const r of campus.roads)
-      for (let i = 1; i < r.pts.length; i++) {
-        const [ax, az] = r.pts[i - 1]
-        const [bx, bz] = r.pts[i]
-        const L = Math.hypot(bx - ax, bz - az)
-        for (let t = 0; t <= L; t += 2) {
-          const x = ax + ((bx - ax) * t) / L
-          const z = az + ((bz - az) * t) / L
-          const k = `${Math.floor(x / CELL)},${Math.floor(z / CELL)}`
-          const list = grid.get(k) ?? []
-          list.push([x, z, r.w / 2])
-          grid.set(k, list)
-        }
-      }
-    const clearOfRoads = (x: number, z: number, pad: number) => {
-      const gx = Math.floor(x / CELL)
-      const gz = Math.floor(z / CELL)
-      for (let i = -1; i <= 1; i++)
-        for (let j = -1; j <= 1; j++)
-          for (const [rx, rz, hw] of grid.get(`${gx + i},${gz + j}`) ?? []) if (Math.hypot(x - rx, z - rz) < hw + pad) return false
-      return true
-    }
+    const clearOfRoads = roadClearance(campus)
     const shells = campus.event?.entrances ?? []
     const taken = (x: number, z: number) => pts.some(([px, pz]) => Math.abs(px - x) < 6 && Math.abs(pz - z) < 6)
     for (const r of campus.roads) {
@@ -214,6 +220,97 @@ function useTreePoints(campus: Campus) {
     }
     return pts
   }, [campus])
+}
+
+/** Park benches and warm lamp posts along the footpaths (instanced: one draw each). */
+function StreetFurniture({ campus }: { campus: Campus }) {
+  const ramp = useToonRamp()
+  const spots = useMemo(() => {
+    const coll = new Collider(campus)
+    const clear = roadClearance(campus)
+    const shells = campus.event?.entrances ?? []
+    const lamps: [number, number][] = []
+    const benches: [number, number, number][] = []
+    const near = (list: [number, number, ...number[]][], x: number, z: number, d: number) => list.some(([px, pz]) => Math.hypot(px - x, pz - z) < d)
+    for (const r of campus.roads) {
+      if (!r.foot) continue
+      for (let i = 1; i < r.pts.length; i++) {
+        const [ax, az] = r.pts[i - 1]
+        const [bx, bz] = r.pts[i]
+        const L = Math.hypot(bx - ax, bz - az)
+        if (L < 6) continue
+        const nx = -(bz - az) / L
+        const nz = (bx - ax) / L
+        for (let t = 4; t < L; t += 22) {
+          const side = (Math.floor(t / 22) + i) % 2 ? 1 : -1
+          const px = ax + ((bx - ax) * t) / L
+          const pz = az + ((bz - az) * t) / L
+          // a lamp right at the path edge
+          const lx = px + nx * (r.w / 2 + 0.7) * side
+          const lz = pz + nz * (r.w / 2 + 0.7) * side
+          if (!coll.blocked(lx, lz, 1) && clear(lx, lz, 0.5) && !near(lamps, lx, lz, 12) && !shells.some(([sx, sz]) => Math.hypot(lx - sx, lz - sz) < 6)) lamps.push([lx, lz])
+          // every other stop, a bench on the other side, facing the path
+          const bt = t + 11
+          if (bt >= L || (Math.floor(t / 22) % 2)) continue
+          const qx = ax + ((bx - ax) * bt) / L - nx * (r.w / 2 + 1.1) * side
+          const qz = az + ((bz - az) * bt) / L - nz * (r.w / 2 + 1.1) * side
+          if (!coll.blocked(qx, qz, 1.4) && clear(qx, qz, 0.7) && !near(benches, qx, qz, 18) && !shells.some(([sx, sz]) => Math.hypot(qx - sx, qz - sz) < 7))
+            benches.push([qx, qz, Math.atan2(nx * side, nz * side)])
+        }
+      }
+    }
+    return { lamps, benches }
+  }, [campus])
+
+  const benchGeo = useMemo(() => {
+    const parts: THREE.BufferGeometry[] = []
+    const box = (s: THREE.Vector3Tuple, p: THREE.Vector3Tuple) => {
+      const g = new THREE.BoxGeometry(...s)
+      g.translate(...p)
+      parts.push(g.toNonIndexed())
+    }
+    for (const x of [-0.7, 0.7]) {
+      box([0.08, 0.45, 0.5], [x, 0.225, 0])
+      box([0.08, 0.5, 0.06], [x, 0.7, -0.24])
+    }
+    for (const z of [-0.18, 0, 0.18]) box([1.8, 0.05, 0.14], [0, 0.47, z])
+    for (const y of [0.65, 0.85]) box([1.8, 0.1, 0.04], [0, y, -0.26])
+    return mergeGeometries(parts)!
+  }, [])
+
+  const placeLamps = (mesh: THREE.InstancedMesh | null, y: number) => {
+    if (!mesh) return
+    const m = new THREE.Matrix4()
+    spots.lamps.forEach(([x, z], i) => mesh.setMatrixAt(i, m.makeTranslation(x, y, z)))
+    mesh.instanceMatrix.needsUpdate = true
+  }
+  const placeBenches = (mesh: THREE.InstancedMesh | null) => {
+    if (!mesh) return
+    const m = new THREE.Matrix4()
+    spots.benches.forEach(([x, z, r], i) => mesh.setMatrixAt(i, m.makeRotationY(r).setPosition(x, 0, z)))
+    mesh.instanceMatrix.needsUpdate = true
+  }
+  const nl = spots.lamps.length
+  const nb = spots.benches.length
+  return (
+    <group>
+      <instancedMesh ref={(m) => placeLamps(m, 1.9)} args={[undefined, undefined, nl]} castShadow>
+        <cylinderGeometry args={[0.07, 0.1, 3.8, 6]} />
+        <meshToonMaterial color="#2c3a4a" gradientMap={ramp} />
+      </instancedMesh>
+      <instancedMesh ref={(m) => placeLamps(m, 3.95)} args={[undefined, undefined, nl]}>
+        <sphereGeometry args={[0.28, 10, 8]} />
+        <meshBasicMaterial color="#ffe7a8" toneMapped={false} />
+      </instancedMesh>
+      <instancedMesh ref={(m) => placeLamps(m, 3.72)} args={[undefined, undefined, nl]}>
+        <cylinderGeometry args={[0.32, 0.22, 0.1, 10]} />
+        <meshToonMaterial color="#2c3a4a" gradientMap={ramp} />
+      </instancedMesh>
+      <instancedMesh ref={placeBenches} args={[undefined, undefined, nb]} castShadow receiveShadow geometry={benchGeo}>
+        <meshToonMaterial color="#a86f3e" gradientMap={ramp} />
+      </instancedMesh>
+    </group>
+  )
 }
 
 function Trees({ campus }: { campus: Campus }) {
@@ -299,6 +396,7 @@ export function World({ campus, onOpenEvent }: { campus: Campus; onOpenEvent: ()
       <Ground campus={campus} />
       <Buildings campus={campus} />
       <Trees campus={campus} />
+      <StreetFurniture campus={campus} />
       <EventBeacon campus={campus} onOpen={onOpenEvent} />
     </group>
   )
