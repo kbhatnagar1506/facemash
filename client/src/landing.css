@@ -1334,3 +1334,21 @@ html.scroll-page #root {
     margin-left: 34px;
   }
 }
+
+/* ---------- /settings: your memory ---------- */
+.set-card { width: min(640px, 100%); text-align: left; }
+.set-card h1, .set-card .muse-sub { text-align: center; }
+.set-form { display: grid; gap: 18px; margin: 8px 0 22px; }
+.set-field { display: grid; gap: 6px; }
+.set-label { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font: 700 14px var(--display); color: var(--ink); }
+.set-label small { font: 500 12.5px system-ui, sans-serif; color: var(--ink-3); }
+.set-card textarea, .set-card input { width: 100%; box-sizing: border-box; font: 15px/1.45 system-ui, sans-serif; color: var(--ink); background: var(--paper); border: 1px solid rgba(27, 29, 36, 0.12); border-radius: 12px; padding: 10px 12px; resize: vertical; }
+.set-card textarea:focus, .set-card input:focus { outline: 2px solid #3b63c4; outline-offset: 1px; background: #fff; }
+.set-notes { display: grid; gap: 10px; }
+.set-note { display: grid; gap: 6px; padding: 10px; border-radius: 14px; background: var(--paper); }
+.set-note textarea { background: #fff; }
+.set-note-top { display: flex; gap: 10px; align-items: center; }
+.set-note-top input { max-width: 160px; background: #fff; padding: 6px 10px; }
+.set-save { position: sticky; bottom: 12px; display: grid; gap: 6px; padding-top: 6px; background: linear-gradient(transparent, #fff 30%); }
+.set-save .muse-fine { text-align: center; margin: 0; }
+.set-erase { display: block; margin: 14px auto 0; color: #b3261e; }

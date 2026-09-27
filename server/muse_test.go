@@ -482,3 +482,52 @@ func TestAgentMemory(t *testing.T) {
 		t.Fatalf("memory prompt: %s", p)
 	}
 }
+
+// Your own memory: read it whole on /settings, edit it, and the edit is saved (redacted)
+// like an upload; never someone else's, never from another site.
+func TestMyMemoryReadAndEdit(t *testing.T) {
+	store := newMemStore()
+	acc := &accounts{store: store, tenant: "hackgt13", sess: sessions{secret: []byte("0123456789abcdef0123456789abcdef")}}
+	a, _, _ := store.SignIn(context.Background(), "hackgt13", user{Sub: "a", Email: "a@x.test", Name: "Ann"})
+	b, _, _ := store.SignIn(context.Background(), "hackgt13", user{Sub: "b", Email: "b@x.test", Name: "Ben"})
+	store.SaveMemory(context.Background(), "hackgt13", b.ID, []byte(`{"user_md":"Ben's secret notes"}`), nil)
+	mux := http.NewServeMux()
+	mountMuse(mux, acc, newHub(), "event.json", "https://site.test", func(r *http.Request) bool { return r.Header.Get("Origin") == "https://site.test" })
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	do := func(method string, who int64, origin, body string) (int, map[string]any) {
+		req, _ := http.NewRequest(method, srv.URL+"/api/me/memory", strings.NewReader(body))
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		v, exp := acc.sess.issue(kindSession, who, time.Hour)
+		req.AddCookie(&http.Cookie{Name: sessionCookie, Value: v, Expires: exp})
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		var out map[string]any
+		json.NewDecoder(res.Body).Decode(&out)
+		return res.StatusCode, out
+	}
+	if c, out := do("GET", a.ID, "", ""); c != 200 || out["stored"] != false {
+		t.Fatalf("nothing yet: %d %v", c, out)
+	}
+	edit := `{"memory":{"user_md":"I build drones. password: hunter2hunter2","daily_notes":[{"date":"2026-09-27","content":"Met the Meta team."}],"bank":{"opinions":"Tabs over spaces."}}}`
+	if c, _ := do("PUT", a.ID, "https://evil.test", edit); c != 403 {
+		t.Fatalf("another site can't edit: %d", c)
+	}
+	if c, out := do("PUT", a.ID, "https://site.test", edit); c != 200 || out["saved"] != true {
+		t.Fatalf("save: %d %v", c, out)
+	}
+	c, out := do("GET", a.ID, "", "")
+	mem, _ := out["memory"].(map[string]any)
+	raw, _ := json.Marshal(mem)
+	if c != 200 || out["stored"] != true || !strings.Contains(string(raw), "I build drones") || !strings.Contains(string(raw), "Met the Meta team") || strings.Contains(string(raw), "hunter2hunter2") {
+		t.Fatalf("read back (redacted): %d %s", c, raw)
+	}
+	if strings.Contains(string(raw), "Ben's secret") {
+		t.Fatal("only your own memory")
+	}
+}

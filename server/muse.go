@@ -788,6 +788,66 @@ func mountMuse(mux *http.ServeMux, acc *accounts, hub *Hub, eventFile, base stri
 		writeJSON(w, http.StatusOK, info)
 	})
 
+	// your own memory, whole, to read and edit on /settings (only ever your own):
+	// GET gives the stored copy; PUT saves an edited one through the same door as an upload
+	// (redaction, storage, index, outfit), so an edit counts like your agent sending it.
+	mux.HandleFunc("/api/me/memory", func(w http.ResponseWriter, r *http.Request) {
+		id, ok := acc.sess.read(r)
+		if !ok {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "sign in first"})
+			return
+		}
+		ts, _ := acc.store.(talkStore)
+		ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+		defer cancel()
+		switch r.Method {
+		case http.MethodGet:
+			if ts == nil {
+				writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "memory isn't available here"})
+				return
+			}
+			raw, err := ts.talkMemory(ctx, acc.tenant, id)
+			if err != nil {
+				writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "try again in a moment"})
+				return
+			}
+			w.Header().Set("Cache-Control", "no-store")
+			if len(raw) == 0 {
+				writeJSON(w, http.StatusOK, map[string]any{"stored": false})
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"stored":true,"memory":`))
+			w.Write(raw)
+			w.Write([]byte(`}`))
+		case http.MethodPut:
+			if r.Header.Get("Origin") == "" || !originOK(r) {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "bad origin"})
+				return
+			}
+			var in struct {
+				Memory map[string]any `json:"memory"`
+			}
+			dec := json.NewDecoder(io.LimitReader(r.Body, maxMemory))
+			if err := dec.Decode(&in); err != nil || len(in.Memory) == 0 {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": `send {"memory": {...}}`})
+				return
+			}
+			in.Memory["edited_at"] = time.Now().UTC().Format(time.RFC3339)
+			body, redacted, err := ingestMemory(ctx, acc, acc.tenant, id, in.Memory, nil, "edited memory")
+			if err != nil {
+				log.Printf("muse: #%d memory edit: %v", id, err)
+				writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "couldn't save that just now"})
+				return
+			}
+			log.Printf("muse: #%d edited their memory (%.1f KB, %d redacted)", id, float64(len(body))/1024, redacted)
+			writeJSON(w, http.StatusOK, map[string]any{"saved": true, "kb": float64(len(body)*10/1024) / 10, "redacted": redacted})
+		default:
+			w.Header().Set("Allow", "GET, PUT")
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "GET or PUT"})
+		}
+	})
+
 	// latency test: "I'm asking my agent now", then how fast it came to us and got its answer
 	mux.HandleFunc("/api/muse/ask", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.Header.Get("Origin") == "" || !originOK(r) {
