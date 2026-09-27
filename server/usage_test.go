@@ -260,6 +260,24 @@ func TestUsagePostgres(t *testing.T) {
 		t.Fatalf("meter: %v %+v", err, mr)
 	}
 
+	// the speed panel reads the talks' own timings
+	if err := st.talkEnsureSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	rec := &talkRecord{ID: "tk_speed", Tenant: "hackgt13", A: ids[0], B: ids[1], State: "no_match", Started: time.Now().UTC(),
+		Transcript: []talkLine{{Kind: "question", QID: "q001"}, {Kind: "answer", FirstMS: 400, TookMS: 900}, {Kind: "question", QID: "q002"}, {Kind: "answer", FirstMS: 600, TookMS: 1100}},
+		Jev:        []talkJevCall{{What: "pick", TookMS: 350, Options: 60}, {What: "pick", TookMS: 1500, Options: 60, Err: "timeout"}, {What: "checkpoint1", TookMS: 200}}}
+	if err := st.talkCreate(ctx, rec); err != nil {
+		t.Fatal(err)
+	}
+	tt, err := st.usageTalkTimes(ctx, "hackgt13", time.Now().Add(-time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sp := usageSpeedOf(tt); sp.Talks != 1 || sp.QuestionsPerTalk != 2 || sp.Picks != 2 || sp.PickFailed != 1 || sp.Answers != 2 || sp.FirstWordsP50MS != 400 {
+		t.Fatalf("speed: %+v", sp)
+	}
+
 	// deleting an account takes its sessions (cascade)
 	if _, err := pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, ids[1]); err != nil {
 		t.Fatal(err)

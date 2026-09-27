@@ -323,6 +323,9 @@ export function createMockApi(params: URLSearchParams): AdminApi {
         avg_session_min: round1(100.4 * k), median_session_min: round1(41.5 * k), avg_per_person_min: round1(347.8 * k),
         returning: 241 * k, peak_online: 142 * k, peak_at: hasTalks ? new Date(end - 5 * 3600_000).toISOString() : null, online_now: 37 * k,
       },
+      speed: hasTalks
+        ? { talks: 142, questions_per_talk: 13.4, picks: 1903, pick_p50_ms: 412, pick_p90_ms: 780, pick_failed: 9, avg_options: 60, answers: 1903, first_words_p50_ms: 540, first_words_p90_ms: 910, answer_p50_ms: 1320, hours_back: 24 }
+        : undefined,
       hourly,
       top,
       voice: { calls: 71 * k, minutes: round1(152.3 * k), avg_call_sec: 129 * k, people: 63 * k },

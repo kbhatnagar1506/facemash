@@ -31,10 +31,12 @@ type talkBrief struct {
 	LookingFor   []string  `json:"looking_for"`
 	Rare         []string  `json:"rare"`
 	GoingThrough []string  `json:"going_through,omitempty"`
+	Life         []string  `json:"life,omitempty"` // who they are outside the project: from, fun, cares about
 	InterruptOK  bool      `json:"interrupt_ok"`
 	OneLine      string    `json:"one_line"`
 	At           time.Time `json:"at"`
 	Hash         string    `json:"hash,omitempty"` // of the memory it was made from
+	V            int       `json:"v,omitempty"`    // talkBriefVersion it was made with
 }
 
 type talkLine struct {

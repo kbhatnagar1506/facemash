@@ -101,6 +101,10 @@ type talkConfig struct {
 		Instructions string `json:"instructions"`
 		MaxOptions   int    `json:"max_options"`
 		TypeCooldown int    `json:"type_cooldown"` // the last N questions' types are left out (variety)
+		// question types about the project; after MaxWorkStreak of them in a row, the next
+		// question is about the person (0: no limit)
+		WorkTypes     []string `json:"work_types"`
+		MaxWorkStreak int      `json:"max_work_streak"`
 	} `json:"pick"`
 	Memory struct {
 		Use                   bool     `json:"use"`
@@ -227,6 +231,17 @@ type talkQuestion struct {
 	Informs    []string `json:"informs"`
 	Horizon    string   `json:"horizon"`
 	FollowupOK bool     `json:"followup_ok"`
+	// Say: how the asking agent puts it in the chat (talkdata/questions_say.json); Text is
+	// what jev picks from and what the answering agent is asked
+	Say string `json:"-"`
+}
+
+// said: the question as it appears in the chat.
+func (q talkQuestion) said() string {
+	if q.Say != "" {
+		return q.Say
+	}
+	return q.Text
 }
 
 func (q talkQuestion) gated() bool { return q.Consent != "" && q.Consent != "none" }
@@ -245,6 +260,11 @@ func loadTalkBank() ([]talkQuestion, string) {
 	if json.Unmarshal(b, &f) != nil || len(f.Questions) == 0 {
 		return talkFixtureBank, "fixture"
 	}
+	// the casual wording of each question, when there is one
+	say := map[string]string{}
+	if sb, err := talkFS.ReadFile("talkdata/questions_say.json"); err == nil {
+		json.Unmarshal(sb, &say)
+	}
 	var out []talkQuestion
 	seen := map[string]bool{}
 	for _, q := range f.Questions {
@@ -252,6 +272,7 @@ func loadTalkBank() ([]talkQuestion, string) {
 			continue
 		}
 		seen[q.ID] = true
+		q.Say = strings.TrimSpace(say[q.ID])
 		out = append(out, q)
 	}
 	return out, f.Version

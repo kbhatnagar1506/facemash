@@ -143,7 +143,23 @@ export interface UsageService {
 }
 
 /** /api/admin/usage: time in the game and what the paid services were used for */
+export interface UsageSpeed {
+  talks: number
+  questions_per_talk: number
+  picks: number
+  pick_p50_ms: number
+  pick_p90_ms: number
+  pick_failed: number
+  avg_options: number
+  answers: number
+  first_words_p50_ms: number
+  first_words_p90_ms: number
+  answer_p50_ms: number
+  hours_back: number
+}
+
 export interface Usage {
+  speed?: UsageSpeed
   play: UsagePlay
   hourly: { hour: string; people: number; minutes: number }[]
   top: (Person & { minutes: number; sessions: number })[]

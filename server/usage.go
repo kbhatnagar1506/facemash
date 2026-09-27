@@ -83,6 +83,20 @@ type usageStore interface {
 	usageSaveMeter(ctx context.Context, tenant string, rows []usageMeterRow) error
 	usageSessions(ctx context.Context, tenant string, includeTest bool) ([]usageSessionRow, error)
 	usageMeterRows(ctx context.Context, tenant string) ([]usageMeterRow, error)
+	usageTalkTimes(ctx context.Context, tenant string, since time.Time) (usageTalkTimes, error)
+}
+
+// usageTalkTimes: the raw timings of the agent talks since some time (the speed panel).
+type usageTalkTimes struct {
+	talks, questions int
+	picks            []usagePickTime
+	firstMS, tookMS  []float64 // answers: to the first words, to the whole answer
+}
+
+type usagePickTime struct {
+	ms      float64
+	options int
+	failed  bool
 }
 
 // ---------- the meter ----------
@@ -359,7 +373,58 @@ type usageVoice struct {
 	People     int     `json:"people"` // have a voice memory
 }
 
+// usageSpeed: how fast the agent talks run (the last usageSpeedFor), for checking it's snappy.
+type usageSpeed struct {
+	Talks            int     `json:"talks"`
+	QuestionsPerTalk float64 `json:"questions_per_talk"`
+	Picks            int     `json:"picks"` // jev choosing the next question
+	PickP50MS        float64 `json:"pick_p50_ms"`
+	PickP90MS        float64 `json:"pick_p90_ms"`
+	PickFailed       int     `json:"pick_failed"` // timed out or errored (the first eligible question is asked instead)
+	AvgOptions       float64 `json:"avg_options"` // questions jev chose from
+	Answers          int     `json:"answers"`
+	FirstWordsP50MS  float64 `json:"first_words_p50_ms"` // an answer's first words on screen
+	FirstWordsP90MS  float64 `json:"first_words_p90_ms"`
+	AnswerP50MS      float64 `json:"answer_p50_ms"` // the whole answer
+	HoursBack        int     `json:"hours_back"`
+}
+
+const usageSpeedFor = 24 * time.Hour
+
+func pctl(xs []float64, p float64) float64 {
+	if len(xs) == 0 {
+		return 0
+	}
+	ys := append([]float64(nil), xs...)
+	sort.Float64s(ys)
+	i := int(math.Ceil(p*float64(len(ys)))) - 1
+	return math.Round(ys[max(0, min(i, len(ys)-1))])
+}
+
+func usageSpeedOf(t usageTalkTimes) usageSpeed {
+	sp := usageSpeed{Talks: t.talks, Picks: len(t.picks), Answers: len(t.firstMS), HoursBack: int(usageSpeedFor / time.Hour)}
+	if t.talks > 0 {
+		sp.QuestionsPerTalk = math.Round(float64(t.questions)/float64(t.talks)*10) / 10
+	}
+	var ms []float64
+	opts := 0
+	for _, p := range t.picks {
+		ms = append(ms, p.ms)
+		opts += p.options
+		if p.failed {
+			sp.PickFailed++
+		}
+	}
+	sp.PickP50MS, sp.PickP90MS = pctl(ms, 0.5), pctl(ms, 0.9)
+	if len(t.picks) > 0 {
+		sp.AvgOptions = math.Round(float64(opts)/float64(len(t.picks))*10) / 10
+	}
+	sp.FirstWordsP50MS, sp.FirstWordsP90MS, sp.AnswerP50MS = pctl(t.firstMS, 0.5), pctl(t.firstMS, 0.9), pctl(t.tookMS, 0.5)
+	return sp
+}
+
 type usageReportT struct {
+	Speed     usageSpeed     `json:"speed"`
 	Play      usagePlay      `json:"play"`
 	Hourly    []usageHour    `json:"hourly"` // the last 24 hours, oldest first (empty hours included)
 	Top       []usagePerson  `json:"top"`
@@ -683,7 +748,77 @@ func (s *pgStore) usageMeterRows(ctx context.Context, tenant string) ([]usageMet
 	return out, rows.Err()
 }
 
+func (s *pgStore) usageTalkTimes(ctx context.Context, tenant string, since time.Time) (usageTalkTimes, error) {
+	var out usageTalkTimes
+	arr := func(f string) string {
+		return "CASE WHEN jsonb_typeof(t.record->'" + f + "') = 'array' THEN t.record->'" + f + "' ELSE '[]'::jsonb END"
+	}
+	if err := s.pool.QueryRow(ctx, `SELECT count(*), coalesce(sum((SELECT count(*) FROM jsonb_array_elements(`+arr("transcript")+`) l WHERE l->>'kind' = 'question')), 0)
+		FROM talks t WHERE t.tenant_id = $1 AND t.started_at >= $2`, tenant, since).Scan(&out.talks, &out.questions); err != nil {
+		return out, err
+	}
+	rows, err := s.pool.Query(ctx, `SELECT coalesce((j->>'took_ms')::float8, 0), coalesce((j->>'options')::int, 0), coalesce(j->>'err', '') <> ''
+		FROM talks t CROSS JOIN LATERAL jsonb_array_elements(`+arr("jev")+`) j
+		WHERE t.tenant_id = $1 AND t.started_at >= $2 AND j->>'what' = 'pick'`, tenant, since)
+	if err != nil {
+		return out, err
+	}
+	for rows.Next() {
+		var p usagePickTime
+		if err := rows.Scan(&p.ms, &p.options, &p.failed); err != nil {
+			rows.Close()
+			return out, err
+		}
+		out.picks = append(out.picks, p)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return out, err
+	}
+	rows, err = s.pool.Query(ctx, `SELECT coalesce((l->>'first_ms')::float8, 0), coalesce((l->>'took_ms')::float8, 0)
+		FROM talks t CROSS JOIN LATERAL jsonb_array_elements(`+arr("transcript")+`) l
+		WHERE t.tenant_id = $1 AND t.started_at >= $2 AND l->>'kind' = 'answer' AND (l->>'first_ms') IS NOT NULL`, tenant, since)
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var f, tk float64
+		if err := rows.Scan(&f, &tk); err != nil {
+			return out, err
+		}
+		out.firstMS, out.tookMS = append(out.firstMS, f), append(out.tookMS, tk)
+	}
+	return out, rows.Err()
+}
+
 // ---------- memory ----------
+
+func (m *memStore) usageTalkTimes(_ context.Context, tenant string, since time.Time) (usageTalkTimes, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out usageTalkTimes
+	for _, rec := range m.talkTables().talks {
+		if rec.Tenant != tenant || rec.Started.Before(since) {
+			continue
+		}
+		out.talks++
+		for _, l := range rec.Transcript {
+			switch {
+			case l.Kind == "question":
+				out.questions++
+			case l.Kind == "answer" && l.FirstMS > 0:
+				out.firstMS, out.tookMS = append(out.firstMS, l.FirstMS), append(out.tookMS, l.TookMS)
+			}
+		}
+		for _, j := range rec.Jev {
+			if j.What == "pick" {
+				out.picks = append(out.picks, usagePickTime{ms: j.TookMS, options: j.Options, failed: j.Err != ""})
+			}
+		}
+	}
+	return out, nil
+}
 
 type memUsageTables struct {
 	sessions map[string]usageSessionRow // by id
@@ -833,6 +968,11 @@ func (a *adminAPI) usageReport(ctx context.Context, withTest bool) (*usageReport
 	}
 	if c, err := a.store.adminCounts(ctx, a.acc.tenant, day, withTest); err == nil {
 		u.Voice.People = c.voice
+	}
+	if tt, err := st.usageTalkTimes(ctx, a.acc.tenant, now.Add(-usageSpeedFor)); err == nil {
+		u.Speed = usageSpeedOf(tt)
+	} else {
+		log.Printf("admin: usage: talk speed: %v", err)
 	}
 	a.usage[withTest] = u
 	return u, nil

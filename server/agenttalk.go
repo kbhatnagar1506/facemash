@@ -259,12 +259,16 @@ var talkBriefSchema = map[string]any{
 		"looking_for":   map[string]any{"type": "ARRAY", "items": map[string]any{"type": "STRING"}},
 		"rare":          map[string]any{"type": "ARRAY", "items": map[string]any{"type": "STRING"}},
 		"going_through": map[string]any{"type": "ARRAY", "items": map[string]any{"type": "STRING"}},
+		"life":          map[string]any{"type": "ARRAY", "items": map[string]any{"type": "STRING"}},
 		"interrupt_ok":  map[string]any{"type": "BOOLEAN"},
 		"one_line":      map[string]any{"type": "STRING"},
 	},
-	"required":         []string{"stuck_on", "solved", "looking_for", "rare", "going_through", "interrupt_ok", "one_line"},
-	"propertyOrdering": []string{"one_line", "stuck_on", "solved", "looking_for", "rare", "going_through", "interrupt_ok"},
+	"required":         []string{"stuck_on", "solved", "looking_for", "rare", "life", "going_through", "interrupt_ok", "one_line"},
+	"propertyOrdering": []string{"one_line", "stuck_on", "solved", "looking_for", "rare", "life", "going_through", "interrupt_ok"},
 }
+
+// talkBriefVersion: briefs made before this (no life) are rebuilt in the background.
+const talkBriefVersion = 2
 
 // cleanBrief caps and scrubs a brief (the model's output is never trusted as is).
 func cleanBrief(b talkBrief, okayToShare bool) talkBrief {
@@ -283,6 +287,7 @@ func cleanBrief(b talkBrief, okayToShare bool) talkBrief {
 	}
 	b.StuckOn, b.Solved, b.LookingFor, b.Rare = list(b.StuckOn, 3), list(b.Solved, 4), list(b.LookingFor, 3), list(b.Rare, 4)
 	b.GoingThrough = list(b.GoingThrough, 2)
+	b.Life = list(b.Life, 4)
 	if !okayToShare {
 		b.GoingThrough = nil
 	}
@@ -304,6 +309,15 @@ func (t *agentTalk) briefFor(ctx context.Context, tenant string, id int64, p tal
 		if b, err = t.buildBrief(ctx, tenant, id, p, false); err != nil {
 			return nil, err
 		}
+	} else if b.V < talkBriefVersion {
+		// an older kind of brief: this talk uses it, the next one gets the new one
+		go func() {
+			bctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			defer cancel()
+			if _, err := t.buildBrief(bctx, tenant, id, p, true); err != nil {
+				log.Printf("talk: #%d brief refresh: %v", id, err)
+			}
+		}()
 	}
 	cb := cleanBrief(*b, p.OkayToShare)
 	return &cb, nil
@@ -346,7 +360,7 @@ func (t *agentTalk) buildBrief(ctx context.Context, tenant string, id int64, p t
 	if cur, err := t.ts.talkBrief(ctx, tenant, id); err == nil && cur != nil && cur.Hash == hash {
 		return cur, nil
 	}
-	b := talkBrief{InterruptOK: true, At: time.Now().UTC(), Hash: hash}
+	b := talkBrief{InterruptOK: true, At: time.Now().UTC(), Hash: hash, V: talkBriefVersion}
 	if strings.TrimSpace(input) != "" && t.gem != nil {
 		rule := t.cfg.Prompts.BriefGoingNo
 		if p.OkayToShare {
@@ -363,7 +377,7 @@ func (t *agentTalk) buildBrief(ctx context.Context, tenant string, id int64, p t
 		if err := json.Unmarshal([]byte(out), &b); err != nil {
 			return nil, fmt.Errorf("brief: bad JSON from %s", model)
 		}
-		b.At, b.Hash = time.Now().UTC(), hash
+		b.At, b.Hash, b.V = time.Now().UTC(), hash, talkBriefVersion
 	}
 	b = cleanBrief(b, p.OkayToShare)
 	if err := t.ts.talkSaveBrief(ctx, tenant, id, b); err != nil {

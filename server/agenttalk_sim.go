@@ -263,7 +263,9 @@ func simOnce(cfg *talkConfig, gem *talkGemini, jev *talkJev, pairName string, o 
 			up, _ := json.Marshal(map[string]any{"user_md": strings.Join(p.notes, "\n\n")})
 			store.SaveMemory(ctx, "sim", a.ID, up, nil)
 		} else {
-			store.talkSaveBrief(ctx, "sim", a.ID, p.brief)
+			b := p.brief
+			b.V = talkBriefVersion
+			store.talkSaveBrief(ctx, "sim", a.ID, b)
 		}
 	}
 	sink := &simSink{start: time.Now(), a: ids[0], print: !*o.quiet, verdict: make(chan map[string]any, 1), reveal: make(chan map[string]any, 2), seen: map[int]bool{}}

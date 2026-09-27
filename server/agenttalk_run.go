@@ -9,6 +9,7 @@ import (
 	"log"
 	"math"
 	mrand "math/rand/v2"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -274,7 +275,7 @@ func (r *talkRun) step(plan *talkPlan, next func() *talkPlan) (*talkPlan, *talkP
 	}
 	ans := <-plan.ans
 	r.asked[pick.q.ID] = true
-	r.say(plan.asker, "question", pick.q.ID, pick.q.Text)
+	r.say(plan.asker, "question", pick.q.ID, pick.q.said())
 	if plan.n == 0 {
 		r.mark("first_question")
 	}
@@ -349,24 +350,43 @@ func (r *talkRun) planFrom(ctx context.Context, n int, q talkQuestion) *talkPlan
 // that need consent only when both humans gave it. At most pick.max_options (jev's limit).
 func (r *talkRun) options(n int, ph *talkPhase) map[string]talkQuestion {
 	recent := map[string]bool{} // the types just asked, for variety
+	pick := r.t.cfg.Pick
+	streak, counting := 0, true // work questions in a row, most recent first
 	r.mu.Lock()
-	for i, k := len(r.rec.Transcript)-1, 0; i >= 0 && k < r.t.cfg.Pick.TypeCooldown; i-- {
-		if l := r.rec.Transcript[i]; l.Kind == "question" {
-			recent[r.t.bankType(l.QID)] = true
-			k++
+	for i, k := len(r.rec.Transcript)-1, 0; i >= 0; i-- {
+		l := r.rec.Transcript[i]
+		if l.Kind != "question" {
+			continue
+		}
+		typ := r.t.bankType(l.QID)
+		if k < pick.TypeCooldown {
+			recent[typ] = true
+		}
+		k++
+		if counting && slices.Contains(pick.WorkTypes, typ) {
+			streak++
+		} else {
+			counting = false
+		}
+		if k >= pick.TypeCooldown && !counting {
+			break
 		}
 	}
 	r.mu.Unlock()
+	// the humans are people first: after max_work_streak project questions, a personal one
+	if pick.MaxWorkStreak > 0 && streak >= pick.MaxWorkStreak {
+		for _, typ := range pick.WorkTypes {
+			recent[typ] = true
+		}
+	}
 	return r.eligible(n, ph, recent)
 }
 
 func (r *talkRun) eligible(n int, ph *talkPhase, recent map[string]bool) map[string]talkQuestion {
 	share := r.bothShare()
-	out := map[string]talkQuestion{}
+	byType := map[string][]talkQuestion{}
+	var types []string
 	for _, q := range r.t.bank {
-		if len(out) >= r.t.cfg.Pick.MaxOptions {
-			break
-		}
 		if r.asked[q.ID] || (q.gated() && (!share || q.Consent != "okay_to_share")) {
 			continue
 		}
@@ -379,7 +399,28 @@ func (r *talkRun) eligible(n int, ph *talkPhase, recent map[string]bool) map[str
 		if recent[q.Type] {
 			continue
 		}
-		out[q.ID] = q
+		if byType[q.Type] == nil {
+			types = append(types, q.Type)
+		}
+		byType[q.Type] = append(byType[q.Type], q)
+	}
+	// at most pick.max_options, dealt evenly across the types in a shuffled order: a smaller
+	// choice for jev (a faster pick) that still spans every kind of question
+	for _, qs := range byType {
+		mrand.Shuffle(len(qs), func(i, j int) { qs[i], qs[j] = qs[j], qs[i] })
+	}
+	out := map[string]talkQuestion{}
+	for round := 0; len(out) < r.t.cfg.Pick.MaxOptions; round++ {
+		dealt := false
+		for _, typ := range types {
+			if qs := byType[typ]; round < len(qs) && len(out) < r.t.cfg.Pick.MaxOptions {
+				out[qs[round].ID] = qs[round]
+				dealt = true
+			}
+		}
+		if !dealt {
+			break
+		}
 	}
 	if len(out) == 0 && len(recent) > 0 { // variety must never leave nothing to ask
 		return r.eligible(n, ph, nil)
@@ -543,6 +584,7 @@ func (r *talkRun) briefText(b *talkBrief, rar *talkRarity) string {
 		rare = append(rare, tag)
 	}
 	add("Rare", rare)
+	add("Outside the project", b.Life)
 	if r.bothShare() {
 		add("Going through", b.GoingThrough)
 	}
@@ -578,7 +620,7 @@ var talkAnswerSchema = map[string]any{
 
 // agentBrief: the brief as the answering agent sees it (its own human only).
 func (r *talkRun) agentBrief(b *talkBrief) string {
-	m := map[string]any{"one_line": b.OneLine, "stuck_on": b.StuckOn, "solved": b.Solved, "looking_for": b.LookingFor, "rare": b.Rare, "interrupt_ok": b.InterruptOK}
+	m := map[string]any{"one_line": b.OneLine, "stuck_on": b.StuckOn, "solved": b.Solved, "looking_for": b.LookingFor, "rare": b.Rare, "life": b.Life, "interrupt_ok": b.InterruptOK}
 	if r.bothShare() && len(b.GoingThrough) > 0 {
 		m["going_through"] = b.GoingThrough
 	}
@@ -651,7 +693,7 @@ func (r *talkRun) startAnswer(ctx context.Context, n int, q talkQuestion, side i
 		if len(already) > 0 {
 			user += "\nYOU ALREADY SAID:\n" + strings.Join(already, "\n") + "\n"
 		}
-		user += "\nThe other agent asks: \"" + q.Text + "\"\nReply as JSON {answer, cites, not_in_memory}."
+		user += "\nThe other agent asks: \"" + q.said() + "\"\nReply as JSON {answer, cites, not_in_memory}."
 
 		var buf strings.Builder
 		consumed, words, dropped := 0, 0, 0
@@ -1151,6 +1193,7 @@ func (t *agentTalk) mapiTopics(ctx context.Context, tenant string, s [2]*talkSid
 		lines = append(lines, b.StuckOn...)
 		lines = append(lines, b.LookingFor...)
 		lines = append(lines, b.Rare...)
+		lines = append(lines, b.Life...)
 		lines = append(lines, b.Solved...)
 		for k, l := range lines {
 			if k >= cfg.Memory.OverlapQueriesPerSide {
