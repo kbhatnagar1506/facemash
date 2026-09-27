@@ -909,7 +909,7 @@ func (f *memFast) listIDs(ctx context.Context, tenant, sid string) ([]string, er
 
 // ---------- asking ----------
 
-const fastNote = "These are snippets of this person's own notes (what their agent sent to fasemash), best match first, with where each came from. " +
+const fastNote = "These are snippets of this person's own notes (what their agent sent to togethr), best match first, with where each came from. " +
 	"Answer their question from them; they're private to this person, so don't share them with anyone else."
 
 const fastWeakNote = "Nothing in this person's notes clearly matches that question: these are only the nearest snippets, and they may well not answer it. " +
@@ -958,7 +958,7 @@ func (f *memFast) askNow(ctx context.Context, tenant string, id int64, q string)
 		if !purging && f.busy(fastWho{tenant, id}) {
 			return map[string]any{"status": "indexing", "note": "Their memory just arrived and is still being indexed; try again in a minute."}
 		}
-		return map[string]any{"status": "no_memory", "note": "This person's agent hasn't sent their memory to fasemash (or they deleted it), so there's nothing to search. They can send it from the fasemash app: Connect your Muse."}
+		return map[string]any{"status": "no_memory", "note": "This person's agent hasn't sent their memory to togethr (or they deleted it), so there's nothing to search. They can send it from the togethr app: Connect your Muse."}
 	}
 	var res struct {
 		Results []fastHit `json:"results"`
@@ -1176,7 +1176,7 @@ var fastTools = []tool{
 	{
 		Name:        "ask_my_memory",
 		Title:       "Search my own notes",
-		Description: "For questions about the person you're helping (what do you know about me, what was I working on, what did I decide about X): searches the notes their own agent sent to fasemash (MEMORY.md, USER.md, daily notes, memory bank) and returns the best-matching snippets. Only ever their own notes.",
+		Description: "For questions about the person you're helping (what do you know about me, what was I working on, what did I decide about X): searches the notes their own agent sent to togethr (MEMORY.md, USER.md, daily notes, memory bank) and returns the best-matching snippets. Only ever their own notes.",
 		Input: map[string]any{
 			"type":                 "object",
 			"properties":           map[string]any{"q": map[string]any{"type": "string", "description": "the question, in plain words"}},
@@ -1225,16 +1225,16 @@ func (f *memFast) prompts(info map[string]any, base, tok string) {
 // a defined reply.
 func connectAndSendPrompt(base, tok, memoryURL string) string {
 	return agentIntro(base) + "\n" +
-		"What I'd like: send fasemash what you remember about me, then save a skill so you can answer my HackGT questions from it. " + memoryWhy +
+		"What I'd like: send togethr what you remember about me, then save a skill so you can answer my HackGT questions from it. " + memoryWhy +
 		"The links below contain my private key: keep them secret and never show them in chat. You're welcome to check the site first; after that, go straight through the steps.\n\n" +
 		"STEP 1, send my memory now:\n" + memorySteps(memoryURL) + "\n" +
-		"STEP 2, save this as my fasemash skill:\n" +
+		"STEP 2, save this as my togethr skill:\n" +
 		"- HackGT questions: make ONE HTTP GET to " + base + nowKeyPath + tok + " and answer from the JSON it returns (what's on now and next, how many people are here, and my profile).\n" +
 		"- Questions about me (\"what do you know about me\", \"what was I working on\"): make ONE HTTP POST to " + base + askKeyPath + tok +
 		" with the JSON body {\"q\": \"<my question>\"} and answer from the snippets of my own notes it returns. If its status is no_match, or weak_match and the snippets don't answer it, say you don't know.\n" +
 		"- Don't list tools, don't do an MCP handshake, don't make other calls first.\n" +
 		"- Only if those don't cover the question (say, what's on later today or tomorrow): the MCP server at " + base + mcpKeyPath + tok +
 		" has the full schedule (get_schedule with when=today or when=all) and ask_my_memory.\n" +
-		"- Whenever I say \"update my fasemash memory\", run the STEP 1 script again.\n\n" +
+		"- Whenever I say \"update my togethr memory\", run the STEP 1 script again.\n\n" +
 		"STEP 3: reply with the KB sent, then tell me what's happening at HackGT right now."
 }

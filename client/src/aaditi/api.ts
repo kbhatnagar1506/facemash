@@ -1,4 +1,4 @@
-// Typed client for the facemash admin API (contract v1): /api/admin/me, overview, talks, talks/{id}
+// Typed client for the togethr admin API (contract v1): /api/admin/me, overview, talks, talks/{id}
 // and the SSE stream. `connectLive` wraps the stream with an automatic fallback to polling the
 // live talks every 3 s, so the admin keeps updating behind proxies that break SSE.
 

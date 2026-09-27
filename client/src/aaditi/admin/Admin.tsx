@@ -64,7 +64,7 @@ function Gate({ kind, detail }: { kind: 'loading' | 'signin' | 'forbidden' | 'er
             <h1>Organizers only</h1>
             <p>You're signed in, but this account isn't on the organizer list. Ask an organizer to add your email.</p>
             <a className="btn ghost" href="/">
-              ← back to facemash
+              ← back to togethr
             </a>
           </>
         )}

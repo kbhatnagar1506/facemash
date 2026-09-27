@@ -143,7 +143,7 @@ export function AvatarStudio() {
   }, [])
   useEffect(() => {
     const prev = document.title
-    document.title = 'Bean Studio · facemash'
+    document.title = 'Bean Studio · togethr'
     return () => {
       document.title = prev
     }

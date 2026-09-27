@@ -160,7 +160,7 @@ export function Landing() {
   // page title and browser chrome colour while the landing is up
   useEffect(() => {
     const prev = document.title
-    document.title = 'facemash · meet the right people at HackGT 13'
+    document.title = 'togethr · meet the right people at HackGT 13'
     const meta = document.createElement('meta')
     meta.name = 'theme-color'
     meta.content = PAPER
@@ -359,7 +359,7 @@ export function Landing() {
       <header className="landing-nav" ref={nav}>
         <a className="brand" href="/">
           <BeanMark />
-          facemash
+          togethr
         </a>
         <nav className="nav-links" aria-label="Site">
           <a className="nav-link" href="/avatar">
@@ -470,7 +470,7 @@ export function Landing() {
       <footer className="about">
         <img src="/facemash-logo-66.png" alt="" width="22" height="22" loading="lazy" decoding="async" />
         <p>
-          <b>facemash</b> helps HackGT 13 attendees find the people they'd be glad to meet. You sign in with Google so
+          <b>togethr</b> helps HackGT 13 attendees find the people they'd be glad to meet. You sign in with Google so
           we can save your bean and progress; we only use your name and email for your account.
         </p>
         <nav aria-label="Legal">

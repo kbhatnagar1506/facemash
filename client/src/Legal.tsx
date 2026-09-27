@@ -10,7 +10,7 @@ const UPDATED = 'September 26, 2026'
 function Page({ title, children }: { title: string; children: ReactNode }) {
   useEffect(() => {
     const prev = document.title
-    document.title = `${title} · facemash`
+    document.title = `${title} · togethr`
     return () => {
       document.title = prev
     }
@@ -47,7 +47,7 @@ export function Privacy() {
     <Page title="Privacy Policy">
       <p>
         This app (the landing page, the game at /play, the Bean Studio at /avatar and the Muse connection and voice
-        guide at /muse) is facemash, a project built at HackGT 13. It is not run by HackGT. This page explains what we collect, why, where
+        guide at /muse) is togethr, a project built at HackGT 13. It is not run by HackGT. This page explains what we collect, why, where
         it lives, and how to delete it.
       </p>
 
@@ -164,7 +164,7 @@ export function Terms() {
   return (
     <Page title="Terms of Service">
       <p>
-        facemash is a project built at HackGT 13 (the landing page, the game at /play, the Bean Studio at /avatar and the
+        togethr is a project built at HackGT 13 (the landing page, the game at /play, the Bean Studio at /avatar and the
         Muse connection at /muse). It is not run by HackGT. By using it you agree to these terms.
       </p>
 
@@ -199,7 +199,7 @@ export function Terms() {
 
       <h2>Limitation of liability</h2>
       <p>
-        To the extent the law allows, the facemash team is not liable for indirect or consequential damages arising from
+        To the extent the law allows, the togethr team is not liable for indirect or consequential damages arising from
         your use of the app.
       </p>
 
