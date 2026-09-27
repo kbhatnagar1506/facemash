@@ -1071,9 +1071,40 @@ func TestTalkGeminiHedgesToFallback(t *testing.T) {
 	h2 := newTalkHarness(t)
 	h2.gem.fail = map[string]int{h2.talk.cfg.Models.Agent.Model: 500, h2.talk.cfg.Models.AgentFallback.Model: 500}
 	id2, _ := h2.run(h2.a, h2.b)
+	kind := map[string]bool{h2.talk.cfg.Lines.NotInMemory: true}
+	for _, s := range h2.talk.cfg.Lines.NotInMemoryAlts {
+		kind[s] = true
+	}
+	last, answers := "", 0
 	for _, l := range h2.record(id2).Transcript {
-		if l.Kind == "answer" && l.Text != h2.talk.cfg.Lines.NotInMemory {
+		if l.Kind != "answer" {
+			continue
+		}
+		answers++
+		if !kind[l.Text] || !l.NotInMemory {
 			t.Fatalf("fallback line: %q", l.Text)
+		}
+		if l.Text == last && len(kind) > 1 {
+			t.Fatalf("the same fallback twice in a row: %q", l.Text)
+		}
+		last = l.Text
+	}
+	// nothing to find: the questions stop after limits.max_misses blanks, not after all of them
+	if max := h2.talk.cfg.Limits.MaxMisses; max > 0 && answers > max {
+		t.Fatalf("%d blank answers; it should stop after %d", answers, max)
+	}
+}
+
+// Questions go only where the answering agent's brief has something to say.
+func TestAnswerableByBrief(t *testing.T) {
+	thin := &talkBrief{OneLine: "fintech app with ElevenLabs"}
+	if !answerable(thin, "now_at_hackgt") || answerable(thin, "where_from") || answerable(thin, "stuck_and_solved") || answerable(thin, "fun_and_play") {
+		t.Fatal("a thin brief answers only what it holds")
+	}
+	full := &talkBrief{OneLine: "x", Life: []string{"grew up in Kochi"}, Rare: []string{"tabla"}, StuckOn: []string{"BLE"}}
+	for _, typ := range []string{"where_from", "fun_and_play", "stuck_and_solved", "values_and_beliefs", "interests_and_rare"} {
+		if !answerable(full, typ) {
+			t.Errorf("%s should be askable", typ)
 		}
 	}
 }

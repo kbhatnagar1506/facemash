@@ -19,7 +19,8 @@
     "approve_ttl_s": 600,
     "answer_max_words": 32,
     "min_gap_ms": 250,
-    "require_online": true
+    "require_online": true,
+    "max_misses": 3
   },
   "proximity": {
     "radius_m": 3,
@@ -125,6 +126,7 @@
       ["Great chatting! Our humans have a lot going on, so I'll let them get back to it.", "Totally. Best of luck to yours!"]
     ],
     "not_in_memory": "My human hasn't told me about that one yet.",
+    "not_in_memory_alts": ["Honestly? No clue, they haven't told me that one.", "Ha, you've got me there, that one's never come up.", "That's a mystery to me, you'd have to ask them yourself.", "Pass! They haven't filled me in on that yet."],
     "ask": "Meet them?",
     "why": {
       "you_fixed_theirs": "You've already solved what they're stuck on.",
