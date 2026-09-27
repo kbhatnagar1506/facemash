@@ -6,6 +6,7 @@ package main
 // point into a path and the steps into movement (App.tsx); the server only keeps it:
 //   GET  /api/reference    {"x","z","table","at"} or {} (anyone: it's a spot in a public room)
 //   POST /api/reference    {"x","z","table"} (organizers in ADMIN_EMAILS, from our own pages)
+//   DELETE /api/reference  clears it (organizers): beans go back to their phones' own location
 // A change goes out to every connected player at once ({"t":"anchor",...} on the socket)
 // and is kept in a file next to the location samples, so a restart doesn't lose it.
 
@@ -77,6 +78,19 @@ func (s *refStore) set(r hallRef) error {
 	return os.Rename(tmp, s.file)
 }
 
+func (s *refStore) clear() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ref = nil
+	if s.file == "" {
+		return nil
+	}
+	if err := os.Remove(s.file); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
 // announce tells everyone connected where the reference is now.
 func (h *Hub) announce(msg []byte) {
 	h.mu.Lock()
@@ -89,6 +103,28 @@ func (h *Hub) announce(msg []byte) {
 var errNotAdmin = errors.New("organizers only")
 
 func mountReference(mux *http.ServeMux, acc *accounts, hub *Hub, admin *adminAPI, originOK func(*http.Request) bool, s *refStore) {
+	// organizer: an admin, signed in, from our own pages (else the error is already written)
+	organizer := func(w http.ResponseWriter, r *http.Request) (string, bool) {
+		if r.Header.Get("Origin") == "" || !originOK(r) {
+			adminJSON(w, http.StatusForbidden, map[string]string{"error": "bad origin"})
+			return "", false
+		}
+		uid, ok := acc.sess.read(r)
+		if !ok {
+			adminJSON(w, http.StatusUnauthorized, map[string]string{"error": "sign in first"})
+			return "", false
+		}
+		if admin == nil {
+			adminJSON(w, http.StatusForbidden, map[string]string{"error": errNotAdmin.Error()})
+			return "", false
+		}
+		email, isAdmin, err := admin.who(r.Context(), uid)
+		if err != nil || !isAdmin {
+			adminJSON(w, http.StatusForbidden, map[string]string{"error": errNotAdmin.Error()})
+			return "", false
+		}
+		return email, true
+	}
 	mux.HandleFunc("/api/reference", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet, http.MethodHead:
@@ -98,23 +134,22 @@ func mountReference(mux *http.ServeMux, acc *accounts, hub *Hub, admin *adminAPI
 			} else {
 				adminJSON(w, http.StatusOK, map[string]any{})
 			}
-		case http.MethodPost:
-			if r.Header.Get("Origin") == "" || !originOK(r) {
-				adminJSON(w, http.StatusForbidden, map[string]string{"error": "bad origin"})
-				return
-			}
-			uid, ok := acc.sess.read(r)
+		case http.MethodDelete:
+			email, ok := organizer(w, r)
 			if !ok {
-				adminJSON(w, http.StatusUnauthorized, map[string]string{"error": "sign in first"})
 				return
 			}
-			if admin == nil {
-				adminJSON(w, http.StatusForbidden, map[string]string{"error": errNotAdmin.Error()})
-				return
+			if err := s.clear(); err != nil {
+				log.Printf("reference: clear not saved to disk (cleared in memory): %v", err)
 			}
-			email, isAdmin, err := admin.who(r.Context(), uid)
-			if err != nil || !isAdmin {
-				adminJSON(w, http.StatusForbidden, map[string]string{"error": errNotAdmin.Error()})
+			log.Printf("reference: %s cleared it", email)
+			if hub != nil {
+				hub.announce(mustJSON(map[string]any{"t": "anchor", "clear": true}))
+			}
+			w.WriteHeader(http.StatusNoContent)
+		case http.MethodPost:
+			email, ok := organizer(w, r)
+			if !ok {
 				return
 			}
 			var in struct {
@@ -136,8 +171,8 @@ func mountReference(mux *http.ServeMux, acc *accounts, hub *Hub, admin *adminAPI
 			}
 			adminJSON(w, http.StatusOK, ref)
 		default:
-			w.Header().Set("Allow", "GET, POST")
-			adminJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "GET or POST"})
+			w.Header().Set("Allow", "GET, POST, DELETE")
+			adminJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "GET, POST or DELETE"})
 		}
 	})
 }

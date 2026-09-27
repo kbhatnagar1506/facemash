@@ -287,7 +287,7 @@ export function Hud({
         </svg>
       </a>
       {/* no chat box: agents do the talking */}
-      {TOUCH && <Stick />}
+      <Stick /> {/* on every device: phones walk with it, and on a PC you can click and drag it too */}
       <div className="help">
         <kbd>WASD</kbd> move · <kbd>Shift</kbd> run · {inHall ? <>drag or <kbd>Q</kbd>/<kbd>R</kbd>/<kbd>T</kbd>/<kbd>G</kbd> look · </> : <><kbd>B</kbd> bike · <kbd>M</kbd> map · </>}<kbd>E</kbd> interact · scroll to zoom
       </div>

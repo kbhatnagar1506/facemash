@@ -190,7 +190,10 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => j && typeof j.x === 'number' && setRefPt(j))
       .catch(() => {})
-    const on = (e: Event) => setRefPt((e as CustomEvent).detail)
+    const on = (e: Event) => {
+      const d = (e as CustomEvent).detail
+      setRefPt(d?.clear ? null : d) // an organizer set it, or cleared it
+    }
     addEventListener('gt-anchor', on)
     return () => removeEventListener('gt-anchor', on)
   }, [])
@@ -424,6 +427,10 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
     }).catch(() => null)
     setRefNote(r?.ok ? `Reference set${t ? ` at Table ${t.n}` : ''}: everyone walks here now` : "Couldn't set the reference")
   }
+  const clearReference = async () => {
+    const r = await fetch('/api/reference', { method: 'DELETE', credentials: 'same-origin' }).catch(() => null)
+    setRefNote(r?.ok ? 'Reference cleared: beans follow their own phones again' : "Couldn't clear the reference")
+  }
   useEffect(() => {
     if (!refNote) return
     const t = setTimeout(() => setRefNote(''), 4000)
@@ -594,6 +601,11 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
         {room === 'hackgt' && isAdmin && (
           <button className="ref-btn" type="button" onClick={() => void setReference()} title="Organizers: set the reference to where your bean stands (Shift+R)">
             📍 Set reference here
+          </button>
+        )}
+        {room === 'hackgt' && isAdmin && refPt && (
+          <button className="ref-btn clear" type="button" onClick={() => void clearReference()} title="Organizers: clear the reference">
+            ✕ Clear reference{refPt.table ? ` (Table ${refPt.table})` : ''}
           </button>
         )}
         {refNote && <div className="ref-note" role="status">{refNote}</div>}

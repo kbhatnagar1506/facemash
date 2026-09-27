@@ -63,4 +63,23 @@ func TestReferenceSetByOrganizersOnly(t *testing.T) {
 	if r := openRefStore(file).get(); r == nil || r.Table != 5 {
 		t.Fatalf("kept across a restart: %+v", r)
 	}
+	// clearing: organizers only, and it stays cleared across a restart
+	if c, _ := do("DELETE", guest.ID, "https://site.test", ""); c != 403 {
+		t.Fatalf("an attendee can't clear it: %d", c)
+	}
+	if c, _ := do("DELETE", boss.ID, "", ""); c != 403 {
+		t.Fatalf("no origin: %d", c)
+	}
+	if c, _ := do("DELETE", boss.ID, "https://site.test", ""); c != 204 {
+		t.Fatalf("organizer clears it: %d", c)
+	}
+	if c, out := do("GET", 0, "", ""); c != 200 || len(out) != 0 {
+		t.Fatalf("cleared for everyone: %d %v", c, out)
+	}
+	if r := openRefStore(file).get(); r != nil {
+		t.Fatalf("still cleared after a restart: %+v", r)
+	}
+	if c, _ := do("DELETE", boss.ID, "https://site.test", ""); c != 204 {
+		t.Fatalf("clearing twice is fine: %d", c)
+	}
 }
