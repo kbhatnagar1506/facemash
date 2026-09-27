@@ -67,6 +67,8 @@ export class Net {
 
   /** `ticket` (from /api/me) signs you in, so the server saves where you are as you play. */
   constructor(name: string, color: string, x: number, z: number, look?: string, room: Room = 'campus', ticket?: string) {
+    if (location.hostname === 'localhost' && location.search.includes('talkdemo'))
+      Object.assign(window, { __talkFrame: (f: TalkFrame) => this.emitTalk(f) })
     this.hello = { name, color, x, z, room, look, ticket }
     this.room = room
     this.open()
@@ -275,7 +277,8 @@ export class Net {
     }
   }
 
-  /** Agent talk pushes (only ever this account's own talks). */
+  /** Agent talk pushes (only ever this account's own talks). On localhost with ?talkdemo,
+   * window.__talkFrame(frame) plays frames by hand (to preview the overlay). */
   onTalk(fn: (f: TalkFrame) => void) {
     this.talkListeners.add(fn)
     return () => {

@@ -21,6 +21,11 @@ export default function TalkOverlay({ store, talk, myLook }: { store: TalkStore;
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
   }, [lines, phase])
 
+  // the connection: a little buzz on phones
+  useEffect(() => {
+    if (phase === 'reveal') navigator.vibrate?.([40, 70, 40, 70, 120])
+  }, [phase])
+
   // a no-match closes itself after a while
   useEffect(() => {
     if (phase !== 'nomatch') return
@@ -33,25 +38,33 @@ export default function TalkOverlay({ store, talk, myLook }: { store: TalkStore;
     phase === 'talking' ? 'Your agent is talking with theirs'
     : phase === 'match' || phase === 'waiting' ? "It's a match!"
     : phase === 'nomatch' ? 'Not your person this time'
-    : phase === 'reveal' ? 'Go say hi'
+    : phase === 'reveal' ? "It's a connection!"
     : 'Not this time'
 
   return (
     <div className={`tk-overlay tk-${phase}`} role="dialog" aria-modal="true" aria-label="Agent talk">
       <div className="tk-sheet">
+        {phase === 'reveal' && <Celebrate />}
         <header className="tk-head">
-          <h2>{title}</h2>
+          <h2 className={phase === 'reveal' ? 'tk-shimmer' : undefined}>{title}</h2>
           <div className="tk-progress" aria-hidden>
             <i style={{ transform: `scaleX(${progress})` }} />
           </div>
         </header>
 
-        <div className="tk-stage" aria-hidden>
+        <div className={'tk-stage' + (phase === 'reveal' ? ' tk-meet' : '')} aria-hidden>
           <div className={'tk-who mine' + (speaking === 'your_agent' ? ' speaking' : '')}>
             <BeanSvg look={mine} wave={phase === 'nomatch'} />
             <span>Your agent</span>
           </div>
-          {(phase === 'match' || phase === 'waiting' || phase === 'reveal') && <div className="tk-spark">✦</div>}
+          {(phase === 'match' || phase === 'waiting') && <div className="tk-spark">✦</div>}
+          {phase === 'reveal' && (
+            <div className="tk-bond">
+              <i className="tk-ring" />
+              <i className="tk-ring late" />
+              <span className="tk-heart">♥</span>
+            </div>
+          )}
           <div className={'tk-who theirs' + (speaking === 'their_agent' ? ' speaking' : '')}>
             <BeanSvg look={theirs} flip wave={phase === 'nomatch'} />
             <span>Their agent</span>
@@ -129,24 +142,50 @@ export default function TalkOverlay({ store, talk, myLook }: { store: TalkStore;
 
 function RevealCard({ r, onDone }: { r: NonNullable<Talk['reveal']>; onDone: () => void }) {
   return (
-    <div className="tk-card">
-      <p className="tk-name">{r.name}</p>
-      {r.where && <p className="tk-where">{r.where}</p>}
-      {r.line && (
-        <div className="tk-field">
-          <small>Why you two</small>
-          <p>{r.line}</p>
-        </div>
-      )}
-      {r.question && (
-        <div className="tk-field ask">
-          <small>Ask them</small>
-          <p>{r.question}</p>
-        </div>
-      )}
-      <button type="button" className="tk-btn go wide" onClick={onDone}>
-        Done
-      </button>
+    <div className="tk-glow">
+      <i className="tk-glow-spin" aria-hidden />
+      <div className="tk-card">
+        <p className="tk-kicker">✦ you two should meet ✦</p>
+        <p className="tk-name">{r.name}</p>
+        {r.where && <p className="tk-where">📍 {r.where}</p>}
+        {r.line && (
+          <div className="tk-field">
+            <small>Why you two</small>
+            <p>{r.line}</p>
+          </div>
+        )}
+        {r.question && (
+          <div className="tk-field ask">
+            <small>Break the ice</small>
+            <p>“{r.question}”</p>
+          </div>
+        )}
+        <button type="button" className="tk-btn go wide tk-shine" onClick={onDone}>
+          Go say hi 👋
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/** The celebration behind a connection: a warm aura, and confetti from the middle. */
+function Celebrate() {
+  const colors = ['#f5b700', '#ff5d6c', '#3fa7b3', '#8faeff', '#ff9ecf', '#7ad97a']
+  return (
+    <div className="tk-party" aria-hidden>
+      <i className="tk-aura" />
+      {Array.from({ length: 34 }, (_, i) => {
+        const a = (i / 34) * Math.PI * 2 + (i % 3) * 0.3
+        const d = 140 + ((i * 53) % 110)
+        const style = {
+          '--x': `${Math.cos(a) * d}px`,
+          '--y': `${Math.sin(a) * d - 60}px`,
+          '--r': `${(i * 67) % 360}deg`,
+          '--c': colors[i % colors.length],
+          '--t': `${(i % 7) * 0.05}s`,
+        } as React.CSSProperties
+        return <b key={i} className={i % 4 === 0 ? 'tk-bit round' : 'tk-bit'} style={style} />
+      })}
     </div>
   )
 }

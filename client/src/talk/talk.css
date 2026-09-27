@@ -64,18 +64,90 @@
 .tk-btn.wide { width: 100%; margin-top: 4px; }
 .tk-btn:focus-visible { outline: 3px solid #3fa7b3; outline-offset: 2px; }
 
-/* the reveal */
-.tk-card {
-  align-self: start; margin-top: 8px; display: grid; gap: 10px; padding: 18px 16px; background: #fff;
-  border: 4px solid var(--ink); border-radius: 18px; box-shadow: 0 6px 0 var(--ink); animation: tk-in .3s ease-out;
-  overflow-y: auto; min-height: 0; max-height: 100%;
+/* the reveal: a celebration (aura, rings, heart, confetti) and the glowing icebreaker card */
+.tk-reveal .tk-sheet { position: relative; background: radial-gradient(120% 70% at 50% 18%, #fff3c4 0%, #ffe0ea 38%, #e9f0ff 70%, #fffdf6 100%); }
+.tk-reveal .tk-sheet > *:not(.tk-party) { position: relative; z-index: 1; }
+.tk-party { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
+.tk-aura {
+  position: absolute; left: 50%; top: 26%; width: 520px; height: 520px; margin: -260px 0 0 -260px; border-radius: 50%;
+  background: conic-gradient(from 0deg, rgba(245,183,0,.0), rgba(245,183,0,.45), rgba(255,93,108,.35), rgba(143,174,255,.4), rgba(63,167,179,.35), rgba(245,183,0,.0));
+  filter: blur(38px); animation: tk-spin 9s linear infinite, tk-breathe 3s ease-in-out infinite;
 }
-.tk-name { margin: 0; text-align: center; font: 400 34px/1.1 'Chewy', var(--round); overflow-wrap: anywhere; }
+.tk-bit {
+  position: absolute; left: 50%; top: 30%; width: 9px; height: 15px; margin: -7px 0 0 -4px; border-radius: 2px; background: var(--c);
+  opacity: 0; animation: tk-burst 1.9s cubic-bezier(.16,.84,.34,1) var(--t) forwards;
+}
+.tk-bit.round { width: 10px; height: 10px; border-radius: 50%; }
+
+.tk-shimmer {
+  background: linear-gradient(100deg, #b46b00 0%, #ff5d6c 30%, #f5b700 50%, #3fa7b3 70%, #b46b00 100%); background-size: 220% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent; animation: tk-shine-text 3.2s linear infinite, tk-pop-title .6s cubic-bezier(.2,1.6,.4,1);
+}
+
+/* the beans hop in and bump */
+.tk-meet .mine { animation: tk-lean-r .7s cubic-bezier(.3,1.4,.5,1) forwards; }
+.tk-meet .theirs { animation: tk-lean-l .7s cubic-bezier(.3,1.4,.5,1) forwards; }
+.tk-meet .tk-body { animation: tk-hop .7s ease-out 3; }
+.tk-bond { position: absolute; left: 50%; top: 46%; width: 0; height: 0; }
+.tk-ring {
+  position: absolute; left: -40px; top: -40px; width: 80px; height: 80px; border-radius: 50%;
+  border: 4px solid rgba(245,183,0,.85); box-shadow: 0 0 24px rgba(245,183,0,.7); animation: tk-ring 1.8s ease-out infinite;
+}
+.tk-ring.late { animation-delay: .9s; border-color: rgba(255,93,108,.7); box-shadow: 0 0 24px rgba(255,93,108,.6); }
+.tk-heart {
+  position: absolute; left: -18px; top: -24px; width: 36px; text-align: center; font-size: 34px; line-height: 48px; color: #ff5d6c;
+  text-shadow: 0 0 16px rgba(255,93,108,.8), 0 0 36px rgba(245,183,0,.7); animation: tk-heart 1s cubic-bezier(.2,1.8,.4,1) .35s both, tk-beat 1.2s ease-in-out 1.4s infinite;
+}
+
+/* the glowing card: a rotating gradient seen through a 4px frame */
+.tk-glow {
+  align-self: start; margin-top: 8px; position: relative; padding: 4px; border-radius: 22px; overflow: hidden; min-height: 0; max-height: 100%;
+  display: grid; box-shadow: 0 0 28px rgba(245,183,0,.55), 0 0 70px rgba(255,93,108,.3), 0 8px 0 rgba(43,42,51,.85);
+  animation: tk-card-in .7s cubic-bezier(.2,1.3,.4,1) .25s both, tk-glow-pulse 2.6s ease-in-out 1s infinite;
+}
+.tk-glow-spin {
+  position: absolute; left: 50%; top: 50%; width: 200%; aspect-ratio: 1; margin: -100% 0 0 -100%;
+  background: conic-gradient(#f5b700, #ff5d6c, #ff9ecf, #8faeff, #3fa7b3, #7ad97a, #f5b700); animation: tk-spin 3.5s linear infinite;
+}
+.tk-card {
+  position: relative; display: grid; gap: 10px; padding: 18px 16px; background: #fffdf8; border-radius: 18px; overflow-y: auto; min-height: 0;
+}
+.tk-kicker { margin: 0; text-align: center; font: 800 12px var(--round); letter-spacing: 2px; text-transform: uppercase; color: #c07a00; }
+.tk-name { margin: 0; text-align: center; font: 400 38px/1.1 'Chewy', var(--round); overflow-wrap: anywhere; animation: tk-name-in .6s ease-out .55s both; }
 .tk-where { margin: -4px 0 4px; text-align: center; font: 700 14px var(--round); color: #3a7f87; }
-.tk-field { border-radius: 12px; background: #f4f1e8; padding: 10px 12px; }
-.tk-field.ask { background: #fff4cc; }
+.tk-field { border-radius: 12px; background: #f4f1e8; padding: 10px 12px; animation: tk-in .45s ease-out .8s both; }
+.tk-field.ask {
+  background: linear-gradient(135deg, #fff4cc, #ffe3ec); border: 2px solid rgba(245,183,0,.6);
+  box-shadow: 0 0 0 0 rgba(245,183,0,.5); animation: tk-in .45s ease-out 1s both, tk-ask-glow 2.2s ease-in-out 1.6s infinite;
+}
 .tk-field small { display: block; font: 800 12px var(--round); text-transform: uppercase; letter-spacing: .6px; color: #5f5a4d; margin-bottom: 3px; }
 .tk-field p { margin: 0; font: 700 16px/1.4 var(--round); overflow-wrap: anywhere; }
+.tk-field.ask p { font-size: 17px; }
+.tk-shine { position: relative; overflow: hidden; animation: tk-in .45s ease-out 1.2s both; }
+.tk-shine::after {
+  content: ''; position: absolute; top: 0; bottom: 0; left: -60%; width: 40%; transform: skewX(-20deg);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.8), transparent); animation: tk-sweep 2.4s ease-in-out 1.8s infinite;
+}
+
+@keyframes tk-spin { to { transform: rotate(360deg); } }
+@keyframes tk-breathe { 50% { opacity: .75; } }
+@keyframes tk-burst {
+  0% { opacity: 1; transform: translate(0, 0) rotate(0) scale(.6); }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--x), calc(var(--y) + 170px)) rotate(calc(var(--r) + 540deg)) scale(1); }
+}
+@keyframes tk-shine-text { to { background-position: -220% 0; } }
+@keyframes tk-pop-title { from { transform: scale(.6); opacity: 0; } }
+@keyframes tk-lean-r { to { transform: translateX(34px); } }
+@keyframes tk-lean-l { to { transform: translateX(-34px); } }
+@keyframes tk-ring { from { transform: scale(.4); opacity: 1; } to { transform: scale(2.6); opacity: 0; } }
+@keyframes tk-heart { from { transform: scale(0) rotate(-20deg); opacity: 0; } }
+@keyframes tk-beat { 15% { transform: scale(1.22); } 30% { transform: scale(1); } 45% { transform: scale(1.14); } 60% { transform: scale(1); } }
+@keyframes tk-card-in { from { opacity: 0; transform: translateY(26px) scale(.92); } }
+@keyframes tk-glow-pulse { 50% { box-shadow: 0 0 44px rgba(245,183,0,.75), 0 0 110px rgba(255,93,108,.42), 0 8px 0 rgba(43,42,51,.85); } }
+@keyframes tk-name-in { from { opacity: 0; letter-spacing: 6px; filter: blur(6px); } }
+@keyframes tk-ask-glow { 50% { box-shadow: 0 0 22px 2px rgba(245,183,0,.55); } }
+@keyframes tk-sweep { 0% { left: -60%; } 60%, 100% { left: 130%; } }
 
 @keyframes tk-fade { from { opacity: 0; } }
 @keyframes tk-in { from { opacity: 0; transform: translateY(6px); } }
