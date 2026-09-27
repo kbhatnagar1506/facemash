@@ -268,10 +268,6 @@ function Memory() {
     <p className="muse-fine">
       Saved: {m.kb || '<1'} KB from {from}
       {when && <> · {when}</>}.{' '}
-      <a className="muse-link" href="/settings">
-        See and edit it
-      </a>{' '}
-      ·{' '}
       <button className="muse-link" type="button" onClick={() => fetch('/api/muse/memory', { method: 'DELETE', credentials: 'same-origin' }).then(load)}>
         Delete it
       </button>

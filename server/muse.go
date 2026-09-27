@@ -435,6 +435,7 @@ func ingestMemory(ctx context.Context, acc *accounts, tenant string, id int64, o
 	acc.fast.uploaded(ctx, tenant, id, items, received) // and into their private memory index, in the background
 	acc.jev.suggest(tenant, id, obj)                    // and an outfit for their bean, picked from it
 	acc.talk.memoryArrived(tenant, id)                  // and the brief their agent talks from (agenttalk.go)
+	conns.memoryChanged(tenant, id)                     // their agent tells their matches what's new (connections.go)
 	return body, redacted, nil
 }
 

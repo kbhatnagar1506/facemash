@@ -20,13 +20,14 @@ const Terms = lazy(() => import('./Legal').then((m) => ({ default: m.Terms })))
 const AdminHome = lazy(() => import('./aaditi/admin/Admin'))
 const AgentConsole = lazy(() => import('./aaditi/App.tsx'))
 const Settings = lazy(() => import('./Settings'))
+const Chat = lazy(() => import('./Chat'))
 
 const path = location.pathname
-const Page = path.startsWith('/avatar') ? AvatarStudio : path.startsWith('/play') ? App : path.startsWith('/muse') ? MusePage : path.startsWith('/settings') ? Settings : path.startsWith('/privacy') ? Privacy : path.startsWith('/terms') ? Terms : path.startsWith('/admin/console') && new URLSearchParams(location.search).has('demo') ? AgentConsole : path.startsWith('/admin') ? AdminHome : Landing
+const Page = path.startsWith('/avatar') ? AvatarStudio : path.startsWith('/play') ? App : path.startsWith('/muse') ? MusePage : path.startsWith('/settings') ? Settings : path.startsWith('/chats') ? Chat : path.startsWith('/privacy') ? Privacy : path.startsWith('/terms') ? Terms : path.startsWith('/admin/console') && new URLSearchParams(location.search).has('demo') ? AgentConsole : path.startsWith('/admin') ? AdminHome : Landing
 // the game and studio are fixed full-screen views; the landing and Muse pages scroll
 if (Page === AdminHome) document.title = 'Muse Admin'
 if (Page === AgentConsole) document.title = 'Agent Console'
-if (Page === Landing || Page === MusePage || Page === Privacy || Page === Terms || Page === Settings) document.documentElement.classList.add('scroll-page')
+if (Page === Landing || Page === MusePage || Page === Privacy || Page === Terms || Page === Settings || Page === Chat) document.documentElement.classList.add('scroll-page')
 
 // The game and the Bean Studio need an account (no guest mode): signed out, you go back to
 // the homepage with the sign-in sheet open. With sign-in off (local dev), nothing changes.

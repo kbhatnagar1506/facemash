@@ -474,6 +474,37 @@ func devName(email string) string {
 
 func mountDevLogin(mux *http.ServeMux, acc *accounts) {
 	log.Printf("auth: DEV LOGIN ENABLED (localhost only)")
+	// local testing: /api/dev/match?with=<email> makes you and them a match (a revealed talk
+	// with an icebreaker), so the chat on /chats can be tried without the AI models
+	mux.HandleFunc("/api/dev/match", func(w http.ResponseWriter, r *http.Request) {
+		host, _, _ := strings.Cut(r.Host, ":")
+		if host != "localhost" && host != "127.0.0.1" || r.Header.Get("X-Forwarded-For") != "" {
+			http.NotFound(w, r)
+			return
+		}
+		me, ok := acc.sess.read(r)
+		ts, _ := acc.store.(talkStore)
+		email := r.URL.Query().Get("with")
+		if !ok || ts == nil || email == "" {
+			http.Error(w, "sign in, and say ?with=<email>", http.StatusBadRequest)
+			return
+		}
+		given := devName(email)
+		other, _, err := acc.store.SignIn(r.Context(), acc.tenant, user{Sub: "dev:" + email, Email: email, Name: given + " (dev)", Given: given})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		now := time.Now().UTC()
+		rec := &talkRecord{ID: talkID(), Tenant: acc.tenant, A: me, B: other.ID, State: "revealed", Started: now, Ended: &now, Forced: true,
+			Icebreaker: &talkIcebreaker{Line: "You both build things that talk to hardware over Bluetooth.", Question: "What was the worst pairing bug you hit this weekend?"}}
+		if err := ts.talkCreate(r.Context(), rec); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		conns.revealed(rec)
+		http.Redirect(w, r, "/chats?c="+rec.ID, http.StatusFound)
+	})
 	mux.HandleFunc("/api/dev/login", func(w http.ResponseWriter, r *http.Request) {
 		host, _, _ := strings.Cut(r.Host, ":")
 		if host != "localhost" && host != "127.0.0.1" || r.Header.Get("X-Forwarded-For") != "" {

@@ -278,6 +278,12 @@ export function Hud({
           <Minimap campus={campus} net={net} info={info} />
         </>
       )}
+      <a className="settings-btn" href="/settings" aria-label="Settings" title="Settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.4 7.4 0 0 0-1.7-1L15 3.5h-4l-.4 2.5a7.4 7.4 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.4 7.4 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7.4 7.4 0 0 0 1.7-1l2.4 1 2-3.4z" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+      </a>
       {/* no chat box: agents do the talking */}
       {TOUCH && <Stick />}
       <div className="help">

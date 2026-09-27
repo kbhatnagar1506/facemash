@@ -445,6 +445,7 @@ type memStore struct {
 	talk    *memTalkTables        // agent talk's tables (agenttalk_store.go), made on first use
 	after   map[int64]time.Time   // users.sessions_after (sessions_after.go)
 	usage   *memUsageTables       // play sessions and the service meter (usage.go), made on first use
+	conn    *memConnTables        // match chats (connections.go), made on first use
 }
 
 type memMemory struct {

@@ -96,7 +96,7 @@ canvas { display: block; touch-action: none; }
 .location.show { transform: none; }
 
 .minimap {
-  position: absolute; top: calc(12px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right)); border: 4px solid var(--ink); border-radius: 10px;
+  position: absolute; top: calc(12px + env(safe-area-inset-top)); right: calc(64px + env(safe-area-inset-right)); border: 4px solid var(--ink); border-radius: 10px;
   overflow: hidden; cursor: pointer; box-shadow: 0 4px 0 var(--ink); line-height: 0;
 }
 .minimap.big { top: 50%; right: 50%; transform: translate(50%, -50%); z-index: 5; }
@@ -170,7 +170,7 @@ kbd {
 
 /* HackGT hall: live "Now / Next" from the real schedule */
 .now-next {
-  position: absolute; top: calc(12px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right)); max-width: min(380px, calc(100vw - 24px)); cursor: pointer;
+  position: absolute; top: calc(12px + env(safe-area-inset-top)); right: calc(64px + env(safe-area-inset-right)); max-width: min(380px, calc(100vw - 76px)); cursor: pointer;
   display: grid; gap: 4px; padding: 10px 14px; font: 700 13px 'Sen', var(--round);
   background: #fbf6ea; border: 4px solid #c98a4b; border-radius: 12px; box-shadow: 0 4px 0 #8e5a2b;
 }
@@ -179,10 +179,23 @@ kbd {
    static "HackGT 13 · Klaus Atrium" sign gives way (the card already says where you are) */
 @media (max-width: 640px) {
   .now-next {
-    top: calc(52px + env(safe-area-inset-top)); left: calc(12px + env(safe-area-inset-left)); right: calc(12px + env(safe-area-inset-right));
+    top: calc(58px + env(safe-area-inset-top)); left: calc(12px + env(safe-area-inset-left)); right: calc(12px + env(safe-area-inset-right));
     max-width: none; padding: 8px 12px; font-size: 12px;
   }
   .hud:has(> .now-next) > .location { display: none; }
+}
+
+/* the one way to settings: a gear in the top-right corner (the map and Now/Next sit left of it) */
+.settings-btn {
+  position: absolute; top: calc(12px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right));
+  width: 44px; height: 44px; display: grid; place-items: center; border-radius: 12px;
+  background: #fff; border: 3px solid var(--ink); box-shadow: 0 3px 0 var(--ink); color: var(--ink);
+}
+.settings-btn svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
+.settings-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
+@media (max-width: 640px) {
+  .settings-btn { width: 38px; height: 38px; }
+  .settings-btn svg { width: 21px; height: 21px; }
 }
 
 /* Georgia Tech wordmark over the campus minimap (campus only) */

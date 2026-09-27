@@ -144,6 +144,10 @@ func (t *agentTalk) decide(ctx context.Context, tenant string, uid int64, id str
 			"icebreaker": ice})
 	}
 	r.finish("revealed")
+	r.mu.Lock()
+	rec := r.rec.copy()
+	r.mu.Unlock()
+	go conns.revealed(rec) // the match's chat opens with the icebreaker (connections.go)
 	return "revealed", nil
 }
 

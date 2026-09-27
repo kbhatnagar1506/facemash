@@ -117,6 +117,9 @@ func (a *accounts) bootExtras(ctx context.Context, pg *pgStore) error {
 			return fmt.Errorf("jev table: %w", err)
 		}
 	}
+	if err := pg.connEnsureSchema(ctx); err != nil {
+		return fmt.Errorf("connections table: %w", err)
+	}
 	if err := pg.usageEnsureSchema(ctx, a.tenant); err != nil {
 		return fmt.Errorf("usage tables: %w", err)
 	}
