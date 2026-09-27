@@ -85,6 +85,8 @@ type talkConfig struct {
 		AnswerMaxWords int  `json:"answer_max_words"`
 		MinGapMS       int  `json:"min_gap_ms"`
 		RequireOnline  bool `json:"require_online"`
+		// MaxMisses: this many "don't know" answers in a row ends the questions early (0: never)
+		MaxMisses int `json:"max_misses"`
 	} `json:"limits"`
 	// Proximity: the web trigger (agenttalk_near.go).
 	Proximity struct {
@@ -142,6 +144,7 @@ type talkConfig struct {
 		Greet              [][2]string       `json:"greet"`
 		Close              [][2]string       `json:"close"`
 		NotInMemory        string            `json:"not_in_memory"`
+		NotInMemoryAlts    []string          `json:"not_in_memory_alts"` // said in turn, so "don't know" doesn't sound canned
 		Ask                string            `json:"ask"`
 		Why                map[string]string `json:"why"`
 		IcebreakerFallback talkIcebreaker    `json:"icebreaker_fallback"`

@@ -193,7 +193,7 @@ func (r *talkRun) run() {
 	if greet[1] != "" {
 		r.say(1, "greet", "", greet[1])
 	}
-	turn := 0
+	turn, dried := 0, false
 	for ; turn < p1.Questions && plan != nil; turn++ {
 		var next *talkPlan
 		plan, next = r.step(plan, func() *talkPlan {
@@ -206,6 +206,14 @@ func (r *talkRun) run() {
 			break
 		}
 		plan = next
+		if r.dry() { // they keep drawing blanks: stop asking
+			if plan != nil {
+				plan.cancel()
+			}
+			turn++
+			dried = true
+			break
+		}
 	}
 
 	// checkpoint 1: the gates, and phase 2's first pick, in one jev call
@@ -230,6 +238,10 @@ func (r *talkRun) run() {
 	// phase 2, steered toward what fired
 	steer := r.steer(fired)
 	plan = first
+	if dried && plan != nil { // nothing more to find by asking: straight to the verdict
+		plan.cancel()
+		plan = nil
+	}
 	for k := 0; k < p2.Questions && plan != nil; k++ {
 		n := turn
 		var next *talkPlan
@@ -249,6 +261,12 @@ func (r *talkRun) run() {
 		}
 		turn++
 		plan = next
+		if r.dry() {
+			if plan != nil {
+				plan.cancel()
+			}
+			break
+		}
 	}
 
 	// checkpoint 2
@@ -382,8 +400,85 @@ func (r *talkRun) options(n int, ph *talkPhase) map[string]talkQuestion {
 	return r.eligible(n, ph, recent)
 }
 
+// dry: the last limits.max_misses answers were all "don't know" (there's nothing more to find).
+func (r *talkRun) dry() bool {
+	max := r.t.cfg.Limits.MaxMisses
+	if max <= 0 {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	misses := 0
+	for i := len(r.rec.Transcript) - 1; i >= 0 && misses < max; i-- {
+		l := r.rec.Transcript[i]
+		if l.Kind != "answer" {
+			continue
+		}
+		if !l.NotInMemory {
+			return false
+		}
+		misses++
+	}
+	return misses >= max
+}
+
+// missLine: the kind "don't know", a different one from the last time it was said.
+func (r *talkRun) missLine() string {
+	lines := append([]string{r.t.cfg.Lines.NotInMemory}, r.t.cfg.Lines.NotInMemoryAlts...)
+	r.mu.Lock()
+	last := ""
+	for i := len(r.rec.Transcript) - 1; i >= 0; i-- {
+		if l := r.rec.Transcript[i]; l.Kind == "answer" && l.NotInMemory {
+			last = l.Text
+			break
+		}
+	}
+	r.mu.Unlock()
+	for range 4 {
+		if s := lines[mrand.IntN(len(lines))]; s != last || len(lines) == 1 {
+			return s
+		}
+	}
+	return lines[0]
+}
+
+// answerable: could this brief answer a question of this type? Asking what the other agent
+// can't know only gets "don't know" (its notes may still help, but the brief is the summary).
+func answerable(b *talkBrief, typ string) bool {
+	if b == nil {
+		return true
+	}
+	has := func(xs ...[]string) bool {
+		for _, x := range xs {
+			if len(x) > 0 {
+				return true
+			}
+		}
+		return false
+	}
+	switch typ {
+	case "now_at_hackgt", "building_and_craft":
+		return b.OneLine != "" || has(b.Solved, b.StuckOn)
+	case "stuck_and_solved":
+		return has(b.StuckOn, b.Solved)
+	case "career_and_path", "future_and_followup":
+		return b.OneLine != "" || has(b.LookingFor)
+	case "interests_and_rare", "fun_and_play":
+		return has(b.Rare, b.Life)
+	case "where_from", "values_and_beliefs":
+		return has(b.Life)
+	case "life_and_personal":
+		return has(b.Life, b.GoingThrough)
+	}
+	return true
+}
+
 func (r *talkRun) eligible(n int, ph *talkPhase, recent map[string]bool) map[string]talkQuestion {
 	share := r.bothShare()
+	var brief *talkBrief // the answering agent's
+	if s := r.sides[1-n%2]; s != nil {
+		brief = s.brief
+	}
 	byType := map[string][]talkQuestion{}
 	var types []string
 	for _, q := range r.t.bank {
@@ -396,7 +491,7 @@ func (r *talkRun) eligible(n int, ph *talkPhase, recent map[string]bool) map[str
 		if n == 0 && q.Type == "future_and_followup" { // nothing to follow up yet
 			continue
 		}
-		if recent[q.Type] {
+		if recent[q.Type] || !answerable(brief, q.Type) {
 			continue
 		}
 		if byType[q.Type] == nil {
@@ -758,13 +853,14 @@ func (r *talkRun) startAnswer(ctx context.Context, n int, q talkQuestion, side i
 			}
 		}
 		if len(said) == 0 && ctx.Err() == nil { // nothing safe to say: the kind fallback
-			said = append(said, cfg.Lines.NotInMemory)
+			miss := r.missLine()
+			said = append(said, miss)
 			res.NotInMemory = true
 			if first == 0 {
 				first = time.Since(start)
 			}
 			select {
-			case t.events <- cfg.Lines.NotInMemory:
+			case t.events <- miss:
 			case <-ctx.Done():
 			}
 		}
