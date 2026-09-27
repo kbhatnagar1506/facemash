@@ -75,9 +75,10 @@ type Player struct {
 	Color string  `json:"color"`
 	X     float64 `json:"x"`
 	Z     float64 `json:"z"`
-	Y     float64 `json:"y"` // floor height (stairs/balcony inside Klaus)
-	R     float64 `json:"r"` // facing, radians
-	M     bool    `json:"m"` // moving (drives the walk animation)
+	Y     float64 `json:"y"`           // floor height (stairs/balcony inside Klaus)
+	R     float64 `json:"r"`           // facing, radians
+	M     bool    `json:"m"`           // moving (drives the walk animation)
+	A     uint8   `json:"a,omitempty"` // what they're doing: actRun, actBike, actSit, actWave (npc_move.go)
 	Room  string  `json:"room"`
 	Look  string  `json:"look,omitempty"` // bean avatar from /avatar (see cleanLook)
 }
@@ -114,9 +115,10 @@ type client struct {
 	ip        string // address counted in hub.perIP while not yet joined ("" = not counted)
 	reject    int    // set by handle when hello is refused: close with this code
 
-	uid   int64    // signed-in account (0 = guest)
-	npc   bool     // an NPC attendee the server moves itself (npcs.go): no socket
-	saved Progress // last position written to the database
+	uid   int64     // signed-in account (0 = guest)
+	npc   bool      // an NPC attendee the server moves itself (npcs.go): no socket
+	brain *npcBrain // what that NPC is up to (npc_move.go)
+	saved Progress  // last position written to the database
 }
 
 // stateFrame is a position frame and the epoch of the client it was built for.
@@ -134,6 +136,7 @@ type inbound struct {
 	Y     float64 `json:"y"`
 	R     float64 `json:"r"`
 	M     bool    `json:"m"`
+	A     uint8   `json:"a"` // players may say they're running or on a bike
 	Text  string  `json:"text"`
 	Room  string  `json:"room"`
 	Look  string  `json:"look"`
@@ -354,6 +357,7 @@ func (h *Hub) run() {
 			}
 			// binary frame: 'S', count u16, then per player
 			// id u32 | x i16 dm | z i16 dm | r i16 crad | y i16 dm | moving u8  (13 bytes)
+			// (the moving byte: bit 0 moving, bits 1-3 the activity, see npc_move.go)
 			frame := make([]byte, 3, 3+len(near)*13)
 			frame[0] = 'S'
 			var intro []map[string]any
@@ -375,11 +379,11 @@ func (h *Hub) run() {
 				frame = binary.LittleEndian.AppendUint16(frame, uint16(int16(math.Round(q.Z*10))))
 				frame = binary.LittleEndian.AppendUint16(frame, uint16(int16(math.Round(q.R*100))))
 				frame = binary.LittleEndian.AppendUint16(frame, uint16(int16(math.Round(q.Y*10))))
+				mv := (q.A & 7) << 1
 				if q.M {
-					frame = append(frame, 1)
-				} else {
-					frame = append(frame, 0)
+					mv |= 1
 				}
+				frame = append(frame, mv)
 			}
 			binary.LittleEndian.PutUint16(frame[1:], uint16(count))
 			// an intro that didn't fit in a full queue is tried again next tick
@@ -520,6 +524,10 @@ func (c *client) handle(m inbound) {
 		c.p.Y = clamp(m.Y, 0, 20)
 		c.p.R = m.R
 		c.p.M = m.M
+		c.p.A = actNone
+		if m.A == actRun || m.A == actBike {
+			c.p.A = m.A
+		}
 		if m.M {
 			c.walkedAt = now
 		}

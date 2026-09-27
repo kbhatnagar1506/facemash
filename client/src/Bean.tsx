@@ -632,14 +632,18 @@ export function BeanBody({ look, state, shadows = true }: { look: Look; state: R
   const eyes = useRef<THREE.Group>(null!)
   const cheerFace = useRef<THREE.Group>(null!)
   const phase = useRef(0)
+  const bike = useRef<THREE.Group>(null!)
+  const wheels = useRef<THREE.Group[]>([])
   const holdsLaptop = look.item === 'laptop'
   const map = useMemo(() => patternTexture(look.body, look.accent, look.pattern, look.logo ?? 'none'), [look.body, look.accent, look.pattern, look.logo])
 
   useFrame(({ clock }, dt) => {
     const { moving, sit, wave } = state.current
+    const riding = !!state.current.bike
+    const running = !!state.current.run && moving && !riding
     const t = clock.elapsedTime
-    phase.current = moving ? phase.current + dt * 11 : phase.current * 0.85
-    const s = Math.sin(phase.current) * (moving ? 0.85 : 0)
+    phase.current = moving ? phase.current + dt * (riding ? 9 : running ? 17 : 11) : phase.current * 0.85
+    const s = Math.sin(phase.current) * (moving ? (running ? 1.15 : 0.85) : 0)
     legL.current.rotation.x = sit ? -1.4 : s
     legR.current.rotation.x = sit ? -1.4 : -s
     // arms swing when walking, sway a little when idle, reach forward when seated;
@@ -675,9 +679,22 @@ export function BeanBody({ look, state, shadows = true }: { look: Look; state: R
         }
       } else if (c < 1.0) squash = 0.82 + 0.18 * ((c - 0.78) / 0.22)
     }
-    // waddle + bounce when walking, gentle breathing when idle
-    body.current.rotation.z = moving ? Math.sin(phase.current) * 0.1 : 0
-    body.current.position.y = (sit ? -0.3 : moving ? Math.abs(Math.cos(phase.current)) * 0.1 : 0) + jump
+    // on a bike: up on the saddle, pedalling, hands on the bars, wheels turning
+    bike.current.visible = riding
+    if (riding) {
+      const p = phase.current
+      legL.current.rotation.x = -1.0 + Math.sin(p) * 0.55
+      legR.current.rotation.x = -1.0 - Math.sin(p) * 0.55
+      armL.current.rotation.x = armR.current.rotation.x = -1.25
+      armL.current.rotation.z = -0.1
+      armR.current.rotation.z = 0.1
+      for (const w of wheels.current) if (w) w.rotation.x = p * 1.6
+    }
+    // waddle + bounce when walking (bigger, leaning in, when running), breathing when idle
+    body.current.rotation.z = moving && !riding ? Math.sin(phase.current) * (running ? 0.06 : 0.1) : 0
+    body.current.rotation.x = running ? 0.22 : riding ? 0.12 : 0
+    body.current.position.y = (riding ? 0.55 : sit ? -0.3 : moving ? Math.abs(Math.cos(phase.current)) * (running ? 0.2 : 0.1) : 0) + jump
+    if (bike.current.visible) bike.current.position.y = -body.current.position.y
     const breathe = (moving ? 1 : 1 + Math.sin(t * 2.2) * 0.018) * squash
     body.current.scale.set(1 / Math.sqrt(breathe), breathe, 1 / Math.sqrt(breathe))
     if (spin.current) {
@@ -743,6 +760,53 @@ export function BeanBody({ look, state, shadows = true }: { look: Look; state: R
         </group>
       ))}
       <HatMesh look={look} spin={spin} />
+      <group ref={bike} visible={false} rotation-x={-0.12}>
+        <Bike color={look.accent} wheels={wheels} />
+      </group>
+    </group>
+  )
+}
+
+/** A little bike under the bean (it rides in the body group, so it's lowered back to the ground). */
+function Bike({ color, wheels }: { color: string; wheels: React.MutableRefObject<THREE.Group[]> }) {
+  const tube = (a: THREE.Vector3Tuple, b: THREE.Vector3Tuple, r = 0.05) => {
+    const va = new THREE.Vector3(...a)
+    const vb = new THREE.Vector3(...b)
+    const mid = va.clone().add(vb).multiplyScalar(0.5)
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), vb.clone().sub(va).normalize())
+    return (
+      <mesh position={mid} quaternion={q}>
+        <cylinderGeometry args={[r, r, va.distanceTo(vb), 8]} />
+        <meshStandardMaterial roughness={0.35} color={color} />
+      </mesh>
+    )
+  }
+  return (
+    <group>
+      {[-0.8, 0.8].map((z, i) => (
+        <group key={z} position={[0, 0.42, z]} ref={(g) => { if (g) wheels.current[i] = g }}>
+          <mesh rotation-y={Math.PI / 2}>
+            <torusGeometry args={[0.38, 0.065, 8, 24]} />
+            <meshStandardMaterial roughness={0.6} color="#26262e" />
+          </mesh>
+          {[0, Math.PI / 3, (2 * Math.PI) / 3].map((a) => (
+            <mesh key={a} rotation-x={a}>
+              <boxGeometry args={[0.03, 0.72, 0.03]} />
+              <meshStandardMaterial color="#c9ccd6" />
+            </mesh>
+          ))}
+        </group>
+      ))}
+      {tube([0, 0.42, -0.8], [0, 0.45, 0])}
+      {tube([0, 0.45, 0], [0, 0.85, -0.25])}
+      {tube([0, 0.85, -0.25], [0, 0.9, 0.55])}
+      {tube([0, 0.45, 0], [0, 0.9, 0.55])}
+      {tube([0, 0.42, 0.8], [0, 1.3, 0.62])}
+      {tube([-0.35, 1.3, 0.62], [0.35, 1.3, 0.62], 0.04)}
+      <mesh position={[0, 0.9, -0.3]}>
+        <boxGeometry args={[0.2, 0.06, 0.34]} />
+        <meshStandardMaterial roughness={0.7} color="#2b2b33" />
+      </mesh>
     </group>
   )
 }

@@ -31,6 +31,10 @@ function Remote({ id, net, scale }: { id: number; net: Net; scale: number }) {
     group.current.scale.setScalar(scale)
     group.current.rotation.y = c.r
     state.current.moving = t.m
+    state.current.run = t.a === 1
+    state.current.bike = t.a === 2
+    state.current.sit = t.a === 3
+    state.current.wave = t.a === 4
     const b = net.bubbles.get(id)
     state.current.bubble = b && performance.now() - b.at < 6000 ? b.text : undefined
   })

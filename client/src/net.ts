@@ -20,6 +20,8 @@ export interface NetPlayer {
   y?: number
   r: number
   m: boolean
+  /** what they're doing: 0 nothing special, 1 running, 2 on a bike, 3 sitting, 4 waving */
+  a?: number
   /** bean look from /avatar (see look.ts) */
   look?: string
 }
@@ -108,6 +110,7 @@ export class Net {
   /**
    * Binary position frame: 'S', count u16, then per player 13 bytes:
    * id u32 | x i16 dm | z i16 dm | r i16 crad | y i16 dm | moving u8 (little-endian).
+   * The moving byte: bit 0 moving, bits 1-3 the activity (Player.a).
    */
   private onFrame(buf: ArrayBuffer) {
     const v = new DataView(buf)
@@ -131,11 +134,12 @@ export class Net {
         cur.x = x / 10
         cur.z = z / 10
         cur.r = r / 100
-        cur.m = m === 1
+        cur.m = (m & 1) === 1
+        cur.a = (m >> 1) & 7
         cur.y = y / 10
       } else {
         const who = this.info.get(id)
-        this.players.set(id, { id, name: who?.name ?? '', color: who?.color ?? '#e0564f', look: who?.look, x: x / 10, z: z / 10, r: r / 100, m: m === 1, y: y / 10 })
+        this.players.set(id, { id, name: who?.name ?? '', color: who?.color ?? '#e0564f', look: who?.look, x: x / 10, z: z / 10, r: r / 100, m: (m & 1) === 1, a: (m >> 1) & 7, y: y / 10 })
         changed = true
       }
     }

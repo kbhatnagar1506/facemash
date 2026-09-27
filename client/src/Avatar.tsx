@@ -12,6 +12,10 @@ export interface AvatarState {
   sit?: boolean
   /** Arm wave for NPCs chatting / greeting. */
   wave?: boolean
+  /** Running: quicker, longer strides, leaning in. */
+  run?: boolean
+  /** Riding a bike (drawn under the bean, pedalling). */
+  bike?: boolean
   /** performance.now() when a cheer (smile + wink + happy jump) started. */
   cheer?: number
 }
