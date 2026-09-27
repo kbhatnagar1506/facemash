@@ -7,18 +7,19 @@ import { Net } from './net'
 import { World } from './World'
 import { Player, type PlayerInfo, type View } from './Player'
 import { Remotes } from './Remotes'
-import { requestMotion, useMotion } from './motion'
+import { useMotion } from './motion'
 import { decodeLook, defaultLook, encodeLook, loadLook, saveLook } from './look'
 import { Hud } from './Hud'
 import { Shells } from './Shells'
 import { fetchMe, type Me } from './account'
 import { touchFirst } from './touch'
 import { PermissionsSheet, wantsPermissions, type PermResult } from './Permissions'
-import { CALIBRATION_SPOTS, HallCollider, HALL_BOUNDS, HALL_SPAWN, HALL_YAW, PERSON_SCALE, TABLE, TABLES, cameraCeiling, eastX, westX } from './hall/layout'
+import { CALIBRATION_SPOTS, HallCollider, HALL_BOUNDS, HALL_SPAWN, HALL_YAW, PERSON_SCALE, TABLE, TABLES, cameraCeiling, eastX, nearestTable, westX } from './hall/layout'
 // the Klaus hall is big: it downloads in its own chunk, only once you're near Klaus
 const HackGTHall = lazy(() => import('./HackGTHall').then((m) => ({ default: m.HackGTHall })))
 import { toHall, useLiveLocation, type GeoCfg } from './geo'
-import { Calibrate, LivePill, MotionPill } from './LiveLocation'
+import { Calibrate } from './LiveLocation'
+import { hallPath } from './hall/path'
 import type { EventInfo } from './HackGTWelcome'
 import { TalkLayer } from './talk/TalkLayer'
 
@@ -180,11 +181,25 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
   // between fixes, and jumps a person couldn't make (indoor multipath) are ignored
   // unless they persist.
   const kf = useRef<{ x: number; z: number; p: number; t: number; rejects: number } | null>(null)
+  // The reference point (an organizer's real table, set with Shift+R): every bean that enters
+  // the hall walks there along `route`, then follows its phone by compass + steps, no GPS.
+  const route = useRef<[number, number][]>([])
+  const [refPt, setRefPt] = useState<{ x: number; z: number; table?: number } | null>(null)
+  useEffect(() => {
+    fetch('/api/reference')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => j && typeof j.x === 'number' && setRefPt(j))
+      .catch(() => {})
+    const on = (e: Event) => setRefPt((e as CustomEvent).detail)
+    addEventListener('gt-anchor', on)
+    return () => removeEventListener('gt-anchor', on)
+  }, [])
   const lastMeas = useRef('')
   const sticky = useRef(new Map<string, { n: number; at: number }>())
   useEffect(() => {
     // Live location is only used inside the Klaus atrium; campus is always keys.
     if (room !== 'hackgt' || !live || !fix || fix.acc > 60 || !geoCfg) {
+      if (room === 'hackgt' && !live && (route.current.length || kf.current)) return // the walk to the reference, or steps, own it
       gps.current = null
       if (room !== 'hackgt' || !live) kf.current = null
       setWhere(null)
@@ -313,7 +328,7 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
     k.x = Math.min(eastX(zc) - 0.9, Math.max(westX(zc) + 0.9, k.x))
     gps.current = { x: k.x, z: k.z }
   }
-  const motionStatus = useMotion(live && room === 'hackgt' && motionOn, onStep)
+  const motionStatus = useMotion(room === 'hackgt' && motionOn && (live || refPt != null), onStep)
   motionActive.current = motionStatus === 'on'
   motionStatusRef.current = motionStatus
   // answered the arrival prompt while the game was already up
@@ -328,24 +343,33 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
     addEventListener('gt-perms', on)
     return () => removeEventListener('gt-perms', on)
   }, [])
-  const enableMotion = async () => {
-    const ok = await requestMotion()
-    setMotionOn(ok)
-    save('gt.motion', ok)
-  }
+
 
   // Where live tracking starts: a known spot we set before the event (the table the
   // judging happens at, from server/geo.json: anchorTable or anchor), else the centre of
   // the atrium's table area. You appear there the moment live tracking starts, and
   // steps + GPS take over (like Doorstep's known-entrance anchor).
   const anchor = useMemo<[number, number]>(() => {
+    if (refPt) return [refPt.x, refPt.z] // set live by an organizer (Shift+R)
     const t = geoCfg?.anchorTable != null ? TABLES.find((q) => q.n === geoCfg.anchorTable) : undefined
     if (t) return [t.x, t.z + TABLE.d / 2 + 0.9] // standing at the table's front edge
     return geoCfg?.anchor ?? [6.8, -1] // middle of the hacking tables
-  }, [geoCfg])
+  }, [geoCfg, refPt])
+  // With a reference set, every bean walks there from wherever it is (the doors, on
+  // arrival), around the tables; then its phone's compass + steps take over from that spot.
+  // Without one, live GPS starts you at the anchor as before.
+  const tracking = room === 'hackgt' && (live || (refPt != null && motionOn))
+  const trackingRef = useRef(tracking)
+  trackingRef.current = tracking
   useEffect(() => {
     lastMeas.current = ''
-    if (room === 'hackgt' && live) {
+    route.current = []
+    if (room === 'hackgt' && refPt && net) {
+      kf.current = null
+      const path = hallPath(net.position(), anchor)
+      route.current = path
+      gps.current = path.length ? { x: path[0][0], z: path[0][1] } : null
+    } else if (room === 'hackgt' && live) {
       kf.current = { x: anchor[0], z: anchor[1], p: 2, t: Date.now(), rejects: 0 }
       gps.current = { x: anchor[0], z: anchor[1] }
       if (net) net.correction = { x: anchor[0], z: anchor[1] } // appear there now
@@ -353,7 +377,70 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
       kf.current = null
       gps.current = null
     }
-  }, [room, live, anchor, net])
+  }, [room, live, anchor, net, refPt])
+  // follow the route one corner at a time; at the reference, the phone takes over
+  useEffect(() => {
+    if (room !== 'hackgt' || !net) return
+    const t = setInterval(() => {
+      const r = route.current
+      if (!r.length) return
+      const [px, pz] = net.position()
+      if (Math.hypot(r[0][0] - px, r[0][1] - pz) > 0.9) return
+      r.shift()
+      if (r.length) {
+        gps.current = { x: r[0][0], z: r[0][1] }
+        return
+      }
+      // arrived
+      if (trackingRef.current) {
+        kf.current = { x: anchor[0], z: anchor[1], p: 1, t: Date.now(), rejects: 0 }
+        gps.current = { x: anchor[0], z: anchor[1] }
+      } else {
+        gps.current = null // no compass/steps on this device: the keys take over
+      }
+    }, 100)
+    return () => clearInterval(t)
+  }, [room, net, anchor])
+  // Organizers set the reference where their bean stands: Shift+R (or the button on a phone).
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [refNote, setRefNote] = useState('')
+  useEffect(() => {
+    fetch('/api/admin/me', { credentials: 'same-origin' })
+      .then((r) => setIsAdmin(r.ok))
+      .catch(() => {})
+  }, [])
+  const setReference = async () => {
+    if (!net || room !== 'hackgt') {
+      setRefNote('Walk into the HackGT hall first')
+      return
+    }
+    const [x, z] = net.position()
+    const t = nearestTable(x, z, 0, 4)
+    const r = await fetch('/api/reference', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ x, z, table: t?.n ?? 0 }),
+    }).catch(() => null)
+    setRefNote(r?.ok ? `Reference set${t ? ` at Table ${t.n}` : ''}: everyone walks here now` : "Couldn't set the reference")
+  }
+  useEffect(() => {
+    if (!refNote) return
+    const t = setTimeout(() => setRefNote(''), 4000)
+    return () => clearTimeout(t)
+  }, [refNote])
+  useEffect(() => {
+    if (!isAdmin) return
+    const on = (e: KeyboardEvent) => {
+      if (!e.shiftKey || e.code !== 'KeyR' || e.metaKey || e.ctrlKey || e.altKey) return
+      const el = document.activeElement
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) return
+      e.preventDefault()
+      void setReference()
+    }
+    addEventListener('keydown', on)
+    return () => removeEventListener('keydown', on)
+  })
   // Send what the device reports to the server so the atrium can be mapped from
   // real coordinates (and so we can see why live location isn't moving someone).
   const lastSample = useRef(0)
@@ -504,18 +591,12 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
       />
       <div className="live-ui">
         {ticket && <TalkLayer net={net} myLook={encodeLook(myLook)} />}
-        {room === 'hackgt' && <LivePill
-          live={live}
-          status={status}
-          fix={fix}
-          where={where}
-          room={room}
-          onToggle={() => {
-            save('gt.gps', !live)
-            setLive(!live)
-          }}
-        />}
-        {room === 'hackgt' && live && status === 'live' && <MotionPill status={motionStatus} wanted={motionOn} onEnable={enableMotion} />}
+        {room === 'hackgt' && isAdmin && (
+          <button className="ref-btn" type="button" onClick={() => void setReference()} title="Organizers: set the reference to where your bean stands (Shift+R)">
+            📍 Set reference here
+          </button>
+        )}
+        {refNote && <div className="ref-note" role="status">{refNote}</div>}
         {calibrating && room === 'hackgt' && (
           <Calibrate
             fix={fix}

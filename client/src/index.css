@@ -365,3 +365,7 @@ kbd {
   /* the dialog is up top here, so the switches stay where they are */
   .hud:has(> .dialog) ~ .live-ui { bottom: calc(172px + env(safe-area-inset-bottom)); }
 }
+/* organizers: set the reference point (Shift+R) */
+.ref-btn { font: 600 13px/1 system-ui, sans-serif; padding: 9px 12px; border-radius: 999px; border: 2px solid #1b1d24; background: #ffd23f; color: #1b1d24; box-shadow: 0 3px 0 #1b1d24; cursor: pointer; }
+.ref-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #1b1d24; }
+.ref-note { font: 600 13px/1.3 system-ui, sans-serif; padding: 8px 12px; border-radius: 12px; background: rgba(27, 29, 36, 0.88); color: #fff; max-width: 280px; }

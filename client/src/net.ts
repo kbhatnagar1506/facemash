@@ -202,6 +202,9 @@ export class Net {
         this.bubbles.set(msg.id, { text: msg.text, at: performance.now() })
         this.addChat(msg.id, msg.name, msg.text)
         break
+      case 'anchor': // an organizer set the reference point (Shift+R): the hall follows it now
+        dispatchEvent(new CustomEvent('gt-anchor', { detail: msg }))
+        break
       case 'correct':
         this.correction = { x: msg.x, z: msg.z }
         break
@@ -218,6 +221,11 @@ export class Net {
   private addChat(id: number, name: string, text: string) {
     this.chat = [...this.chat.slice(-30), { key: this.chatKey++, id, name, text, at: Date.now() }]
     this.emit()
+  }
+
+  /** Where this player's bean is now (hall or campus metres), as last reported by the game. */
+  position(): [number, number] {
+    return [this.hello.x, this.hello.z]
   }
 
   /** Called every frame; only sends when something changed, capped by the caller's rate. */

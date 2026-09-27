@@ -117,53 +117,6 @@ function LocationSign({ collider, info }: { collider: Collider; info: React.Muta
   )
 }
 
-function Chat({ net }: { net: Net }) {
-  const [, rerender] = useReducer((n: number) => n + 1, 0)
-  const [text, setText] = useState('')
-  const input = useRef<HTMLInputElement>(null!)
-  useEffect(() => net.subscribe(rerender), [net])
-  useEffect(() => {
-    const k = (e: KeyboardEvent) => {
-      if (e.code === 'Enter' && document.activeElement !== input.current) {
-        e.preventDefault()
-        input.current.focus()
-      }
-    }
-    window.addEventListener('keydown', k)
-    return () => window.removeEventListener('keydown', k)
-  }, [])
-
-  return (
-    <div className="chat">
-      <div className="chat-log">
-        {net.chat.slice(-8).map((c) => (
-          <div key={c.key} className={c.id ? 'chat-line' : 'chat-line system'}>
-            {c.id ? <b>{c.name}: </b> : null}
-            {c.text}
-          </div>
-        ))}
-      </div>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (text.trim()) net.say(text.trim())
-          setText('')
-          input.current.blur()
-        }}
-      >
-        <input
-          ref={input}
-          value={text}
-          maxLength={140}
-          placeholder={TOUCH ? 'Say something…' : 'Press Enter to chat'}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => e.key === 'Escape' && input.current.blur()}
-        />
-      </form>
-    </div>
-  )
-}
-
 /** "Now / Next" from the real HackGT schedule, using the viewer's clock. */
 function nowNext(event: EventInfo | null) {
   if (!event?.days) return null
@@ -325,10 +278,10 @@ export function Hud({
           <Minimap campus={campus} net={net} info={info} />
         </>
       )}
-      <Chat net={net} />
+      {/* no chat box: agents do the talking */}
       {TOUCH && <Stick />}
       <div className="help">
-        <kbd>WASD</kbd> move · <kbd>Shift</kbd> run · {inHall ? <>drag or <kbd>Q</kbd>/<kbd>R</kbd>/<kbd>T</kbd>/<kbd>G</kbd> look · </> : <>drag or <kbd>Q</kbd>/<kbd>R</kbd> turn · <kbd>B</kbd> bike · <kbd>M</kbd> map · </>}<kbd>Enter</kbd> chat · <kbd>E</kbd> interact · scroll to zoom
+        <kbd>WASD</kbd> move · <kbd>Shift</kbd> run · {inHall ? <>drag or <kbd>Q</kbd>/<kbd>R</kbd>/<kbd>T</kbd>/<kbd>G</kbd> look · </> : <>drag or <kbd>Q</kbd>/<kbd>R</kbd> turn · <kbd>B</kbd> bike · <kbd>M</kbd> map · </>}<kbd>E</kbd> interact · scroll to zoom
       </div>
       {near && !eventOpen && !board && (
         <div className="dialog" onClick={act}>

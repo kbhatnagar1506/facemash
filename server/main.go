@@ -791,8 +791,10 @@ func main() {
 		}
 		mountVoice(mux, acct, acct.voice, originOK)
 		mountVoiceAsk(mux, acct, acct.voice, originOK) // hands-free: questions as audio, answers written down (voice_ask.go)
-		mountAdmin(mux, acct, hub)                     // /api/admin/* for organizers in ADMIN_EMAILS (admin.go)
-		startUsage(acct, hub)                          // play sessions and the service meter (usage.go)
+		adm := mountAdmin(mux, acct, hub)              // /api/admin/* for organizers in ADMIN_EMAILS (admin.go)
+		// the organizer's real table, set with Shift+R; beans walk there, then follow their phone (reference.go)
+		mountReference(mux, acct, hub, adm, originOK, openRefStore(refFile(*samplesFile)))
+		startUsage(acct, hub) // play sessions and the service meter (usage.go)
 		if *devLogin {
 			mountDevLogin(mux, acct)
 		}

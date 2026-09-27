@@ -31,9 +31,13 @@ export function TalkLayer({ net, myLook }: { net: Net; myLook: string }) {
     }
   }, [ended])
 
+  // everyone's agent talks: opted in automatically, no switch
+  useEffect(() => {
+    if (opt && opt.live && !opt.on) void setOptIn(true).then((o) => o && setOpt(o))
+  }, [opt])
+
   return (
     <>
-      {opt && opt.live && <TalkSwitch opt={opt} onChange={setOpt} />}
       {store &&
         talks.length > 0 &&
         createPortal(
@@ -49,24 +53,3 @@ export function TalkLayer({ net, myLook }: { net: Net; myLook: string }) {
 const noTalks: never[] = []
 const noSnap = () => noTalks
 const noSub = () => () => {}
-
-function TalkSwitch({ opt, onChange }: { opt: OptIn; onChange: (o: OptIn) => void }) {
-  const [busy, setBusy] = useState(false)
-  const flip = async () => {
-    if (busy) return
-    setBusy(true)
-    const o = await setOptIn(!opt.on)
-    setBusy(false)
-    if (o) onChange(o)
-  }
-  const left = opt.limit ? `${opt.left ?? 0} agent talk${opt.left === 1 ? '' : 's'} left today` : ''
-  return (
-    <button type="button" className={opt.on ? 'talk-switch on' : 'talk-switch'} role="switch" aria-checked={opt.on} onClick={flip} disabled={busy}>
-      <span className="talk-knob" aria-hidden />
-      <span className="talk-label">
-        Let my agent talk to people nearby
-        {opt.on && left && <small>{left}</small>}
-      </span>
-    </button>
-  )
-}
