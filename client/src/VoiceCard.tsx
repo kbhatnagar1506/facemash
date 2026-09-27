@@ -1,48 +1,47 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Conversation } from '@elevenlabs/client'
 import { BEAN_STEP } from './onboarding'
 
-// No Muse? Talk for two minutes instead. A short call with our ElevenLabs voice guide, who
-// asks five questions; what you say becomes your memory here, the same as a Muse upload.
-//  - The key stays on our server: it hands this page a signed URL for one call.
-//  - The SDK is loaded only once this card opens (it's most of the weight).
-//  - When the call ends we ask the server to save it; it fetches the transcript itself and
-//    keeps only your side of it. Then we show you what it heard.
+// No Muse? Answer five questions out loud instead, hands-free after one tap.
+//  - Each question plays in our voice guide's voice (made once on the server, the same clip
+//    for everyone), then the phone listens and stops by itself when you've finished talking.
+//  - Each answer goes to the server while the next question plays: it's written down there
+//    (ElevenLabs speech to text) and saved into your memory at once, so stopping halfway
+//    keeps what you said and there's nothing to wait for at the end.
+//  - The recording is never kept, only the words.
+// server/voice_ask.go has the other side; QUESTIONS must match its voiceQuestions.
 
-type Phase = 'idle' | 'connecting' | 'listening' | 'speaking' | 'saving' | 'done' | 'error'
-type Answer = { q: string; a: string }
-type Start = { signed_url: string; session: string; first_name: string; questions: string[]; max_seconds: number }
-
-// a phrase from each question that marks the guide asking it (server/voice.go has the same)
-const MARKS = [
-  ['building this weekend', 'what are you building'],
-  ['stuck on', 'love help with'],
-  ['really good at', 'help someone else'],
-  ['niche', 'nobody else here'],
-  ['dream person', 'meet this weekend'],
+const QUESTIONS = [
+  "What are you building this weekend, and what's the part you're most excited about?",
+  "What's the one thing you're stuck on right now, the bug or problem you'd love help with?",
+  "What's something you're really good at that you could help someone else with here?",
+  "What's a niche thing you're into that almost nobody else here shares?",
+  'Who would be your dream person to meet this weekend, and why?',
 ]
-function whichQuestion(msg: string, cur: number) {
-  const m = msg.toLowerCase().replace(/’/g, "'")
-  for (let q = cur + 1; q < MARKS.length; q++) if (MARKS[q].some((k) => m.includes(k))) return q
-  return -1
-}
 
+// listening: when to stop by itself
+const WAIT_FOR_SPEECH_MS = 9000 // nothing said by then: move on
+const END_SILENCE_MS = 1600 // quiet this long after speaking: done
+const MAX_ANSWER_MS = 60000
+const SPEECH_MS = 200 // this much sound counts as speaking (not a cough)
+
+type Phase = 'idle' | 'starting' | 'asking' | 'listening' | 'finishing' | 'done' | 'error'
+// per question: not asked yet, being written down, what we heard, or skipped/failed
+type Heard = { state: 'todo' | 'sending' | 'ok' | 'skipped' | 'failed'; text: string }
+
+const blank = (): Heard[] => QUESTIONS.map(() => ({ state: 'todo', text: '' }))
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-async function postJSON<T>(path: string, body?: unknown): Promise<{ status: number; data: T & { error?: string } }> {
-  const r = await fetch(path, {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  return { status: r.status, data: await r.json().catch(() => ({}) as T & { error?: string }) }
+function pickMime() {
+  if (typeof MediaRecorder === 'undefined') return ''
+  for (const m of ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus']) if (MediaRecorder.isTypeSupported(m)) return m
+  return ''
 }
 
-/** The call's bean: breathes while it listens, bounces with the guide's voice. */
-function Bean({ phase, level }: { phase: Phase; level: number }) {
+/** The guide's bean: bounces while a question plays, breathes and follows your voice while it listens. */
+function Bean({ phase, beanRef }: { phase: Phase; beanRef: React.RefObject<HTMLDivElement | null> }) {
+  const cls = phase === 'asking' ? 'vc-speaking' : phase === 'listening' ? 'vc-listening' : phase === 'finishing' ? 'vc-saving' : 'vc-connecting'
   return (
-    <div className={'vc-bean vc-' + phase} style={{ '--lvl': level.toFixed(3) } as React.CSSProperties} aria-hidden="true">
+    <div ref={beanRef} className={'vc-bean ' + cls} aria-hidden="true">
       <svg viewBox="0 0 32 32">
         <rect x="7" y="2" width="18" height="28" rx="9" fill="#3B63C4" />
         <rect x="11.5" y="7.5" width="12" height="8" rx="4" fill="#fff" />
@@ -53,35 +52,38 @@ function Bean({ phase, level }: { phase: Phase; level: number }) {
   )
 }
 
-// tell the server this person's call is over without a save (it frees their place under the cap);
-// keepalive lets it go out while the page is closing
-function hangUp() {
-  fetch('/api/voice/end', { method: 'POST', credentials: 'same-origin', keepalive: true }).catch(() => {})
-}
-
 export function VoiceCard({ step, onBack }: { step: boolean; onBack: () => void }) {
   const [phase, setPhase] = useState<Phase>('idle')
-  const [q, setQ] = useState(-1)
   const [error, setError] = useState('')
-  const [answers, setAnswers] = useState<Answer[]>([])
-  const [level, setLevel] = useState(0)
-  const conv = useRef<Conversation | null>(null)
-  const convId = useRef('')
-  const qRef = useRef(-1)
-  const finishing = useRef(false)
+  const [q, setQ] = useState(-1)
+  const [heard, setHeard] = useState<Heard[]>(blank)
 
-  // start fetching the SDK as soon as the card is open, so the tap is quick
-  const sdk = useRef<Promise<typeof import('@elevenlabs/client')> | null>(null)
+  const beanRef = useRef<HTMLDivElement | null>(null)
+  const audio = useRef<HTMLAudioElement | null>(null)
+  const stream = useRef<MediaStream | null>(null)
+  const actx = useRef<AudioContext | null>(null)
+  const stopped = useRef(false) // the whole run was stopped
+  const skipNow = useRef<(() => void) | null>(null) // ends the clip playing or the answer being recorded
+  const uploads = useRef<Promise<void>[]>([])
+
+  const mark = (i: number, h: Heard) => setHeard((all) => all.map((x, k) => (k === i ? h : x)))
+  // the bean follows the sound level without re-rendering the card
+  const setLevel = (v: number) => beanRef.current?.style.setProperty('--lvl', v.toFixed(3))
+
+  const release = () => {
+    skipNow.current?.()
+    audio.current?.pause()
+    stream.current?.getTracks().forEach((t) => t.stop())
+    stream.current = null
+    actx.current?.close().catch(() => {})
+    actx.current = null
+  }
+
+  // leaving the page stops everything (answers already sent are already saved)
   useEffect(() => {
-    sdk.current = import('@elevenlabs/client')
-    sdk.current.catch(() => {})
-    // leaving (tab closed, page away) hangs up, so no call keeps running in the background
-    // and its place frees up for someone else right away
     const leave = () => {
-      if (!conv.current) return
-      conv.current.endSession().catch(() => {})
-      conv.current = null
-      hangUp()
+      stopped.current = true
+      release()
     }
     addEventListener('pagehide', leave)
     return () => {
@@ -90,114 +92,169 @@ export function VoiceCard({ step, onBack }: { step: boolean; onBack: () => void 
     }
   }, [])
 
-  // the bean follows whoever is talking
-  useEffect(() => {
-    if (phase !== 'listening' && phase !== 'speaking') return
-    let raf = 0
-    const tick = () => {
-      const c = conv.current
-      if (c) setLevel(Math.min(1, phase === 'speaking' ? c.getOutputVolume() * 1.6 : c.getInputVolume() * 2))
-      raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [phase])
+  const play = (src: string) =>
+    new Promise<void>((resolve, reject) => {
+      const a = audio.current!
+      a.onended = () => resolve()
+      a.onerror = () => reject(new Error("Couldn't play the question. Check your sound and try again?"))
+      a.src = src
+      a.play().catch(reject)
+      skipNow.current = () => {
+        a.pause()
+        resolve()
+      }
+    })
 
-  const finish = async () => {
-    if (finishing.current) return
-    finishing.current = true
-    conv.current = null
-    setLevel(0)
-    if (!convId.current) {
-      hangUp()
-      setError("The call didn't connect. Try again?")
-      setPhase('error')
-      finishing.current = false
-      return
-    }
-    setPhase('saving')
-    // the guide may still be wrapping up for a few seconds: ask again while it does
-    for (let i = 0; i < 8; i++) {
+  // record one answer; stops by itself on silence (or when nothing is said), or on skipNow
+  const record = (mime: string) =>
+    new Promise<{ blob: Blob; secs: number; spoke: boolean }>((resolve) => {
+      const s = stream.current!
+      const rec = new MediaRecorder(s, mime ? { mimeType: mime } : undefined)
+      const parts: Blob[] = []
+      rec.ondataavailable = (e) => {
+        if (e.data.size) parts.push(e.data)
+      }
+      const an = actx.current!.createAnalyser()
+      an.fftSize = 1024
+      const src = actx.current!.createMediaStreamSource(s)
+      src.connect(an)
+      const buf = new Float32Array(an.fftSize)
+      const t0 = performance.now()
+      let floor = 0.01
+      let loud = 0
+      let spokeAt = 0
+      let quietSince = 0
+      let done = false
+      const finish = () => {
+        if (done) return
+        done = true
+        clearInterval(tick)
+        src.disconnect()
+        setLevel(0)
+        const out = () => resolve({ blob: new Blob(parts, { type: rec.mimeType || mime }), secs: (performance.now() - t0) / 1000, spoke: spokeAt > 0 })
+        if (rec.state === 'inactive') return out()
+        rec.onstop = out
+        rec.stop()
+      }
+      skipNow.current = finish
+      const tick = window.setInterval(() => {
+        an.getFloatTimeDomainData(buf)
+        let sum = 0
+        for (const v of buf) sum += v * v
+        const rms = Math.sqrt(sum / buf.length)
+        const now = performance.now()
+        const t = now - t0
+        if (t < 350) floor = Math.max(floor, rms) // the room's own noise, before they start
+        const thr = Math.max(0.02, floor * 2.5)
+        setLevel(Math.min(1, rms * 8))
+        if (rms > thr) {
+          loud += 50
+          quietSince = 0
+          if (loud >= SPEECH_MS && !spokeAt) spokeAt = now
+        } else {
+          loud = Math.max(0, loud - 25)
+          if (!quietSince) quietSince = now
+        }
+        if ((spokeAt && quietSince && now - quietSince > END_SILENCE_MS) || (!spokeAt && t > WAIT_FOR_SPEECH_MS) || t > MAX_ANSWER_MS) finish()
+      }, 50)
+      rec.start(250)
+    })
+
+  // send one answer; the server writes it down and saves it into their memory
+  const send = async (i: number, run: string, blob: Blob, secs: number) => {
+    mark(i, { state: 'sending', text: '' })
+    for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const { status, data } = await postJSON<{ answers: Answer[] }>('/api/voice/finish', { conversation_id: convId.current })
-        if (status === 200) {
-          setAnswers(data.answers ?? [])
-          setPhase('done')
-          return
-        }
-        if (status !== 409 && status !== 503 && status !== 429) {
-          setError(data.error ?? 'Something went wrong saving that.')
-          break
-        }
+        const r = await fetch(`/api/voice/hear?q=${i}&run=${run}&secs=${Math.round(secs)}`, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': blob.type || 'audio/webm' },
+          body: blob,
+        })
+        const data = (await r.json().catch(() => ({}))) as { text?: string; error?: string }
+        if (r.ok) return mark(i, data.text ? { state: 'ok', text: data.text } : { state: 'skipped', text: '' })
+        if (![429, 502, 503].includes(r.status)) return mark(i, { state: 'failed', text: data.error ?? '' })
       } catch {
         /* offline for a moment: try again */
       }
-      await sleep(2500)
+      await sleep(1500 * (attempt + 1))
     }
-    setError((e) => e || "Couldn't save that call just now.")
-    setPhase('error')
-    finishing.current = false
+    mark(i, { state: 'failed', text: "Couldn't save that one." })
   }
 
   const begin = async () => {
     setError('')
+    setHeard(blank())
     setQ(-1)
-    qRef.current = -1
-    convId.current = ''
-    finishing.current = false
-    setPhase('connecting')
+    stopped.current = false
+    uploads.current = []
+    setPhase('starting')
+    if (typeof MediaRecorder === 'undefined' || !navigator.mediaDevices) {
+      setError("This browser can't record audio. Try Chrome or Safari, or connect Muse instead.")
+      setPhase('error')
+      return
+    }
+    const run = Array.from(crypto.getRandomValues(new Uint8Array(10)), (b) => b.toString(16).padStart(2, '0')).join('')
+    // on this tap: unlock sound (one audio element plays every clip) and ask for the mic
+    audio.current ??= new Audio()
+    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    actx.current = new Ctx()
+    const intro = play('/api/voice/q/intro')
+    intro.catch(() => {}) // awaited below
     try {
-      // ask for the mic first, on this tap, so the prompt comes up right away
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      stream.getTracks().forEach((t) => t.stop())
+      stream.current = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
     } catch {
+      release()
       setError('We need your microphone for this. Allow it in your browser settings, then try again.')
       setPhase('error')
       return
     }
+    const mime = pickMime()
     try {
-      const [{ status, data }, lib] = await Promise.all([postJSON<Start>('/api/voice/start'), sdk.current ?? import('@elevenlabs/client')])
-      if (status !== 200) throw new Error(data.error ?? 'The voice guide is busy. Try again in a minute.')
-      convId.current = new URL(data.signed_url).searchParams.get('conversation_id') ?? ''
-      conv.current = await lib.Conversation.startSession({
-        signedUrl: data.signed_url,
-        connectionType: 'websocket',
-        dynamicVariables: { first_name: data.first_name || 'there', fm_session: data.session },
-        onConnect: ({ conversationId }) => {
-          if (conversationId) convId.current = conversationId
-        },
-        onModeChange: ({ mode }) => setPhase((p) => (p === 'saving' || p === 'done' || p === 'error' ? p : mode)),
-        onMessage: (m) => {
-          if (m.role !== 'agent' && m.source !== 'ai') return
-          const n = whichQuestion(m.message, qRef.current)
-          if (n >= 0) {
-            qRef.current = n
-            setQ(n)
-          }
-        },
-        onDisconnect: () => void finish(),
-        onError: (msg) => console.warn('voice:', msg),
-      })
-      if (!convId.current) convId.current = conv.current.getId()
-      setPhase((p) => (p === 'connecting' ? 'speaking' : p))
+      setPhase('asking')
+      await intro
+      for (let i = 0; i < QUESTIONS.length && !stopped.current; i++) {
+        setQ(i)
+        setPhase('asking')
+        await play(`/api/voice/q/${i}`)
+        if (stopped.current) break
+        setPhase('listening')
+        const { blob, secs, spoke } = await record(mime)
+        if (!spoke || blob.size < 1000) {
+          mark(i, { state: 'skipped', text: '' })
+          continue
+        }
+        uploads.current.push(send(i, run, blob, secs)) // written down and saved while the next question plays
+      }
     } catch (e) {
-      conv.current?.endSession().catch(() => {})
-      conv.current = null
-      hangUp()
-      setError(e instanceof Error && e.message ? e.message : "Couldn't reach the voice guide. Try again?")
+      release()
+      setError(e instanceof Error && e.message ? e.message : 'Something went wrong. Try again?')
       setPhase('error')
+      return
     }
+    release()
+    setPhase('finishing')
+    await Promise.all(uploads.current)
+    setPhase('done')
   }
 
-  const end = () => {
-    const c = conv.current
-    if (c) c.endSession().catch(() => void finish())
-    else void finish()
+  const stop = () => {
+    stopped.current = true
+    skipNow.current?.()
   }
 
-  const live = phase === 'connecting' || phase === 'listening' || phase === 'speaking'
+  const live = phase === 'starting' || phase === 'asking' || phase === 'listening' || phase === 'finishing'
+  const kept = heard.filter((h) => h.state === 'ok')
   const status =
-    phase === 'connecting' ? 'Connecting…' : phase === 'speaking' ? 'The guide is talking' : phase === 'listening' ? 'Listening, go ahead' : phase === 'saving' ? 'Saving what you said…' : ''
+    phase === 'starting'
+      ? 'Getting ready…'
+      : phase === 'asking'
+        ? 'Listen to the question…'
+        : phase === 'listening'
+          ? 'Go ahead, it moves on when you stop'
+          : phase === 'finishing'
+            ? 'Saving your last answer…'
+            : ''
 
   if (phase === 'done')
     return (
@@ -208,16 +265,18 @@ export function VoiceCard({ step, onBack }: { step: boolean; onBack: () => void 
             <path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
-        {answers.length ? (
+        {kept.length ? (
           <>
             <h1>Saved. Here's what we heard</h1>
             <ol className="vc-heard">
-              {answers.map((a) => (
-                <li key={a.q}>
-                  <span>{a.q}</span>
-                  <p>{a.a}</p>
-                </li>
-              ))}
+              {heard.map((h, i) =>
+                h.state === 'ok' ? (
+                  <li key={i}>
+                    <span>{QUESTIONS[i]}</span>
+                    <p>{h.text}</p>
+                  </li>
+                ) : null,
+              )}
             </ol>
           </>
         ) : (
@@ -230,11 +289,9 @@ export function VoiceCard({ step, onBack }: { step: boolean; onBack: () => void 
           <a className="btn btn-primary muse-wide" href={BEAN_STEP}>
             Next: make your bean
           </a>
-          {!answers.length && (
-            <button className="btn btn-secondary muse-wide" type="button" onClick={begin}>
-              Talk again
-            </button>
-          )}
+          <button className="btn btn-secondary muse-wide" type="button" onClick={begin}>
+            {kept.length ? 'Answer again' : 'Try again'}
+          </button>
         </div>
         <p className="muse-fine">This is now your memory here, like a Muse upload. You can delete it any time on this page.</p>
       </section>
@@ -243,20 +300,21 @@ export function VoiceCard({ step, onBack }: { step: boolean; onBack: () => void 
   return (
     <section className="muse-card vc">
       {step && <p className="muse-step">Step 2 of 3</p>}
-      <h1>{live || phase === 'saving' ? 'Talking with the guide' : 'Talk for two minutes'}</h1>
-      {!live && phase !== 'saving' && (
-        <p className="muse-sub">Our voice guide asks you five quick questions. What you say becomes your memory here, just like a Muse upload.</p>
+      <h1>{live ? (q >= 0 ? QUESTIONS[q] : 'Five quick questions') : 'Answer five questions out loud'}</h1>
+      {!live && (
+        <p className="muse-sub">Tap once and just talk: each question plays, and it moves on by itself when you finish. Every answer is saved as you go.</p>
       )}
-      {(live || phase === 'saving') && (
+      {live && (
         <p className="vc-count" aria-live="polite">
           {q >= 0 ? `Question ${q + 1} of 5` : 'Five questions'}
+          {kept.length > 0 && ` · ${kept.length} saved`}
         </p>
       )}
       <div className="vc-stage">
-        {live || phase === 'saving' ? (
-          <Bean phase={phase} level={level} />
+        {live ? (
+          <Bean phase={phase} beanRef={beanRef} />
         ) : (
-          <button className="vc-mic" type="button" onClick={begin} aria-label="Start talking">
+          <button className="vc-mic" type="button" onClick={begin} aria-label="Start">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor" />
               <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -273,19 +331,24 @@ export function VoiceCard({ step, onBack }: { step: boolean; onBack: () => void 
         </p>
       )}
       <div className="muse-actions">
-        {live && (
-          <button className="btn btn-secondary muse-wide" type="button" onClick={end}>
-            End call
+        {(phase === 'asking' || phase === 'listening') && (
+          <button className="btn btn-secondary muse-wide" type="button" onClick={() => skipNow.current?.()}>
+            {phase === 'listening' ? "I'm done, next" : 'Skip ahead'}
           </button>
         )}
-        {!live && phase !== 'saving' && (
+        {live && phase !== 'finishing' && (
+          <button className="muse-link" type="button" onClick={stop}>
+            Stop here (keeps what you've said)
+          </button>
+        )}
+        {!live && (
           <button className="muse-link" type="button" onClick={onBack}>
             I have Muse after all
           </button>
         )}
       </div>
       <p className="muse-fine">
-        ElevenLabs runs the call. We keep only the words you said, as text, never the audio. Delete it any time on this page.{' '}
+        ElevenLabs writes down what you say. We keep only the words, as text, never the audio. Delete it any time on this page.{' '}
         <a href="/privacy">Privacy</a>
       </p>
     </section>

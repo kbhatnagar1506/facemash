@@ -598,7 +598,7 @@ func usageServices(rows []usageMeterRow, day time.Time, rates map[string]usageRa
 			a.todayOut += r.TokensOut
 			a.todaySecs += r.Seconds
 		}
-		if r.Kind == "voice" {
+		if r.Kind == "voice" && r.Model != "elevenlabs-tts" && r.Model != "saved" { // calls, and answers written down
 			voice.Calls += r.Calls - r.Failed
 			voiceSecs += r.Seconds
 		}
