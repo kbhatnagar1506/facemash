@@ -104,7 +104,8 @@ type voiceCall struct {
 	convID  string // when ElevenLabs puts it in the signed URL
 	key     *voiceKey
 	started time.Time
-	done    bool
+	done    bool // saved
+	ended   bool // hung up (or replaced by their next call): no longer holds a place under the cap
 }
 
 type voiceGuide struct {
@@ -437,11 +438,24 @@ func (v *voiceGuide) sweep(now time.Time) {
 	v.calls = v.calls[i:]
 }
 
+// endCalls releases a person's calls from the cap (they can still be finished and saved).
+// Must hold v.mu.
+func (v *voiceGuide) endCalls(tenant string, id int64) int {
+	n := 0
+	for _, c := range v.calls {
+		if c.tenant == tenant && c.id == id && !c.done && !c.ended {
+			c.ended = true
+			n++
+		}
+	}
+	return n
+}
+
 // live counts calls that may still be going. Must hold v.mu.
 func (v *voiceGuide) live(now time.Time) int {
 	n := 0
 	for _, c := range v.calls {
-		if !c.done && now.Sub(c.started) < voiceLiveFor {
+		if !c.done && !c.ended && now.Sub(c.started) < voiceLiveFor {
 			n++
 		}
 	}
@@ -461,6 +475,7 @@ func (v *voiceGuide) start(ctx context.Context, tenant string, id int64, first s
 	v.mu.Lock()
 	now := v.now()
 	v.sweep(now)
+	v.endCalls(tenant, id) // one call per person: a new one replaces any left running
 	if v.live(now) >= v.cap {
 		v.mu.Unlock()
 		return voiceStart{}, errVoiceBusy
@@ -810,6 +825,21 @@ func mountVoice(mux *http.ServeMux, acc *accounts, v *voiceGuide, originOK func(
 			log.Printf("voice: #%d call started", id)
 			writeJSON(w, http.StatusOK, out)
 		}
+	})
+
+	// the page hung up without saving (closed, went away, or failed to connect): free the place
+	mux.HandleFunc("/api/voice/end", func(w http.ResponseWriter, r *http.Request) {
+		id, ok := who(w, r)
+		if !ok {
+			return
+		}
+		v.mu.Lock()
+		n := v.endCalls(acc.tenant, id)
+		v.mu.Unlock()
+		if n > 0 {
+			log.Printf("voice: #%d hung up %d call(s)", id, n)
+		}
+		w.WriteHeader(http.StatusNoContent)
 	})
 
 	mux.HandleFunc("/api/voice/finish", func(w http.ResponseWriter, r *http.Request) {

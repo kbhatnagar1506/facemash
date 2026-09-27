@@ -53,6 +53,12 @@ function Bean({ phase, level }: { phase: Phase; level: number }) {
   )
 }
 
+// tell the server this person's call is over without a save (it frees their place under the cap);
+// keepalive lets it go out while the page is closing
+function hangUp() {
+  fetch('/api/voice/end', { method: 'POST', credentials: 'same-origin', keepalive: true }).catch(() => {})
+}
+
 export function VoiceCard({ step, onBack }: { step: boolean; onBack: () => void }) {
   const [phase, setPhase] = useState<Phase>('idle')
   const [q, setQ] = useState(-1)
@@ -69,8 +75,18 @@ export function VoiceCard({ step, onBack }: { step: boolean; onBack: () => void 
   useEffect(() => {
     sdk.current = import('@elevenlabs/client')
     sdk.current.catch(() => {})
+    // leaving (tab closed, page away) hangs up, so no call keeps running in the background
+    // and its place frees up for someone else right away
+    const leave = () => {
+      if (!conv.current) return
+      conv.current.endSession().catch(() => {})
+      conv.current = null
+      hangUp()
+    }
+    addEventListener('pagehide', leave)
     return () => {
-      conv.current?.endSession().catch(() => {})
+      removeEventListener('pagehide', leave)
+      leave()
     }
   }, [])
 
@@ -93,6 +109,7 @@ export function VoiceCard({ step, onBack }: { step: boolean; onBack: () => void 
     conv.current = null
     setLevel(0)
     if (!convId.current) {
+      hangUp()
       setError("The call didn't connect. Try again?")
       setPhase('error')
       finishing.current = false
@@ -164,7 +181,9 @@ export function VoiceCard({ step, onBack }: { step: boolean; onBack: () => void 
       if (!convId.current) convId.current = conv.current.getId()
       setPhase((p) => (p === 'connecting' ? 'speaking' : p))
     } catch (e) {
+      conv.current?.endSession().catch(() => {})
       conv.current = null
+      hangUp()
       setError(e instanceof Error && e.message ? e.message : "Couldn't reach the voice guide. Try again?")
       setPhase('error')
     }

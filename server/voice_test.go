@@ -298,6 +298,30 @@ func TestVoiceCap(t *testing.T) {
 	}
 }
 
+// A hung-up call, or one replaced by the same person's next call, frees its place at once.
+func TestVoiceHangUpFreesThePlace(t *testing.T) {
+	e := voiceServer(t, []*voiceKey{{name: "primary", key: "xk_primary_1", agent: "agent_a"}}, 1)
+	if code, _ := e.post(t, "/api/voice/start", e.a, site, ""); code != 200 {
+		t.Fatalf("first: %d", code)
+	}
+	// A starts again (the old call left running in another tab): the new one replaces it
+	if code, _ := e.post(t, "/api/voice/start", e.a, site, ""); code != 200 {
+		t.Fatalf("a second call of one's own: %d", code)
+	}
+	if code, _ := e.post(t, "/api/voice/start", e.b, site, ""); code != http.StatusServiceUnavailable {
+		t.Fatalf("A's call still holds the one place: %d", code)
+	}
+	if code, _ := e.post(t, "/api/voice/end", e.a, site, ""); code != http.StatusNoContent {
+		t.Fatalf("hang up: %d", code)
+	}
+	if code, _ := e.post(t, "/api/voice/start", e.b, site, ""); code != 200 {
+		t.Fatalf("after A hung up: %d", code)
+	}
+	if code, _ := e.post(t, "/api/voice/end", e.a, "https://evil.test", ""); code != http.StatusForbidden {
+		t.Fatalf("hang up from another site: %d", code)
+	}
+}
+
 func TestVoiceKeyFailover(t *testing.T) {
 	for _, bad := range []int{400, 401, 429, 503} {
 		t.Run(fmt.Sprint(bad), func(t *testing.T) {
