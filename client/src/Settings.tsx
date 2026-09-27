@@ -93,6 +93,13 @@ export default function Settings() {
     }
   }
 
+  const deleteAccount = async () => {
+    if (!confirm('Delete your togethr account? Your memory, your matches and your chats are erased for good. This cannot be undone.')) return
+    const r = await fetch('/api/me', { method: 'DELETE', credentials: 'same-origin' }).catch(() => null)
+    if (r?.ok) location.href = '/'
+    else setNote("Couldn't delete your account just now. Try again?")
+  }
+
   return (
     <div className="landing muse-page">
       <header className="muse-nav">
@@ -174,6 +181,16 @@ export default function Settings() {
             </>
           )}
         </section>
+        {(state === 'ready' || state === 'empty') && (
+          <section className="muse-card set-danger">
+            <h2>Delete my account</h2>
+            <p className="muse-sub">Erases your account, your memory, your matches and your chats. Sign in again any time to start fresh.</p>
+            {note && state === 'empty' && <p className="muse-error">{note}</p>}
+            <button type="button" className="btn set-danger-btn" onClick={deleteAccount}>
+              Delete my account
+            </button>
+          </section>
+        )}
       </main>
     </div>
   )

@@ -1382,3 +1382,9 @@ html.scroll-page #root {
 .chat-compose input { flex: 1; min-width: 0; font: 15px system-ui, sans-serif; padding: 11px 14px; border-radius: 999px; border: 1px solid rgba(27, 29, 36, 0.14); background: var(--paper); }
 .chat-compose input:focus { outline: 2px solid #3b63c4; background: #fff; }
 .chat-compose .btn { padding: 0 18px; }
+
+/* /settings: the account delete, set apart */
+.set-danger { margin-top: 18px; border: 2px solid #f2c2c2; }
+.set-danger h2 { font: 700 20px/1.2 inherit; margin: 0 0 6px; color: #9b2c2c; }
+.set-danger-btn { width: 100%; margin-top: 12px; background: #fff; color: #b42323; border: 2px solid #e59b9b; }
+.set-danger-btn:hover { background: #fff4f4; }

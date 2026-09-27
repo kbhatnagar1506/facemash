@@ -537,6 +537,20 @@ func (m *memStore) purgeTestAccounts(_ context.Context, dryRun bool) (adminPurge
 	if dryRun || rep.Accounts == 0 {
 		return rep, nil
 	}
+	m.purgeLocked(gone)
+	return rep, nil
+}
+
+// purgeLocked deletes these accounts and everything of theirs (m.mu held).
+func (m *memStore) purgeLocked(gone map[int64]bool) {
+	var memberKeys []string
+	for k := range m.members {
+		if _, id, ok := memKeyID(k); ok && gone[id] {
+			memberKeys = append(memberKeys, k)
+		}
+	}
+	sort.Strings(memberKeys)
+	tt := m.talkTables()
 	ft := m.fastT()
 	for _, k := range memberKeys {
 		tenant, id, _ := memKeyID(k)
@@ -566,5 +580,4 @@ func (m *memStore) purgeTestAccounts(_ context.Context, dryRun bool) (adminPurge
 		delete(m.byEmail, strings.ToLower(strings.TrimSpace(m.users[id].Email)))
 		delete(m.users, id)
 	}
-	return rep, nil
 }

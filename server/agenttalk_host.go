@@ -70,6 +70,18 @@ func (t *agentTalk) hostID(ctx context.Context, tenant string) int64 {
 	return id
 }
 
+// forgetHost: the host deleted their account; look them up again when they're back.
+func (t *agentTalk) forgetHost(id int64) {
+	if t == nil || t.host == nil {
+		return
+	}
+	t.host.mu.Lock()
+	if t.host.id == id {
+		t.host.id = 0
+	}
+	t.host.mu.Unlock()
+}
+
 // greetHost starts the host's talk with a player who just joined (in the background).
 func (t *agentTalk) greetHost(tenant string, uid int64) {
 	if t == nil || !t.on() || t.host == nil || t.host.email == "" || uid <= 0 {

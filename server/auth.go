@@ -330,6 +330,10 @@ func mountAuth(mux *http.ServeMux, clientIDs []string, acc *accounts, originOK f
 	}
 
 	mux.HandleFunc("/api/me", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			deleteMe(acc, originOK, w, r) // account_delete.go
+			return
+		}
 		out := map[string]any{"googleClientId": clientID, "tenant": acc.tenant, "user": nil, "voice": acc.voice != nil}
 		if id, ok := acc.sess.read(r); ok {
 			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
