@@ -195,3 +195,11 @@ func TestSignInFlow(t *testing.T) {
 		t.Errorf("progress leaked across tenants: %+v", a)
 	}
 }
+
+func TestDevName(t *testing.T) {
+	for in, want := range map[string]string{"demo.alex@local.test": "Alex", "bea@x.test": "Bea", "dev@localhost": "Dev", "@x": "Dev", "sam+qa@x": "Qa"} {
+		if got := devName(in); got != want {
+			t.Errorf("%s: %q, want %q", in, got, want)
+		}
+	}
+}

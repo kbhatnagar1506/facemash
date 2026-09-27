@@ -183,8 +183,8 @@ func (h *Hub) usagePresent() map[int64]usagePresence {
 		if !seen || c.joinedAt.Before(p.joined) {
 			p.joined = c.joinedAt
 		}
-		if c.lastMove.After(p.moved) {
-			p.moved = c.lastMove
+		if c.walkedAt.After(p.moved) { // walking, not an idle turn or bob
+			p.moved = c.walkedAt
 		}
 		p.hall = p.hall || c.p.Room == "hackgt"
 		out[c.uid] = p
@@ -263,7 +263,7 @@ func (t *usageTracker) observe(now time.Time, present map[int64]usagePresence) {
 		if p.hall {
 			s.row.Hall += step.Seconds()
 		}
-		if now.Sub(p.moved) <= usageIdle {
+		if !p.moved.IsZero() && now.Sub(p.moved) <= usageIdle {
 			s.row.Active += step.Seconds()
 		}
 		s.dirty = true

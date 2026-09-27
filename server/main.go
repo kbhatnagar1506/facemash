@@ -93,6 +93,7 @@ type client struct {
 	p        Player
 	joined   bool
 	joinedAt time.Time // hello (usage.go times sessions from it)
+	walkedAt time.Time // the last move that was actually walking (usage.go's active time)
 	lastMove time.Time
 
 	chatTokens float64 // chat token bucket (chatBurst, one back per chatEvery)
@@ -510,6 +511,9 @@ func (c *client) handle(m inbound) {
 		c.p.Y = clamp(m.Y, 0, 20)
 		c.p.R = m.R
 		c.p.M = m.M
+		if m.M {
+			c.walkedAt = now
+		}
 		h.dirty = true
 
 	case "room":

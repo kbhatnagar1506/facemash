@@ -450,6 +450,28 @@ var googleKeysOverride *googleKeys
 
 // mountDevLogin signs in a test account without Google, for trying the signed-in flows
 // locally. Off unless the server runs with -dev-login, and even then localhost only.
+// devName: a first name from a dev email, so local players can tell each other apart
+// ("demo.alex@local.test" is Alex).
+func devName(email string) string {
+	local, _, _ := strings.Cut(email, "@")
+	if i := strings.LastIndexAny(local, "._-+"); i >= 0 && i < len(local)-1 {
+		local = local[i+1:]
+	}
+	local = strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
+			return r
+		}
+		return -1
+	}, local)
+	if local == "" {
+		return "Dev"
+	}
+	if len(local) > 20 {
+		local = local[:20]
+	}
+	return strings.ToUpper(local[:1]) + local[1:]
+}
+
 func mountDevLogin(mux *http.ServeMux, acc *accounts) {
 	log.Printf("auth: DEV LOGIN ENABLED (localhost only)")
 	mux.HandleFunc("/api/dev/login", func(w http.ResponseWriter, r *http.Request) {
@@ -462,7 +484,8 @@ func mountDevLogin(mux *http.ServeMux, acc *accounts) {
 		if email == "" {
 			email = "dev@localhost"
 		}
-		a, _, err := acc.store.SignIn(r.Context(), acc.tenant, user{Sub: "dev:" + email, Email: email, Name: "Dev Tester", Given: "Dev"})
+		given := devName(email)
+		a, _, err := acc.store.SignIn(r.Context(), acc.tenant, user{Sub: "dev:" + email, Email: email, Name: given + " (dev)", Given: given})
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

@@ -31,7 +31,7 @@ func TestUsageSessionsMergeAndEnd(t *testing.T) {
 	for s := 0; s <= 60; s += 10 {
 		tr.observe(at(s), map[int64]usagePresence{
 			1: {joined: at(0), moved: at(s), hall: true},
-			2: {joined: at(0), moved: at(0)},
+			2: {joined: at(0)}, // never walked
 		})
 	}
 	// both leave; #1 reloads 30 s later (same session), #2 stays gone past the gap
@@ -58,10 +58,10 @@ func TestUsageSessionsMergeAndEnd(t *testing.T) {
 	if two.Ended == nil || !two.Ended.Equal(at(60)) || two.secs() != 60 {
 		t.Fatalf("#2 should end at its last sample: %+v", two)
 	}
-	if two.Active > 60 || two.Hall != 0 {
+	if two.Active != 0 || two.Hall != 0 {
 		t.Fatalf("#2 idled on campus: %+v", two)
 	}
-	if one.Hall < 60 || one.Active < 60 {
+	if one.Hall < 60 || one.Active < 50 { // the first sample (moved == joined) isn't active
 		t.Fatalf("#1 moved in the hall: %+v", one)
 	}
 	if _, open := tr.open[2]; open {
