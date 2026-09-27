@@ -217,7 +217,7 @@ function Services({ u }: { u: Usage }) {
         <span className="dim">{u.cost_usd == null ? 'cost: set USAGE_RATES' : `${usd(u.cost_usd)} · ${usd(u.cost_today_usd)} today`}</span>
       </div>
       <div className="u-voice">
-        <b>{fmtInt(v.people)}</b> onboarded by voice · <b>{fmtInt(v.calls)}</b> calls · <b>{num1(v.minutes)}</b> min · avg {Math.round(v.avg_call_sec)} s
+        <b>{fmtInt(v.people)}</b> onboarded by voice · <b>{fmtInt(v.calls)}</b> answers · <b>{num1(v.minutes)}</b> min spoken · avg {Math.round(v.avg_call_sec)} s
       </div>
       {u.services.length ? (
         <table className="u-table u-svc">

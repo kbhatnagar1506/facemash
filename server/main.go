@@ -786,8 +786,9 @@ func main() {
 			acct.talk.watchProximity(hub) // two opted-in players within 3 m for 3 s (talk_config.json)
 		}
 		mountVoice(mux, acct, acct.voice, originOK)
-		mountAdmin(mux, acct, hub) // /api/admin/* for organizers in ADMIN_EMAILS (admin.go)
-		startUsage(acct, hub)      // play sessions and the service meter (usage.go)
+		mountVoiceAsk(mux, acct, acct.voice, originOK) // hands-free: questions as audio, answers written down (voice_ask.go)
+		mountAdmin(mux, acct, hub)                     // /api/admin/* for organizers in ADMIN_EMAILS (admin.go)
+		startUsage(acct, hub)                          // play sessions and the service meter (usage.go)
 		if *devLogin {
 			mountDevLogin(mux, acct)
 		}

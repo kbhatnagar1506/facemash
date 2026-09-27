@@ -610,14 +610,26 @@ func memoryFrom(name, first string, conv conversation, now time.Time) (map[strin
 			b.WriteString(msg)
 		}
 	}
+	said := make([]string, len(answers))
+	for i := range answers {
+		said[i] = answers[i].String()
+	}
+	return voiceMemory(name, first, said, now)
+}
+
+// voiceMemory files answers (by question, in order) as a memory like an agent's upload.
+func voiceMemory(name, first string, answers []string, now time.Time) (map[string]any, []voiceAnswer) {
 	if first == "" {
 		first = name
 	}
 	var md strings.Builder
 	md.WriteString("# What " + first + " told the HackGT voice guide\n")
 	var out []voiceAnswer
-	for i, b := range answers {
-		if a := strings.TrimSpace(b.String()); a != "" && utf8.ValidString(a) {
+	for i, raw := range answers {
+		if i >= len(voiceQuestions) {
+			break
+		}
+		if a := strings.TrimSpace(raw); a != "" && utf8.ValidString(a) {
 			md.WriteString("\n## " + voiceQuestions[i] + "\n" + a + "\n")
 			out = append(out, voiceAnswer{Q: voiceQuestions[i], A: a})
 		}
@@ -628,6 +640,38 @@ func memoryFrom(name, first string, conv conversation, now time.Time) (map[strin
 		"user_md":     md.String(),
 		"source":      "voice",
 	}, out
+}
+
+// saveVoiceMemory stores what someone said as their memory (the same door as an agent's
+// upload: redaction, storage, index, outfit) and gives back what was kept.
+func saveVoiceMemory(ctx context.Context, acc *accounts, tenant string, id int64, build func(name, first string) (map[string]any, []voiceAnswer)) (voiceResult, error) {
+	a, err := acc.store.Account(ctx, tenant, id)
+	if err != nil {
+		return voiceResult{}, err
+	}
+	name := a.User.Name
+	if name == "" {
+		name = a.Profile.Name
+	}
+	first := a.User.Given
+	if first == "" {
+		first, _, _ = strings.Cut(name, " ")
+	}
+	obj, answers := build(name, first)
+	res := voiceResult{tenant: tenant, id: id, Answers: []voiceAnswer{}}
+	if len(answers) > 0 {
+		body, redacted, err := ingestMemory(ctx, acc, tenant, id, obj, nil, "voice memory")
+		if err != nil {
+			return voiceResult{}, err
+		}
+		res.KB, res.Redacted = float64(len(body)*10/1024)/10, redacted
+		// show them what was kept: the answers as stored, credentials scrubbed
+		scratch := map[string]int{}
+		for _, an := range answers {
+			res.Answers = append(res.Answers, voiceAnswer{Q: an.Q, A: redactText(an.A, scratch)})
+		}
+	}
+	return res, nil
 }
 
 // whichQuestion: the question an agent line asks, if any. Only a later question than the
@@ -713,31 +757,11 @@ func (v *voiceGuide) finish(ctx context.Context, acc *accounts, tenant string, i
 		return voiceResult{}, errVoiceNotYours
 	}
 
-	a, err := acc.store.Account(ctx, tenant, id)
+	res, err := saveVoiceMemory(ctx, acc, tenant, id, func(name, first string) (map[string]any, []voiceAnswer) {
+		return memoryFrom(name, first, conv, time.Now())
+	})
 	if err != nil {
 		return voiceResult{}, err
-	}
-	name := a.User.Name
-	if name == "" {
-		name = a.Profile.Name
-	}
-	first := a.User.Given
-	if first == "" {
-		first, _, _ = strings.Cut(name, " ")
-	}
-	obj, answers := memoryFrom(name, first, conv, time.Now())
-	res := voiceResult{tenant: tenant, id: id, Answers: []voiceAnswer{}}
-	if len(answers) > 0 {
-		body, redacted, err := ingestMemory(ctx, acc, tenant, id, obj, nil, "voice memory")
-		if err != nil {
-			return voiceResult{}, err
-		}
-		res.KB, res.Redacted = float64(len(body)*10/1024)/10, redacted
-		// show them what was kept: the answers as stored, credentials scrubbed
-		scratch := map[string]int{}
-		for _, an := range answers {
-			res.Answers = append(res.Answers, voiceAnswer{Q: an.Q, A: redactText(an.A, scratch)})
-		}
 	}
 	log.Printf("voice: #%d saved %d answer(s), %.1f KB, %d redacted", id, len(res.Answers), res.KB, res.Redacted)
 	// saved: ElevenLabs doesn't need its copy any more

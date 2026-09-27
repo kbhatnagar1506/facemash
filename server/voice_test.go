@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -34,12 +35,15 @@ type fakeEleven struct {
 	pageSize   int               // list page size (0: whatever was asked)
 	lists      int
 	start      int64 // start time for addConv (0: now)
+
+	tts map[string]int // text → speech requests
+	stt int            // transcriptions
 }
 
 var fakeAgents = map[string]string{"xk_primary_1": "agent_a", "xk_backup_2": "agent_b", "xk_broken_3": "agent_a"}
 
 func newFakeEleven(t *testing.T) (*fakeEleven, *httptest.Server) {
-	f := &fakeEleven{keyErr: map[string]int{}, mints: map[string]int{}, convs: map[string]map[string]any{}, polls: map[string]int{}, deleted: map[string]string{}}
+	f := &fakeEleven{keyErr: map[string]int{}, mints: map[string]int{}, convs: map[string]map[string]any{}, polls: map[string]int{}, deleted: map[string]string{}, tts: map[string]int{}}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
@@ -61,6 +65,22 @@ func newFakeEleven(t *testing.T) (*fakeEleven, *httptest.Server) {
 			return
 		}
 		switch {
+		case strings.HasPrefix(r.URL.Path, "/v1/text-to-speech/"):
+			var in struct{ Text, ModelID string }
+			json.NewDecoder(r.Body).Decode(&in)
+			f.tts[in.Text]++
+			w.Header().Set("Content-Type", "audio/mpeg")
+			fmt.Fprint(w, "ID3fake-mp3:"+in.Text)
+		case r.URL.Path == "/v1/speech-to-text":
+			f.stt++
+			file, _, err := r.FormFile("file")
+			if err != nil || r.FormValue("model_id") != voiceSTTModel {
+				w.WriteHeader(422)
+				return
+			}
+			b, _ := io.ReadAll(file)
+			text, _ := strings.CutPrefix(strings.TrimRight(string(b), "."), "SAY:") // the fake "audio" says its words
+			json.NewEncoder(w).Encode(map[string]any{"text": strings.TrimSpace(text), "language_code": "en"})
 		case r.URL.Path == "/v1/convai/conversation/get-signed-url":
 			if r.URL.Query().Get("agent_id") != fakeAgents[k] {
 				w.WriteHeader(404)
@@ -196,7 +216,9 @@ func voiceServer(t *testing.T, keys []*voiceKey, cap int) *voiceEnv {
 		acc.voice = v
 	}
 	mux := http.NewServeMux()
-	mountVoice(mux, acc, v, func(r *http.Request) bool { return r.Header.Get("Origin") == "https://site.test" })
+	ok := func(r *http.Request) bool { return r.Header.Get("Origin") == "https://site.test" }
+	mountVoice(mux, acc, v, ok)
+	mountVoiceAsk(mux, acc, v, ok)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return &voiceEnv{srv, acc, store, fake, v, a.ID, b.ID}
@@ -668,5 +690,89 @@ func TestVoiceSweepTranscripts(t *testing.T) {
 	}
 	if n := e.v.sweepTranscripts(context.Background()); n != 0 {
 		t.Fatalf("second sweep: %d", n)
+	}
+}
+
+// fakeAudio: a "recording" the fake transcriber reads back as words (padded past the 1 KB floor).
+func fakeAudio(words string) string { return "SAY:" + words + strings.Repeat(".", 1200) }
+
+func (e *voiceEnv) hear(t *testing.T, who int64, q int, run, ctype, audio string) (int, map[string]any) {
+	t.Helper()
+	req, _ := http.NewRequest("POST", fmt.Sprintf("%s/api/voice/hear?q=%d&run=%s&secs=12", e.srv.URL, q, run), strings.NewReader(audio))
+	req.Header.Set("Origin", site)
+	req.Header.Set("Content-Type", ctype)
+	v, exp := e.acc.sess.issue(kindSession, who, time.Hour)
+	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: v, Expires: exp})
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	var out map[string]any
+	json.NewDecoder(res.Body).Decode(&out)
+	return res.StatusCode, out
+}
+
+// Hands-free onboarding: each question's audio is made once for everyone, and each answer is
+// written down and saved into memory at once (all the run's answers so far).
+func TestVoiceAskHearAndSaveEachAnswer(t *testing.T) {
+	clips = &voiceClips{clips: map[string][]byte{}, busy: map[string]chan struct{}{}}
+	e := voiceServer(t, []*voiceKey{{name: "primary", key: "xk_primary_1", agent: "agent_a"}}, 1)
+	for i := 0; i < 3; i++ {
+		res, err := http.Get(e.srv.URL + "/api/voice/q/0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		if res.StatusCode != 200 || res.Header.Get("Content-Type") != "audio/mpeg" || !strings.Contains(string(b), voiceQuestions[0]) {
+			t.Fatalf("clip: %d %q", res.StatusCode, b)
+		}
+	}
+	if res, _ := http.Get(e.srv.URL + "/api/voice/q/9"); res.StatusCode != 404 {
+		t.Fatalf("no such clip: %d", res.StatusCode)
+	}
+	e.fake.mu.Lock()
+	if n := e.fake.tts[voiceQuestions[0]]; n != 1 {
+		t.Errorf("a clip is made once for everyone, made %d times", n)
+	}
+	e.fake.mu.Unlock()
+
+	code, out := e.hear(t, e.a, 0, "run-aaaa1", "audio/webm;codecs=opus", fakeAudio("a drone that maps the Klaus atrium"))
+	if code != 200 || out["text"] != "a drone that maps the Klaus atrium" || out["saved"] != float64(1) {
+		t.Fatalf("first answer: %d %v", code, out)
+	}
+	code, out = e.hear(t, e.a, 1, "run-aaaa1", "video/mp4", fakeAudio("flaky BLE pairing"))
+	if code != 200 || out["saved"] != float64(2) {
+		t.Fatalf("second answer (Safari records video/mp4): %d %v", code, out)
+	}
+	info, _ := e.store.MemoryInfo(context.Background(), "hackgt13", e.a)
+	raw, _ := e.store.talkMemory(context.Background(), "hackgt13", e.a)
+	if info == nil || !strings.Contains(string(raw), "Klaus atrium") || !strings.Contains(string(raw), "flaky BLE pairing") || !strings.Contains(string(raw), `"source":"voice"`) {
+		t.Fatalf("both answers are in their memory: %s", raw)
+	}
+	// a new pass starts over
+	if code, out = e.hear(t, e.a, 2, "run-bbbb2", "audio/webm", fakeAudio("soldering")); code != 200 || out["saved"] != float64(1) {
+		t.Fatalf("new run: %d %v", code, out)
+	}
+	// silence is nothing to save
+	if code, out = e.hear(t, e.a, 3, "run-bbbb2", "audio/webm", "tiny"); code != 200 || out["text"] != "" || out["saved"] != float64(0) {
+		t.Fatalf("silence: %d %v", code, out)
+	}
+	for _, c := range []struct {
+		q     int
+		run   string
+		ctype string
+		want  int
+	}{{7, "run-aaaa1", "audio/webm", 400}, {0, "x", "audio/webm", 400}, {0, "run-aaaa1", "text/plain", 415}} {
+		if code, _ := e.hear(t, e.a, c.q, c.run, c.ctype, fakeAudio("x")); code != c.want {
+			t.Errorf("%+v: %d", c, code)
+		}
+	}
+	if code, _ := e.post(t, "/api/voice/hear?q=0&run=run-aaaa1", e.a, "https://evil.test", fakeAudio("x")); code != 403 {
+		t.Fatalf("another site: %d", code)
+	}
+	if code, _ := e.post(t, "/api/voice/hear?q=0&run=run-aaaa1", 0, site, fakeAudio("x")); code != 401 {
+		t.Fatalf("signed out: %d", code)
 	}
 }
