@@ -92,7 +92,7 @@ func startNPCs(acc *accounts, hub *Hub) {
 		}
 		ts, _ := acc.store.(talkStore)
 		spots := npcSpots(len(personas))
-		world := &npcWorld{hall: loadHallGrid(), campus: loadCampusWalk(), seats: npcSpots(60), taken: map[int]bool{}}
+		world := &npcWorld{hall: loadHallGrid(), campus: loadCampusWalk(), seats: npcSpots(60), taken: map[int]bool{}, touched: map[[2]int64]time.Time{}}
 		var ids []int64
 		for i, p := range personas {
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -121,6 +121,6 @@ func startNPCs(acc *accounts, hub *Hub) {
 			acc.talk.setNPCs(ids)
 		}
 		log.Printf("npcs: %d around the hall and campus", len(ids))
-		hub.npcLive(world)
+		hub.npcLive(world, acc.tenant)
 	}()
 }

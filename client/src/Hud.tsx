@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { NpcChat, useNpcChat } from './NpcChat'
 import type { Campus, Collider } from './map'
 import type { Net } from './net'
 import type { PlayerInfo } from './Player'
@@ -154,6 +155,7 @@ export function Hud({
 }) {
   type Near = null | { kind: 'shell' } | { kind: 'exit' } | { kind: 'spot'; spot: Spot } | { kind: 'table'; table: Table }
   const [near, setNear] = useState<Near>(null)
+  const [npcChat, closeNpcChat] = useNpcChat()
   const [board, setBoard] = useState<null | 'about' | 'tracks' | 'schedule'>(null)
   const [bike, setBike] = useState(false)
   const [clock, setClock] = useState(0)
@@ -222,7 +224,7 @@ export function Hud({
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      if (document.activeElement instanceof HTMLInputElement || eventOpen || board) return
+      if (document.activeElement instanceof HTMLInputElement || eventOpen || board || npcChat) return
       if (e.code === 'KeyE' || e.code === 'Space') act()
     }
     window.addEventListener('keydown', k)
@@ -289,7 +291,8 @@ export function Hud({
       <div className="help">
         <kbd>WASD</kbd> move · <kbd>Shift</kbd> run · {inHall ? <>drag or <kbd>Q</kbd>/<kbd>R</kbd>/<kbd>T</kbd>/<kbd>G</kbd> look · </> : <><kbd>B</kbd> bike · <kbd>M</kbd> map · </>}<kbd>E</kbd> interact · scroll to zoom
       </div>
-      {near && !eventOpen && !board && (
+      {npcChat && !eventOpen && !board && <NpcChat key={npcChat.talk} chat={npcChat} net={net} info={info} onClose={closeNpcChat} />}
+      {near && !npcChat && !eventOpen && !board && (
         <div className="dialog" onClick={act}>
           <p>
             {near.kind === 'shell' && <>🐚 A shiny shell at the Klaus entrance! It's glowing with <b>{title}</b> energy…</>}

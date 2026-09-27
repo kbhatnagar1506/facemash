@@ -206,6 +206,9 @@ export class Net {
         this.bubbles.set(msg.id, { text: msg.text, at: performance.now() })
         this.addChat(msg.id, msg.name, msg.text)
         break
+      case 'npc': // you walked right up to an AI attendee: it said hi (NpcChat.tsx shows it)
+        dispatchEvent(new CustomEvent('gt-npc', { detail: { talk: msg.talk, pid: msg.pid, name: msg.name } }))
+        break
       case 'anchor': // an organizer set the reference point (Shift+R): the hall follows it now
         dispatchEvent(new CustomEvent('gt-anchor', { detail: msg }))
         break

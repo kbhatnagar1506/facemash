@@ -294,6 +294,8 @@ type npcWorld struct {
 	campus *campusWalk
 	seats  [][3]float64 // hall table seats: x, z, facing
 	taken  map[int]bool // seats someone is using or walking to
+	// touched: when each NPC and player were last in contact (npc_chat.go), keyed npc, player
+	touched map[[2]int64]time.Time
 }
 
 // place: where NPC i starts, and what it does. About 45% are outside on campus (runners,
@@ -439,8 +441,9 @@ func (w *npcWorld) step(b *npcBrain, p *Player, now time.Time, dt float64) bool 
 	return true
 }
 
-// npcLive moves every NPC, forever (started by startNPCs).
-func (h *Hub) npcLive(w *npcWorld) {
+// npcLive moves every NPC, forever (started by startNPCs), and opens a chat when a player
+// walks right up to one (npc_chat.go).
+func (h *Hub) npcLive(w *npcWorld, tenant string) {
 	t := time.NewTicker(npcTick)
 	defer t.Stop()
 	last := time.Now()
@@ -453,6 +456,13 @@ func (h *Hub) npcLive(w *npcWorld) {
 				h.dirty = true
 			}
 		}
+		var met []npcContact
+		if w.touched != nil {
+			met = w.npcContacts(h, now)
+		}
 		h.mu.Unlock()
+		for _, k := range met {
+			go conns.openNPCChat(tenant, k)
+		}
 	}
 }

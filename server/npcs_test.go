@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"math"
+	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -99,5 +101,66 @@ func TestNPCsMoveAround(t *testing.T) {
 	}
 	if d := math.Hypot(p.X-x, p.Z-z); d < 3 || d > 9 || !p.M {
 		t.Fatalf("a second on a bike covers 6.5-8.5 m, got %.1f", d)
+	}
+}
+
+// Walking right up to an NPC: it stops, turns to you and waves, and a chat opens with its
+// hello (once per pair); passing by at a distance, or staying in contact, does nothing more.
+func TestNPCContactOpensChat(t *testing.T) {
+	store := newMemStore()
+	acc := &accounts{store: store, tenant: "hackgt13"}
+	ctx := context.Background()
+	npc, _, _ := store.SignIn(ctx, "hackgt13", user{Sub: "npc:pip", Email: "npc-pip" + testEmailSuffix, Name: "Pip", Given: "Pip"})
+	me, _, _ := store.SignIn(ctx, "hackgt13", user{Sub: "me", Email: "me@x.test", Name: "Dana", Given: "Dana"})
+	hub := newHub()
+	mountConnections(http.NewServeMux(), acc, hub, func(*http.Request) bool { return true })
+	defer func() { conns = nil }()
+	w := &npcWorld{seats: npcSpots(60), taken: map[int]bool{}, touched: map[[2]int64]time.Time{}}
+	hub.addNPC(npc.ID, "Pip", "", "hackgt", 0, 0, 0, &npcBrain{kind: "hall", seat: -1, path: [][2]float64{{5, 5}}})
+	// a signed-in player, 3 m away: not in contact
+	hub.mu.Lock()
+	p := &client{hub: hub, send: make(chan []byte, 16), joined: true, uid: me.ID}
+	p.p = Player{ID: hub.nextID, Name: "Dana", X: 3, Z: 0, Room: "hackgt"}
+	hub.nextID++
+	hub.clients[p.p.ID] = p
+	now := time.Now()
+	if got := w.npcContacts(hub, now); len(got) != 0 {
+		hub.mu.Unlock()
+		t.Fatalf("3 m away is not contact: %v", got)
+	}
+	p.p.X = 1 // a bean's width: contact
+	got := w.npcContacts(hub, now)
+	var n *client
+	for _, c := range hub.clients {
+		if c.npc {
+			n = c
+		}
+	}
+	again := w.npcContacts(hub, now.Add(time.Second)) // still touching
+	hub.mu.Unlock()
+	if len(got) != 1 || got[0].playerUID != me.ID || got[0].npcUID != npc.ID {
+		t.Fatalf("contact: %v", got)
+	}
+	if len(again) != 0 {
+		t.Fatal("staying in contact doesn't reopen the chat")
+	}
+	if n.brain.path != nil || n.p.M || n.p.A != actWave || math.Abs(n.p.R-math.Pi/2) > 1e-9 {
+		t.Fatalf("the NPC stops, faces you and waves: path %v moving %v act %d r %.2f", n.brain.path, n.p.M, n.p.A, n.p.R)
+	}
+	// the chat: one thread with the NPC's hello, reused on the next contact; your game hears
+	conns.openNPCChat("hackgt13", got[0])
+	conns.openNPCChat("hackgt13", got[0])
+	rows, _ := store.connList(ctx, "hackgt13", me.ID)
+	if len(rows) != 1 || rows[0].last == nil || rows[0].last.From != npc.ID || !strings.Contains(rows[0].last.Text, "Pip") {
+		t.Fatalf("one chat, opened by Pip's hello: %+v", rows)
+	}
+	pings := 0
+	for len(p.send) > 0 {
+		if m := <-p.send; strings.Contains(string(m), `"t":"npc"`) {
+			pings++
+		}
+	}
+	if pings != 2 {
+		t.Fatalf("your game is told both times: %d", pings)
 	}
 }

@@ -382,3 +382,25 @@ kbd {
 .ref-btn { font: 600 13px/1 system-ui, sans-serif; padding: 9px 12px; border-radius: 999px; border: 2px solid #1b1d24; background: #ffd23f; color: #1b1d24; box-shadow: 0 3px 0 #1b1d24; cursor: pointer; }
 .ref-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #1b1d24; }
 .ref-note { font: 600 13px/1.3 system-ui, sans-serif; padding: 8px 12px; border-radius: 12px; background: rgba(27, 29, 36, 0.88); color: #fff; max-width: 280px; }
+
+/* talking to an AI attendee you walked up to (NpcChat.tsx): a Pokémon-style text box */
+.npc-chat {
+  position: absolute; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+  width: min(560px, calc(100vw - 24px)); background: var(--paper); color: var(--ink);
+  border: 4px solid var(--ink); border-radius: 12px; outline: 3px solid var(--paper); box-shadow: 0 0 0 7px var(--ink);
+  padding: 10px 14px 12px; font: 700 16px/1.45 var(--round); display: flex; flex-direction: column; gap: 8px;
+}
+.npc-chat-head { display: flex; align-items: center; justify-content: space-between; }
+.npc-chat-head b { font: 400 18px 'Darumadrop One', 'Chewy', sans-serif; color: #1f5566; letter-spacing: .5px; }
+.npc-chat-x { border: 0; background: none; font: 700 18px var(--round); cursor: pointer; color: var(--ink); padding: 0 4px; }
+.npc-chat-msgs { max-height: 168px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.npc-line { margin: 0; }
+.npc-line.you { align-self: flex-end; max-width: 80%; background: #3b63c4; color: #fff; font-weight: 600; font-size: 14px; padding: 5px 11px; border-radius: 12px 12px 3px 12px; }
+.npc-line.agents { font-style: italic; font-weight: 600; font-size: 14px; color: #6a5acd; }
+.npc-line.typing { letter-spacing: 3px; animation: npcDots 1s steps(3) infinite; }
+@keyframes npcDots { 50% { opacity: .35; } }
+.npc-chat-form { display: flex; gap: 8px; }
+.npc-chat-form input { flex: 1; min-width: 0; border: 3px solid var(--ink); border-radius: 10px; padding: 7px 10px; font: 600 15px var(--round); background: #fff; }
+.npc-chat-form button { border: 3px solid var(--ink); border-radius: 10px; background: #ff5d6c; color: #fff; font: 700 16px var(--round); padding: 0 14px; cursor: pointer; box-shadow: 0 3px 0 var(--ink); }
+.npc-chat-form button:disabled { opacity: .5; cursor: default; }
+@media (max-width: 640px) { .npc-chat { bottom: calc(172px + env(safe-area-inset-bottom)); } }
