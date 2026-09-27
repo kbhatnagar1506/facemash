@@ -115,6 +115,7 @@ type client struct {
 	reject    int    // set by handle when hello is refused: close with this code
 
 	uid   int64    // signed-in account (0 = guest)
+	npc   bool     // an NPC attendee the server moves itself (npcs.go): no socket
 	saved Progress // last position written to the database
 }
 
@@ -302,7 +303,9 @@ func (h *Hub) run() {
 		for _, c := range h.clients {
 			if c.joined {
 				snaps = append(snaps, snap{c, c.p, c.epoch.Load()})
-				n.add(c.p.Room)
+				if !c.npc {
+					n.add(c.p.Room) // who's online counts people, not NPCs
+				}
 			}
 		}
 		h.mu.Unlock()
@@ -338,6 +341,9 @@ func (h *Hub) run() {
 				near = near[:maxVisible]
 			}
 			c := s.c
+			if c.npc {
+				continue // NPCs have no screen to draw for
+			}
 			c.kmu.Lock()
 			if c.gone || c.epoch.Load() != s.epoch {
 				c.kmu.Unlock() // left, or changed room since the snapshot: the next tick has them
@@ -798,6 +804,7 @@ func main() {
 		// the organizer's real table, set with Shift+R; beans walk there, then follow their phone (reference.go)
 		mountReference(mux, acct, hub, adm, originOK, openRefStore(refFile(*samplesFile)))
 		startUsage(acct, hub) // play sessions and the service meter (usage.go)
+		startNPCs(acct, hub)  // 55 NPC attendees at the hall's tables (npcs.go)
 		if *devLogin {
 			mountDevLogin(mux, acct)
 		}

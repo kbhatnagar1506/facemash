@@ -155,6 +155,8 @@ type agentTalk struct {
 	briefSem chan struct{}
 	near     *talkNear // the proximity trigger, once watchProximity started it
 	host     *talkHost // everyone's first talk is with the event's host (agenttalk_host.go)
+	npcMu    sync.Mutex
+	npcs     map[int64]bool // the hall's NPC attendees (npcs.go): no caps, never with each other
 }
 
 func (t *agentTalk) on() bool { return t != nil && t.gem != nil && t.jev != nil }
@@ -624,6 +626,25 @@ func (t *agentTalk) encounterOpt(ctx context.Context, tenant string, a, b int64,
 	return rec.ID, nil
 }
 
+// isNPC: one of the hall's NPC attendees (never takes t.mu, so the scan can ask under it).
+func (t *agentTalk) isNPC(uid int64) bool {
+	if t == nil {
+		return false
+	}
+	t.npcMu.Lock()
+	defer t.npcMu.Unlock()
+	return t.npcs[uid]
+}
+
+func (t *agentTalk) setNPCs(ids []int64) {
+	t.npcMu.Lock()
+	defer t.npcMu.Unlock()
+	t.npcs = map[int64]bool{}
+	for _, id := range ids {
+		t.npcs[id] = true
+	}
+}
+
 // underCaps: each person has at most limits.talks_per_day agent talks per event day (every
 // talk that started counts, match or not), and, when intros_per_day is set, at most that
 // many matches. Counted from the talks table, so it survives restarts. Both people are
@@ -631,6 +652,9 @@ func (t *agentTalk) encounterOpt(ctx context.Context, tenant string, a, b int64,
 func (t *agentTalk) underCaps(ctx context.Context, tenant string, a, b int64) error {
 	day := talkDayStart(time.Now())
 	for i, id := range []int64{a, b} {
+		if t.isNPC(id) {
+			continue // NPCs are there to be met, all day
+		}
 		who := [2]string{"a_uid", "b_uid"}[i]
 		if lim := t.cfg.Limits.TalksPerDay; lim > 0 {
 			n, err := t.ts.talkCount(ctx, tenant, id, day, false)

@@ -290,7 +290,7 @@ func (h *Hub) counts() map[string]int {
 	var n onlineCounts
 	h.mu.Lock()
 	for _, c := range h.clients {
-		if c.joined {
+		if c.joined && !c.npc {
 			n.add(c.p.Room)
 		}
 	}

@@ -1079,6 +1079,19 @@ func (r *talkRun) match(verdict map[string]any) {
 	r.expiry = time.AfterFunc(ttl, func() { r.t.expire(r) })
 	r.mu.Unlock()
 	r.finish("awaiting")
+	// an NPC says yes to meeting (after a beat, like a person reading it)
+	for _, s := range r.sides {
+		if id := s.person.id; r.t.isNPC(id) {
+			go func() {
+				time.Sleep(2 * time.Second)
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				if _, err := r.t.decide(ctx, r.rec.Tenant, id, r.rec.ID, true); err != nil {
+					log.Printf("talk: %s: NPC #%d approve: %v", r.rec.ID, id, err)
+				}
+			}()
+		}
+	}
 	for i, s := range r.sides {
 		rel := talkRelReason(reason, i)
 		r.t.sink.send(s.person.id, map[string]any{"t": "verdict", "id": r.rec.ID, "match": true, "reason": rel,

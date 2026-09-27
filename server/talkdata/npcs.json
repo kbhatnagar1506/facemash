@@ -1,0 +1,1432 @@
+[
+  {
+    "slug": "aditi",
+    "name": "Aditi",
+    "look": "b=#ff8a3d;a=#ff7eb6;p=solid;e=dots;h=cap;i=coffee",
+    "memory": {
+      "user_id": "Aditi",
+      "user_md": "I'm Aditi, a second-year computer engineering student at Georgia Tech, originally from Pune. At HackGT 13 I'm building PillowTalk, a little ESP32 plushie that glows and hums when your long-distance friend taps theirs. Right now my BLE connection to the phone app drops every thirty seconds or so and I cannot figure out why. I'm great at soldering, KiCad, and making tiny PCBs look adorable, so come find me if your board is misbehaving. I'd love to meet someone who has tamed BLE reconnects and anyone else who hand-sews enclosures.",
+      "memory_md": "Aditi sews plush enclosures for all her hardware and keeps a spool of pastel heat-shrink in her pocket. She's teaching herself tabla on weekends and cares a lot about tech that makes people feel less far apart.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Got the plush prototype glowing at 2am but BLE keeps dropping; someone told me to look at connection intervals."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Rohan and I jammed on tabla bols during the midnight snack break, which fixed my mood if not my firmware."
+        }
+      ],
+      "bank": {
+        "experience": "Built a solar-powered bird feeder camera for her dorm balcony and a macro keypad for her robotics club.",
+        "opinions": "She thinks every hardware hack should have a soft, huggable version. She also believes hot glue is a legitimate engineering material.",
+        "reflections": "She learned this weekend that asking for help early saves about six hours of sad debugging.",
+        "world": "Her team of three is all GT ECE sophomores who met in the same intro circuits lab."
+      }
+    }
+  },
+  {
+    "slug": "tomas",
+    "name": "Tomás",
+    "look": "b=#ff5d6c;a=#7ad36b;p=hearts;e=happy;h=propeller;i=coffee",
+    "memory": {
+      "user_id": "Tomás",
+      "user_md": "I'm Tomás from Montevideo, Uruguay, doing a master's in robotics at Georgia Tech. I'm building a BLE-connected wearable that buzzes when you slouch, mostly because I slouch constantly. I already solved the dreaded BLE drop issue by tuning the connection interval and supervision timeout, so I'm happy to help anyone whose ESP32 keeps disconnecting. What I'm stuck on is my 3D-printed clip: the snap-fit tolerances are either too loose or snap off. I'd love to meet a 3D-printing wizard and anyone who wants to talk mate and embedded Rust.",
+      "memory_md": "Tomás carries a thermos of mate everywhere and offers it to anyone who looks tired. He plays futsal on Tuesday nights and loves explaining supervision timeouts with hand gestures.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Fixed BLE drops by bumping supervision timeout to 4s and slowing the connection interval; wrote it on the whiteboard for others."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Keanu showed me how to print a tolerance test comb and my snap-fit finally clicks."
+        }
+      ],
+      "bank": {
+        "experience": "Built a line-following robot that won his undergrad competition and a firmware updater for a campus sensor network.",
+        "opinions": "He thinks embedded Rust is finally ready for hackathons. He also insists every wearable needs an off switch you can find in the dark.",
+        "reflections": "He realized he enjoys helping debug other teams' boards more than his own.",
+        "world": "He's hacking solo this year but keeps getting adopted by the hardware table."
+      }
+    }
+  },
+  {
+    "slug": "mei",
+    "name": "Mei",
+    "look": "b=#ffc93c;a=#2bb3a6;p=zigzag;e=sleepy;h=none;i=boba",
+    "memory": {
+      "user_id": "Mei",
+      "user_md": "I'm Mei, a junior studying computational media at Georgia Tech, from Chengdu by way of Portland. I'm building CaptionCloud, live captions for lecture halls that show up on everyone's phone. My problem right now is latency: my Whisper-based transcription lags about eight seconds behind the speaker. I'm really good at UI design, Figma, and making interfaces readable for everyone. I'd love to meet someone who has done real-time speech streaming and anyone who crochets.",
+      "memory_md": "Mei crochets tiny amigurumi versions of her teammates and hands them out at demos. She cares about accessibility and gets weirdly excited about good typography.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Our captions work but they're so slow; the speaker is on the next slide before the text arrives."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Oluwaseun walked me through voice activity detection chunking and we got latency under two seconds!"
+        }
+      ],
+      "bank": {
+        "experience": "Designed the app for a campus food pantry and ran a crochet club with forty members.",
+        "opinions": "She thinks captions should be a default, not a setting. She also believes Comic Sans has its place, just not in production.",
+        "reflections": "She's learning that a fast rough caption beats a slow perfect one.",
+        "world": "Her team is two designers and one backend dev from the GT Accessibility Club."
+      }
+    }
+  },
+  {
+    "slug": "oluwaseun",
+    "name": "Oluwaseun",
+    "look": "b=#7ad36b;a=#ff7eb6;p=dots;e=wink;h=bucket;i=boba",
+    "memory": {
+      "user_id": "Oluwaseun",
+      "user_md": "I'm Oluwaseun, a senior in CS at Georgia Tech from Lagos, Nigeria. I'm building a voice-first market price assistant for small traders that works over low-bandwidth connections. I already solved real-time speech latency with voice activity detection and small overlapping chunks, so I can help anyone doing live transcription. I'm stuck on making the assistant understand code-switched Yoruba and English sentences. I'd love to meet people working on multilingual NLP or low-resource languages.",
+      "memory_md": "Oluwaseun is a competitive Scrabble player and can recite every two-letter word from memory. He loves Afrobeats production and cares about building tech for markets people usually ignore.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Got streaming transcription down to 1.5s latency using VAD chunking; shared my notes with a captions team."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Spent the morning with Tunde, who is also from Lagos, arguing about the best jollof spot back home and swapping NLP ideas."
+        }
+      ],
+      "bank": {
+        "experience": "Interned on a speech team and built a USSD-based savings tracker in undergrad.",
+        "opinions": "He believes low-bandwidth design should be taught in every CS class. He thinks most voice assistants are built for one accent.",
+        "reflections": "He's proud that his solved problem helped someone else ship.",
+        "world": "His teammates are from the GT African Students Association hack group."
+      }
+    }
+  },
+  {
+    "slug": "jonah",
+    "name": "Jonah",
+    "look": "b=#3fc5f0;a=#9b6bd1;p=stripes;e=star;h=headphones;i=trophy",
+    "memory": {
+      "user_id": "Jonah",
+      "user_md": "I'm Jonah, a sophomore at Kennesaw State from Macon, Georgia. I'm building a multiplayer trivia game about Georgia history that runs in the browser with WebSockets. It works perfectly on localhost but the WebSocket connection drops every sixty seconds once deployed. I'm good at game design, Phaser, and writing silly trivia questions. I'd love to meet someone who has deployed WebSockets in production and anyone who speedruns.",
+      "memory_md": "Jonah speedruns Super Metroid and has a personal best he talks about unprompted. He loves peach cobbler, small-town history, and making learning feel like a game.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "The game dies after exactly sixty seconds in prod, which is suspicious."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Farida told me it's the proxy idle timeout and to add a heartbeat ping; the game now survives a full round!"
+        }
+      ],
+      "bank": {
+        "experience": "Made a Discord bot for his high school's quiz bowl team and a Phaser platformer about a peach.",
+        "opinions": "He thinks every history class should have a boss fight. He also believes sixty-second bugs are always timeouts.",
+        "reflections": "He learned that deploying early is the only way to find the real bugs.",
+        "world": "His team is two KSU friends and his cousin who goes to Georgia Tech."
+      }
+    }
+  },
+  {
+    "slug": "farida",
+    "name": "Farida",
+    "look": "b=#4f7fd6;a=#7ad36b;p=split;e=shades;h=bunny;i=energy",
+    "memory": {
+      "user_id": "Farida",
+      "user_md": "I'm Farida, a CS master's student at Georgia Tech from Almaty, Kazakhstan. I'm building a realtime whiteboard for tutoring sessions with collaborative cursors. I've already sorted out WebSocket disconnects in production with heartbeats and proxy timeout settings, so ask me about that. Right now I'm stuck on conflict resolution when two people draw on the same stroke at once. I'd love to meet someone who knows CRDTs and fellow boulderers.",
+      "memory_md": "Farida boulders at least four times a week and names her climbing shoes. She loves apricots, backend infrastructure, and explaining networking with cardboard diagrams.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Helped two teams fix dropping sockets before lunch, still fighting my own merge conflicts."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Kai and I went bouldering talk-mode for twenty minutes and I came back with fresh eyes on my CRDT bug."
+        }
+      ],
+      "bank": {
+        "experience": "Built a chat backend that handled 10k concurrent users for a class project and ran infra for a student startup.",
+        "opinions": "She thinks CRDTs are beautiful and terrifying in equal parts. She believes heartbeats solve more bugs than people admit.",
+        "reflections": "She realized teaching a fix is the fastest way to understand it herself.",
+        "world": "Her team is her and two friends from the GT grad CS program."
+      }
+    }
+  },
+  {
+    "slug": "lucia",
+    "name": "Lucia",
+    "look": "b=#9b6bd1;a=#2bb3a6;p=solid;e=happy;h=bunny;i=boba",
+    "memory": {
+      "user_id": "Lucia",
+      "user_md": "I'm Lucia, a junior in computational media at Georgia Tech, from Valencia, Spain. I'm building a cozy 3D garden game in the browser with React Three Fiber where plants grow from your daily walks. My frame rate tanks once the garden has a few hundred plants, and I suspect draw calls. I'm great at shaders and stylized art, so if your Godot or Three.js shader looks wrong, I can help. I'd love to meet someone who has mastered instancing and other cozy-game makers.",
+      "memory_md": "Lucia paints tiny watercolor postcards of every city she visits. She loves paella debates, toon shaders, and games that make people calm.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "The garden is gorgeous and runs at 11 fps, which is not very cozy."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Hyun-woo showed me InstancedMesh and we're at 60 fps with a thousand tulips."
+        }
+      ],
+      "bank": {
+        "experience": "Shipped two game jam entries and made a toon water shader that went mildly viral in a class forum.",
+        "opinions": "She believes cozy games are serious design work. She thinks every shader deserves a little wobble.",
+        "reflections": "She learned that performance is part of the art direction.",
+        "world": "Her team is an artist-programmer duo from GT's game dev club."
+      }
+    }
+  },
+  {
+    "slug": "hyun-woo",
+    "name": "Hyun-woo",
+    "look": "b=#ff7eb6;a=#2bb3a6;p=hearts;e=sleepy;h=crown;i=trophy",
+    "memory": {
+      "user_id": "Hyun-woo",
+      "user_md": "I'm Hyun-woo, a senior in CS at Georgia Tech from Seoul. I'm building a 3D visualizer that turns your GitHub-style commit history into a growing city. I already solved big performance issues with instanced meshes and frustum culling, so I can help anyone with a slow Three.js scene. What I'm stuck on is text labels: rendering thousands of crisp labels without killing performance. I'd love to meet other graphics nerds and anyone who throws a yo-yo.",
+      "memory_md": "Hyun-woo is a competitive yo-yo player who placed at a regional contest in the 1A division. He loves tteokbokki, WebGL, and teaching people tricks during breaks.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Did a yo-yo demo at the snack table and got three people interested in instancing somehow."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Helped Lucia instance her garden; Bex and I compared yo-yo bearings for way too long."
+        }
+      ],
+      "bank": {
+        "experience": "Built a WebGL particle system for a music visualizer and a mini Minecraft clone in a weekend.",
+        "opinions": "He thinks every data set looks better as a city. He believes signed distance field text is underrated.",
+        "reflections": "He noticed he explains graphics best when he has a yo-yo in hand.",
+        "world": "His team is two GT seniors and a first-time hacker they adopted at check-in."
+      }
+    }
+  },
+  {
+    "slug": "ravi",
+    "name": "Ravi",
+    "look": "b=#2bb3a6;a=#9b6bd1;p=zigzag;e=wink;h=halo;i=coffee",
+    "memory": {
+      "user_id": "Ravi",
+      "user_md": "I'm Ravi, a junior in business and CS at Georgia Tech, from Edison, New Jersey. I'm building PennyPal, a budgeting app for students that auto-categorizes spending from bank CSV exports. My big problem is merchant names: they're messy strings like SQ COFFEE 0932 and my categorizer is confused. I'm great at pitching, spreadsheets, and product thinking. I'd love to meet someone who has cleaned messy transaction data and anyone who salsa dances.",
+      "memory_md": "Ravi takes salsa classes on Thursdays and will teach you the basic step in a hallway. He loves spreadsheets a little too much and cares about financial literacy for first-gen students.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "My app thinks a coffee shop is a hardware store. Need help."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Camila showed me fuzzy matching plus a small lookup table and accuracy jumped to 90 percent."
+        }
+      ],
+      "bank": {
+        "experience": "Ran a campus financial literacy workshop and built a split-the-bill app used by his whole dorm floor.",
+        "opinions": "He believes budgeting apps should never make people feel guilty. He thinks good pitches start with a real story.",
+        "reflections": "He learned that data cleaning is most of the product.",
+        "world": "His team is a mix of Scheller business students and CS majors."
+      }
+    }
+  },
+  {
+    "slug": "camila",
+    "name": "Camila",
+    "look": "b=#f5f1e6;a=#9b6bd1;p=dots;e=star;h=cap;i=duck",
+    "memory": {
+      "user_id": "Camila",
+      "user_md": "I'm Camila, a CS senior at Georgia Tech from São Paulo, Brazil. I'm building a tool that helps small bakeries predict how much bread to bake to cut food waste. I already solved messy merchant and product name matching with fuzzy string matching and a tiny embedding model, so I can help with any data-cleaning mess. I'm stuck on my forecast: it doesn't handle holidays well. I'd love to meet time-series folks and fellow film photographers.",
+      "memory_md": "Camila shoots 35mm film and develops it in her bathroom. She bakes pão de queijo for her teammates and cares about food waste and small businesses.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Helped a fintech team with merchant names; my own model still thinks Thanksgiving is a normal Thursday."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Soren suggested adding holiday features and a simple baseline; forecasts look way saner now."
+        }
+      ],
+      "bank": {
+        "experience": "Built a data pipeline for a local farmers market and a film photo cataloging app.",
+        "opinions": "She thinks the simplest model that works is the best model. She believes bakeries deserve good software too.",
+        "reflections": "She's learning to trust baselines before fancy models.",
+        "world": "Her team is her and her roommate, both from the GT data science club."
+      }
+    }
+  },
+  {
+    "slug": "ama",
+    "name": "Ama",
+    "look": "b=#4a4e57;a=#ff5d6c;p=stripes;e=shades;h=bucket;i=none",
+    "memory": {
+      "user_id": "Ama",
+      "user_md": "I'm Ama, a sophomore in environmental engineering at Georgia Tech, from Kumasi, Ghana. I'm building a map that shows tree canopy and heat across Atlanta neighborhoods. My map freezes when I load fifty thousand tree points. I'm great at GIS, field data collection, and explaining climate data to non-scientists. I'd love to meet a mapping performance expert and anyone who goes birding.",
+      "memory_md": "Ama is an avid birder who keeps a life list of over 200 species and wakes up early for warblers. She loves kelewele and cares about urban heat and who gets shade.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Saw a red-tailed hawk outside Klaus at 7am, then watched my map freeze again."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Dmitri helped me add point clustering and now the map is smooth; went birding with Theo and Pita at sunrise."
+        }
+      ],
+      "bank": {
+        "experience": "Mapped street trees for a city volunteer program and built a heat sensor network with her lab.",
+        "opinions": "She believes shade is a climate justice issue. She thinks every map should tell a story.",
+        "reflections": "She learned that fewer points on screen can show more truth.",
+        "world": "Her team is from the GT Environmental Engineering student society."
+      }
+    }
+  },
+  {
+    "slug": "dmitri",
+    "name": "Dmitri",
+    "look": "b=#b86b3c;a=#ff5d6c;p=split;e=dots;h=none;i=boba",
+    "memory": {
+      "user_id": "Dmitri",
+      "user_md": "I'm Dmitri, a PhD student in computational science at Georgia Tech, from Plovdiv, Bulgaria. I'm building an app that plans bike routes by air quality. I already solved rendering huge point datasets on web maps with clustering and vector tiles, so I can help any mapping team. I'm stuck on getting my air quality sensor feed to update without reloading the whole layer. I'd love to meet fellow cyclists, boulderers, and anyone doing climate data.",
+      "memory_md": "Dmitri bikes everywhere, even in the rain, and boulders on weekends. He loves banitsa, open data, and maps with good color palettes.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Helped a canopy team cluster their points; my own layers still flicker on update."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Figured out how to update just the GeoJSON source; went bouldering-in-spirit with Farida and Kai at lunch."
+        }
+      ],
+      "bank": {
+        "experience": "Built open datasets for city bike lanes and published a paper on sensor interpolation.",
+        "opinions": "He thinks every city should publish its data. He believes color palettes matter as much as algorithms.",
+        "reflections": "He realized he misses making things that ship fast.",
+        "world": "He's teamed up with two undergrads he met at a GT climate meetup."
+      }
+    }
+  },
+  {
+    "slug": "sione",
+    "name": "Sione",
+    "look": "b=#ff8a3d;a=#1f2430;p=solid;e=sleepy;h=bucket;i=duck",
+    "memory": {
+      "user_id": "Sione",
+      "user_md": "I'm Sione, a sophomore in CS at Georgia Tech, from Auckland, New Zealand by way of Salt Lake City. I'm building a two-player fighting game where the characters are dancing fruit. My online multiplayer feels laggy and I'm trying to implement rollback netcode but inputs desync. I'm great at pixel art and animation. I'd love to meet someone who has done rollback netcode and other speedrunners.",
+      "memory_md": "Sione speedruns Super Mario 64 and practices the same trick for hours. He loves rugby, pixel art, and games that make people laugh.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "The mango character keeps teleporting on the other player's screen."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Bex helped me find a non-deterministic float in my physics; rollback mostly works now. Jonah and I compared speedrun splits."
+        }
+      ],
+      "bank": {
+        "experience": "Made three game jam games and animated a short pixel art film for a class.",
+        "opinions": "He thinks fighting games need more fruit. He believes determinism is everything.",
+        "reflections": "He's learning that netcode bugs are usually physics bugs in disguise.",
+        "world": "His team is him and his roommate from GT's game dev club."
+      }
+    }
+  },
+  {
+    "slug": "bex",
+    "name": "Bex",
+    "look": "b=#ff5d6c;a=#7ad36b;p=hearts;e=wink;h=propeller;i=laptop",
+    "memory": {
+      "user_id": "Bex",
+      "user_md": "I'm Bex, a senior in CS at Georgia Tech from Leeds, England. I'm building a tiny online party game where you draw and guess with friends. I already implemented rollback netcode for a previous game, so I can help anyone with multiplayer desyncs. I'm stuck on matchmaking: how to pair players fairly without long waits. I'd love to meet backend folks and fellow yo-yo throwers.",
+      "memory_md": "Bex throws a yo-yo and knows about forty tricks, some of which work. They love tea, game networking, and making strangers laugh together.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Showed Hyun-woo my yo-yo trick and he immediately out-tricked me."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Helped Sione fix his rollback desync; still thinking about matchmaking queues."
+        }
+      ],
+      "bank": {
+        "experience": "Built rollback netcode for a fighting game and a Discord party game with 5k plays.",
+        "opinions": "They believe multiplayer games are social infrastructure. They think floats in netcode are a crime.",
+        "reflections": "They realized they love explaining netcode with drawings.",
+        "world": "Their team is two GT seniors from the game dev club and an exchange student."
+      }
+    }
+  },
+  {
+    "slug": "noor",
+    "name": "Noor",
+    "look": "b=#ffc93c;a=#ffe066;p=zigzag;e=star;h=bunny;i=phone",
+    "memory": {
+      "user_id": "Noor",
+      "user_md": "I'm Noor, a junior in CS at Georgia State, from Amman, Jordan. I'm building a study group finder where classmates can match by course and schedule. My OAuth login goes into an infinite redirect loop after the callback. I'm great at backend APIs and database design. I'd love to meet someone who has fixed OAuth redirects and anyone who plays bullet chess.",
+      "memory_md": "Noor plays bullet chess online and has a strong opinion about the Sicilian. She loves knafeh, clean APIs, and helping first-year students feel less lost.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Login loop is haunting me; the redirect never ends."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Grace spotted that my callback URL had a trailing slash mismatch; fixed! Played bullet chess against Hugo during a break."
+        }
+      ],
+      "bank": {
+        "experience": "Built a course review site for GSU and interned on a backend team.",
+        "opinions": "She thinks auth is the hardest easy thing. She believes every campus needs a better study group tool.",
+        "reflections": "She learned that one slash can cost three hours.",
+        "world": "Her team is three GSU friends at their first HackGT."
+      }
+    }
+  },
+  {
+    "slug": "grace",
+    "name": "Grace",
+    "look": "b=#7ad36b;a=#9b6bd1;p=dots;e=shades;h=party;i=trophy",
+    "memory": {
+      "user_id": "Grace",
+      "user_md": "I'm Grace, a sophomore in CS at Georgia Tech from Savannah, Georgia. I'm building a volunteer shift scheduler for local food banks. I already fixed OAuth redirect loops and cookie issues on a previous project, so I can help with any login mess. I'm stuck on sending reminder texts without paying for an SMS service. I'd love to meet civic tech people and fellow cubers.",
+      "memory_md": "Grace solves Rubik's cubes and has a sub-20-second average. She loves Savannah squares, civic tech, and people who volunteer on Saturday mornings.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Helped a team fix their OAuth loop in ten minutes; feeling powerful."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Yusuf and I raced cubes at breakfast; Imani gave me ideas on free reminders through email digests instead."
+        }
+      ],
+      "bank": {
+        "experience": "Built a signup site for a food bank and a cube timer app.",
+        "opinions": "She thinks nonprofits deserve software as good as startups. She believes auth bugs are usually URLs.",
+        "reflections": "She realized she likes being the person teams call for login bugs.",
+        "world": "Her team is two GT sophomores and a friend from Savannah State."
+      }
+    }
+  },
+  {
+    "slug": "kwame",
+    "name": "Kwame",
+    "look": "b=#3fc5f0;a=#9b6bd1;p=stripes;e=dots;h=crown;i=coffee",
+    "memory": {
+      "user_id": "Kwame",
+      "user_md": "I'm Kwame, a senior in mechanical engineering at Georgia Tech, from Accra, Ghana. I'm building a small robot arm that sorts recycling. My servos oscillate wildly when I try to hold a position and my PID tuning is not working. I'm great at mechanical design and CAD. I'd love to meet controls experts and fellow crocheters.",
+      "memory_md": "Kwame crochets hats while waiting for code to compile. He loves waakye, mechanical design, and reducing waste.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Robot arm is shaking like it drank five energy drinks."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Ingrid helped me lower the derivative gain and add a filter; the arm is calm now. Mei and I compared crochet stitches."
+        }
+      ],
+      "bank": {
+        "experience": "Built a mechanical claw for a robotics competition and designed a bike trailer.",
+        "opinions": "He thinks recycling should be automated and fun. He believes PID tuning is part science, part meditation.",
+        "reflections": "He learned that shaking usually means too much D.",
+        "world": "His team is from the GT RoboJackets club."
+      }
+    }
+  },
+  {
+    "slug": "ingrid",
+    "name": "Ingrid",
+    "look": "b=#4f7fd6;a=#9b6bd1;p=split;e=happy;h=halo;i=duck",
+    "memory": {
+      "user_id": "Ingrid",
+      "user_md": "I'm Ingrid, a master's student in robotics at Georgia Tech from Bergen, Norway. I'm building a self-balancing delivery robot for dorm snacks. I already tuned PID controllers and servo filters for many robots, so I can help anyone with shaky motors. I'm stuck on ROS 2 messages dropping between my Raspberry Pi and laptop. I'd love to meet ROS networking experts and anyone who bakes sourdough.",
+      "memory_md": "Ingrid keeps a sourdough starter named Fjord and bakes bread every Sunday. She loves hiking, control theory, and fjord photos.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Helped Kwame tame his robot arm; my own ROS messages keep vanishing."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Omar and I traded sourdough tips; Malik suggested checking my DDS settings and it works now."
+        }
+      ],
+      "bank": {
+        "experience": "Built balancing robots and a drone controller for a research lab.",
+        "opinions": "She thinks control theory should be taught with robots, not equations. She believes bread is patience.",
+        "reflections": "She realized that networking bugs look like control bugs.",
+        "world": "Her team is two robotics master's students."
+      }
+    }
+  },
+  {
+    "slug": "theo",
+    "name": "Theo",
+    "look": "b=#9b6bd1;a=#1f2430;p=solid;e=wink;h=cap;i=none",
+    "memory": {
+      "user_id": "Theo",
+      "user_md": "I'm Theo, a junior in CS at Georgia Tech from Savannah, Georgia. I'm building a screen-reader-friendly bus arrival app for Atlanta transit. My live updates aren't announced properly by screen readers. I'm good at transit data and APIs. I'd love to meet accessibility experts and birders.",
+      "memory_md": "Theo is a birder who can identify birds by call and keeps a notebook of sightings. He loves public transit and cares about accessible cities.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Screen readers are either silent or read everything twice."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Marisol showed me aria-live polite regions; now arrivals are announced once. Went birding with Ama and Pita at dawn."
+        }
+      ],
+      "bank": {
+        "experience": "Built a transit bot for his high school and contributed to open data for buses.",
+        "opinions": "He thinks every transit app should be accessible first. He believes birds and buses are both about timing.",
+        "reflections": "He learned that accessibility is testing with real users.",
+        "world": "His team is from the GT Accessibility Club with Mei."
+      }
+    }
+  },
+  {
+    "slug": "marisol",
+    "name": "Marisol",
+    "look": "b=#ff7eb6;a=#ff8a3d;p=hearts;e=star;h=halo;i=boba",
+    "memory": {
+      "user_id": "Marisol",
+      "user_md": "I'm Marisol, a senior in CS at Georgia Tech from Houston, Texas. I'm building a tool that audits websites for accessibility and suggests fixes. I already solved screen reader announcements with aria-live regions, so I can help anyone with accessibility. I'm stuck on automatically detecting low-contrast text on images. I'd love to meet computer vision people and salsa dancers.",
+      "memory_md": "Marisol dances salsa and runs a campus dance club. She loves tacos, accessibility, and teaching people to use screen readers.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Helped Theo with aria-live; my contrast detection still flags everything."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Leilani suggested sampling background colors under text boxes; working better. Ravi and I danced salsa at midnight."
+        }
+      ],
+      "bank": {
+        "experience": "Built accessibility audits for a nonprofit and taught workshops on screen readers.",
+        "opinions": "She believes accessibility is design. She thinks automatic tools miss human context.",
+        "reflections": "She realized many devs want to be accessible but don't know how.",
+        "world": "Her team is her and two friends from the GT Accessibility Club."
+      }
+    }
+  },
+  {
+    "slug": "anjali",
+    "name": "Anjali",
+    "look": "b=#2bb3a6;a=#1f2430;p=zigzag;e=shades;h=none;i=energy",
+    "memory": {
+      "user_id": "Anjali",
+      "user_md": "I'm Anjali, a sophomore in biomedical engineering at Georgia Tech, from Naperville, Illinois. I'm building RepBuddy, a phone app that counts stretching and strength reps using the front camera so rehab homework feels less boring. My pose keypoints jitter so much that one slow squat gets counted as four. I'm great at biomechanics, joint angles, and explaining why form matters without sounding like a gym teacher. I'd love to meet someone who has smoothed pose tracking and anyone who bakes sourdough.",
+      "memory_md": "Anjali keeps a sourdough starter called Doughlores in her dorm mini fridge and bakes a lopsided loaf every Sunday. She plays ultimate frisbee and cares about making healthy habits feel playful instead of preachy.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "My rep counter said I did 45 squats. I did 10. I wish."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Yusuf showed me a One Euro filter on the keypoints plus a hysteresis threshold and the counts are finally honest."
+        }
+      ],
+      "bank": {
+        "experience": "Built a knee-angle sensor sleeve for a design class and a hydration reminder app for her lab.",
+        "opinions": "She thinks fitness apps should celebrate showing up, not perfection. She believes every angle calculation needs a unit test.",
+        "reflections": "She learned that raw model output is a suggestion, not a fact.",
+        "world": "Her team is two BME sophomores and a CS friend from her floor in North Ave."
+      }
+    }
+  },
+  {
+    "slug": "yusuf",
+    "name": "Yusuf",
+    "look": "b=#f5f1e6;a=#7ad36b;p=dots;e=dots;h=bucket;i=coffee",
+    "memory": {
+      "user_id": "Yusuf",
+      "user_md": "I'm Yusuf, a junior in CS at Georgia Tech, from Bursa, Turkey. I'm building a fingerspelling practice app that watches your hand and tells you when your letters are clear. I already fixed jittery hand and pose tracking with MediaPipe and a One Euro filter, so I can help anyone whose camera tracking shakes. I'm stuck on telling apart similar handshapes like M and N, which my classifier keeps mixing up. I'd love to meet people who train small vision models and anyone who speedcubes.",
+      "memory_md": "Yusuf speedcubes one-handed and carries a 3x3 in his hoodie pocket at all times. He brews Turkish tea in a double kettle at his desk and cares about language access.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "My model thinks M and N are the same letter; honestly, from some angles, fair."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Raced Grace on cubes at breakfast and lost by 0.4s. Zara suggested collecting angles from more hands and it helped a lot."
+        }
+      ],
+      "bank": {
+        "experience": "Built a gesture-controlled music player and did undergrad research on hand tracking.",
+        "opinions": "He thinks signing apps must be built with signers, not just for them. He believes filtering fixes half of all CV demos.",
+        "reflections": "He realized small clean datasets beat big messy ones.",
+        "world": "His team includes a friend from the GT ASL club who guides every design choice."
+      }
+    }
+  },
+  {
+    "slug": "elif",
+    "name": "Elif",
+    "look": "b=#4a4e57;a=#ff8a3d;p=stripes;e=happy;h=headphones;i=phone",
+    "memory": {
+      "user_id": "Elif",
+      "user_md": "I'm Elif, a sophomore in music technology at Georgia Tech, from Izmir, Turkey. I'm building Usul, a browser rhythm trainer for odd meters from Turkish, Balkan and Indian music. My metronome drifts audibly out of time after about a minute. I'm great at music theory and can clap 9/8 while talking. I'd love to meet audio programmers and anyone who plays hand drums, especially tabla.",
+      "memory_md": "Elif plays darbuka and is teaching herself tabla from videos, badly but joyfully. She collects cassette tapes from flea markets and cares about getting non-Western rhythms into music classrooms.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "The metronome is great for sixty seconds, then it wanders off like a cat."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Rohan explained lookahead scheduling on the AudioContext clock and now it's rock solid. He also corrected my tabla hand position."
+        }
+      ],
+      "bank": {
+        "experience": "Made a rhythm game for a class and composed a score for a student short film.",
+        "opinions": "She thinks 9/8 is the friendliest time signature. She believes setTimeout should never be trusted with music.",
+        "reflections": "She learned that audio has its own clock and you should listen to it.",
+        "world": "Her team is two music tech students and a CS friend who plays bass."
+      }
+    }
+  },
+  {
+    "slug": "rohan",
+    "name": "Rohan",
+    "look": "b=#b86b3c;a=#ff5d6c;p=split;e=sleepy;h=headphones;i=trophy",
+    "memory": {
+      "user_id": "Rohan",
+      "user_md": "I'm Rohan, a music technology master's student at Georgia Tech from Pune, India. I'm building a small robot that plays tabla along with a singer and follows their tempo. I already solved timing drift in Web Audio with lookahead scheduling, so I can help any music app that stutters or drifts. I'm stuck on recognizing individual tabla strokes like na and ge from a mic recording. I'd love to meet audio ML folks and anyone else who plays or is learning tabla.",
+      "memory_md": "Rohan has played tabla for fifteen years and gives free lessons to anyone patient enough. He drinks too much cutting chai and cares about robots that make music with people rather than instead of them.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Helped Elif fix her metronome drift; my robot still hits ge when I asked for na."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Jammed bols with Aditi, a fellow Pune kid. Yuki showed me spectral flux onset detection and stroke recognition finally clicks."
+        }
+      ],
+      "bank": {
+        "experience": "Built a percussion robot for his thesis and a rhythm transcription tool for his tabla students.",
+        "opinions": "He thinks musical robots should listen before they play. He believes tabla is really applied math.",
+        "reflections": "He realized teaching tabla has made him a better debugger.",
+        "world": "His team is from the GT Center for Music Technology."
+      }
+    }
+  },
+  {
+    "slug": "zara",
+    "name": "Zara",
+    "look": "b=#2bb3a6;a=#ffe066;p=solid;e=star;h=party;i=coffee",
+    "memory": {
+      "user_id": "Zara",
+      "user_md": "I'm Zara, a senior in CS at Georgia Tech, from Karachi, Pakistan. I'm building AidAsk, a chatbot that answers questions about financial aid PDFs in plain language for first-gen students. My retrieval keeps pulling irrelevant paragraphs, so a question about grants gets an answer about parking permits. I'm great at training and augmenting small vision and text models. I'd love to meet someone who has made RAG retrieval actually good and anyone who writes poetry.",
+      "memory_md": "Zara writes Urdu ghazals in a tiny notebook and reads them at open mics. She loves kite flying and cares deeply about first-gen students getting clear information.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Asked my bot about Pell grants and it told me where to park. Close, but no."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Minh taught me heading-aware chunking and a reranker; answers are finally on topic."
+        }
+      ],
+      "bank": {
+        "experience": "Built a plant disease classifier and TA'd an intro ML course.",
+        "opinions": "She thinks most RAG problems are chunking problems. She believes financial aid paperwork should be illegal to make this confusing.",
+        "reflections": "She learned that a chunk without its heading is a sentence without a home.",
+        "world": "Her team is from GT's first-gen student network."
+      }
+    }
+  },
+  {
+    "slug": "minh",
+    "name": "Minh",
+    "look": "b=#2bb3a6;a=#ffffff;p=hearts;e=shades;h=crown;i=coffee",
+    "memory": {
+      "user_id": "Minh",
+      "user_md": "I'm Minh, an ML PhD student at Georgia Tech from Hanoi, Vietnam. I'm building a reading buddy that summarizes research papers and points to the exact section it used. I already solved bad RAG retrieval with heading-aware chunking and a reranker, so I can help any team whose chatbot answers the wrong question. I'm stuck on citations: the model sometimes invents page numbers. I'd love to meet people working on LLM grounding and structured outputs.",
+      "memory_md": "Minh plays competitive badminton and makes a very serious pho on Sundays. He cares about helping undergrads read research without feeling intimidated.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Helped Zara fix her chunking; my own citations are still creative writing."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Arjun showed me schema-validated outputs that only allow real source IDs; no more fake page numbers."
+        }
+      ],
+      "bank": {
+        "experience": "Published a workshop paper on dense retrieval and built his lab's internal paper search.",
+        "opinions": "He thinks grounding is what makes AI trustworthy. He believes rerankers are the most underrated trick in RAG.",
+        "reflections": "He realized hackathon speed is a nice break from paper deadlines.",
+        "world": "His team is two PhD students and a curious undergrad from the GT ML group."
+      }
+    }
+  },
+  {
+    "slug": "bongani",
+    "name": "Bongani",
+    "look": "b=#7ad36b;a=#ff7eb6;p=zigzag;e=dots;h=halo;i=none",
+    "memory": {
+      "user_id": "Bongani",
+      "user_md": "I'm Bongani, a junior in environmental engineering at Georgia Tech, from Durban, South Africa. I'm building SipSense, soil moisture sensors that tell community gardeners exactly which beds need water. Two of my sensors in the same pot of soil read totally different values. I'm good at plant science, drip irrigation, and field testing in the mud. I'd love to meet sensor calibration folks and fellow gardeners.",
+      "memory_md": "Bongani grows a ridiculous number of chili varieties on his apartment balcony and rates them on a personal heat scale. He plays pickup soccer and cares about water conservation in cities.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "My two sensors disagree about the same soil. One of them is lying."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Pita walked me through a dry-and-saturated two-point calibration; the sensors agree now."
+        }
+      ],
+      "bank": {
+        "experience": "Built a rain barrel level monitor and volunteers at a West End community garden.",
+        "opinions": "He thinks every drop of water should be accounted for. He believes cheap sensors are fine if you calibrate them.",
+        "reflections": "He learned that sensors are only as honest as their calibration.",
+        "world": "His team is from GT's Engineers for a Sustainable World chapter."
+      }
+    }
+  },
+  {
+    "slug": "pita",
+    "name": "Pita",
+    "look": "b=#3fc5f0;a=#ff8a3d;p=dots;e=happy;h=bucket;i=boba",
+    "memory": {
+      "user_id": "Pita",
+      "user_md": "I'm Pita, a senior in electrical engineering at Georgia Tech, from Nuku'alofa, Tonga. I'm building a low-cost buoy that logs water temperature near coral reefs. I already figured out calibrating cheap soil and water sensors with two-point calibration, so I can help with noisy analog readings. I'm stuck on waterproofing: my enclosure leaks at the cable gland. I'd love to meet ocean nerds, 3D printing folks, and early-morning birders.",
+      "memory_md": "Pita is a birder who loves shorebirds and swims laps before sunrise. He cares about coral reefs and the islands they protect.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Helped Bongani calibrate his sensors; my buoy took on water in the sink test."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Birded the Klaus courtyard at dawn with Ama and Theo. Keanu suggested a potted gland and a gasket groove; dry at last."
+        }
+      ],
+      "bank": {
+        "experience": "Built a campus weather station and a tide logger for a summer research program.",
+        "opinions": "He thinks the ocean needs more cheap sensors. He believes birds are the best alarm clock.",
+        "reflections": "He learned water always finds the one gap you skipped.",
+        "world": "His team is two EE seniors who share a lab bench."
+      }
+    }
+  },
+  {
+    "slug": "lena",
+    "name": "Lena",
+    "look": "b=#3fc5f0;a=#ffe066;p=stripes;e=sleepy;h=propeller;i=energy",
+    "memory": {
+      "user_id": "Lena",
+      "user_md": "I'm Lena, a junior in CS at the University of Toronto, visiting HackGT for the first time. I'm building a Flutter app that scans grocery receipts and suggests recipes to use up food before it spoils. My iOS camera permission prompt never appears, so the camera shows black. I'm good at Flutter UI and animations. I'd love to meet mobile developers and fellow sourdough bakers.",
+      "memory_md": "Lena bakes sourdough and has named her starter Clint Yeastwood. She skates on outdoor rinks all winter and cares about food waste.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Black camera screen on iPhone, works fine on Android. Classic."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Kai told me to add the camera usage description to Info.plist; the prompt appears now. Swapped starter stories with Ingrid and Omar."
+        }
+      ],
+      "bank": {
+        "experience": "Built a Flutter habit tracker and a campus event app at UofT.",
+        "opinions": "She thinks every recipe app should start from what's in your fridge. She believes Info.plist is where bugs go to hide.",
+        "reflections": "She learned that iOS permissions fail silently.",
+        "world": "Her team is her and a friend from Toronto who both road-tripped down."
+      }
+    }
+  },
+  {
+    "slug": "kai",
+    "name": "Kai",
+    "look": "b=#ff8a3d;a=#3fc5f0;p=split;e=wink;h=none;i=laptop",
+    "memory": {
+      "user_id": "Kai",
+      "user_md": "I'm Kai, a sophomore in CS at Georgia Tech from Honolulu, Hawaii. I'm building a Flutter app that turns bouldering gym routes into shareable videos with hold highlights. I already solved iOS camera and permission headaches, so I can help any mobile team. I'm stuck on highlighting holds consistently when lighting changes. I'd love to meet computer vision people and fellow boulderers.",
+      "memory_md": "Kai boulders at the campus rec center and is chasing his first V6. He surfs whenever he's home and cares about making climbing more welcoming to beginners.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Fixed Lena's camera permissions in two minutes; my hold detection is still confused by shadows."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Talked climbing with Farida for too long; Esperanza suggested normalizing colors in HSV and it's way more stable."
+        }
+      ],
+      "bank": {
+        "experience": "Built a Flutter app for a surf report and a climbing log.",
+        "opinions": "He thinks climbing apps should be social. He believes lighting is the hardest part of CV.",
+        "reflections": "He realized helping others fix bugs builds confidence.",
+        "world": "His team is from the GT climbing club."
+      }
+    }
+  },
+  {
+    "slug": "omar",
+    "name": "Omar",
+    "look": "b=#4f7fd6;a=#ffe066;p=solid;e=shades;h=bucket;i=phone",
+    "memory": {
+      "user_id": "Omar",
+      "user_md": "I'm Omar, a senior in CS at Georgia Tech from Houston, Texas. I'm building LeaseLens, which highlights the confusing clauses in a rental lease and explains them in plain English. I'm stuck on Postgres row-level security: in testing, one user could see another user's uploaded lease, which is a hard no. I'm great at product scoping and can help any team cut their idea down to a demo that actually works by Sunday. I'd love to meet someone who has written RLS policies they trust and any fellow sourdough bakers.",
+      "memory_md": "Omar bakes sourdough with jalapeño and cheddar and brings slices to every team meeting. He will defend Houston barbecue against all comers and cares about renters knowing their rights.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "My row-level security has two settings: nobody sees anything, or everybody sees everything."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Priscila helped me write policies keyed on the user's id and add a test for each one. Traded starter feeding schedules with Ingrid and Lena."
+        }
+      ],
+      "bank": {
+        "experience": "Built an intake form for a legal aid clinic and a food truck finder for his hometown.",
+        "opinions": "He thinks legal information should be as easy to read as a menu. He believes every security rule needs a failing test first.",
+        "reflections": "He learned that scoping down is a feature, not a failure.",
+        "world": "His team includes a friend from law school who reviews every clause explanation."
+      }
+    }
+  },
+  {
+    "slug": "priscila",
+    "name": "Priscila",
+    "look": "b=#ff7eb6;a=#ff8a3d;p=hearts;e=dots;h=headphones;i=trophy",
+    "memory": {
+      "user_id": "Priscila",
+      "user_md": "I'm Priscila, a junior in CS at Georgia Tech, from Belo Horizonte, Brazil. I'm building Geladeira, a shared fridge and grocery list app for roommates that works even with bad dorm wifi. I already solved Postgres row-level security for a previous project, so I can help anyone whose users can see data they shouldn't. I'm stuck on offline sync: edits made offline overwrite each other when phones reconnect. I'd love to meet people who have done offline-first apps and anyone who dances forró.",
+      "memory_md": "Priscila dances forró and runs a Sunday beginners' class on the Tech Green. She makes pão de queijo for her team and cares about roommates never fighting over the last egg again.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Helped Omar lock down his RLS; meanwhile my app thinks there are negative three eggs."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Farida explained CRDTs with sticky notes; I'm shipping per-item last-write-wins for the demo and CRDTs after."
+        }
+      ],
+      "bank": {
+        "experience": "Built a roommate chore rotation app used by her entire apartment building.",
+        "opinions": "She thinks security should be the default, not a toggle. She believes offline-first apps are kinder to real life.",
+        "reflections": "She realized she likes databases more than she admits.",
+        "world": "Her team is two friends from the GT Brazilian Student Association."
+      }
+    }
+  },
+  {
+    "slug": "hugo",
+    "name": "Hugo",
+    "look": "b=#ff7eb6;a=#ff5d6c;p=zigzag;e=happy;h=bunny;i=coffee",
+    "memory": {
+      "user_id": "Hugo",
+      "user_md": "I'm Hugo, an exchange student at Georgia Tech from Lyon, France, studying computer science. I'm building a browser chess trainer in Rust compiled to WebAssembly that explains why your move was bad. My wasm bundle is 9 MB and the page takes forever to load on phones. I'm good at Rust, chess engines, and search algorithms. I'd love to meet someone who has shrunk wasm builds and anyone up for bullet chess.",
+      "memory_md": "Hugo plays bullet chess between every task and claims it helps him think. He misses real bakery croissants and cares about teaching chess without being condescending.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "My wasm file is bigger than most video games from the nineties."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Nadia showed me opt-level z, LTO, and wasm-opt; we're at 900 KB. Lost two bullet games to Noor, won one."
+        }
+      ],
+      "bank": {
+        "experience": "Wrote a small chess engine in Rust and contributed to an open-source puzzle database.",
+        "opinions": "He thinks chess tools should explain ideas, not just show evaluations. He believes Rust is worth the compile times.",
+        "reflections": "He realized build size is a user experience problem.",
+        "world": "He's hacking with two other exchange students he met at orientation."
+      }
+    }
+  },
+  {
+    "slug": "nadia",
+    "name": "Nadia",
+    "look": "b=#f5f1e6;a=#3fc5f0;p=dots;e=sleepy;h=headphones;i=duck",
+    "memory": {
+      "user_id": "Nadia",
+      "user_md": "I'm Nadia, a senior in CS at Georgia Tech, from Kraków, Poland. I'm building a browser-based audio sampler written in Rust and WebAssembly. I already shrank wasm bundles from megabytes to under a megabyte with LTO and wasm-opt, so I can help any Rust web team. I'm stuck on sharing audio buffers between a worker and the main thread without glitches. I'd love to meet audio programmers and fellow knitters.",
+      "memory_md": "Nadia knits socks with ridiculous colorwork and has a sock for every programming language. She loves pierogi and cares about fast, lightweight software.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Helped Hugo shrink his wasm; my audio still crackles when the worker hands off buffers."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Yuki suggested a ring buffer with SharedArrayBuffer and an AudioWorklet; crackles gone."
+        }
+      ],
+      "bank": {
+        "experience": "Built a Rust image editor that runs in the browser and a tiny synth plugin.",
+        "opinions": "She thinks the web can be fast if you care. She believes every byte shipped should justify itself.",
+        "reflections": "She realized she enjoys optimizing more than adding features.",
+        "world": "Her team is her and a friend from the GT systems club."
+      }
+    }
+  },
+  {
+    "slug": "tariq",
+    "name": "Tariq",
+    "look": "b=#b86b3c;a=#ff8a3d;p=stripes;e=wink;h=crown;i=none",
+    "memory": {
+      "user_id": "Tariq",
+      "user_md": "I'm Tariq, a sophomore in electrical engineering at Georgia Tech, from Nairobi, Kenya. I'm building a LoRa-based alert system that warns farmers about flooding upstream. My LoRa range is only about 200 meters instead of the kilometers I expected. I'm good at RF basics and power budgets for battery devices. I'd love to meet antenna experts and film photographers.",
+      "memory_md": "Tariq shoots medium-format film on a secondhand camera and develops it with Camila's help. He runs early morning 5Ks and cares about farmers getting warnings in time.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Range test across the parking deck: 200 meters. Sad."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Keanu noticed my antenna was cut for the wrong frequency; we're getting over a kilometer now. Camila and I compared film stocks."
+        }
+      ],
+      "bank": {
+        "experience": "Built a solar charge controller and a weather alert SMS bot.",
+        "opinions": "He thinks early warnings save more than any fancy dashboard. He believes antennas are black magic until someone explains them.",
+        "reflections": "He learned that the antenna is half the radio.",
+        "world": "His team is two EE students from the GT Kenyan student association."
+      }
+    }
+  },
+  {
+    "slug": "keanu",
+    "name": "Keanu",
+    "look": "b=#ff5d6c;a=#1f2430;p=split;e=star;h=cap;i=boba",
+    "memory": {
+      "user_id": "Keanu",
+      "user_md": "I'm Keanu, a junior in mechanical engineering at Georgia Tech, from Hilo, Hawaii. I'm building a solar-powered LoRa trail beacon for hikers. I already solved snap-fit tolerances, waterproof enclosures, and antenna tuning, so I can help most hardware teams. I'm stuck on power: my beacon drains its battery in a day instead of a week. I'd love to meet low-power firmware people and fellow hikers.",
+      "memory_md": "Keanu 3D prints everything, including a tiny ukulele he actually plays. He hikes whenever possible and cares about safety in the outdoors.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Helped Tomás and Pita with enclosures; my own battery is dead by dinner."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Aditi showed me deep sleep mode on the ESP32; the battery is now looking at a week."
+        }
+      ],
+      "bank": {
+        "experience": "Designed 3D-printed parts for a Formula SAE car and a waterproof camera housing.",
+        "opinions": "He thinks every hardware project needs a tolerance test print. He believes solar is the best power source for trails.",
+        "reflections": "He realized hardware is more fun when you share tricks.",
+        "world": "His team is two MEs from the GT hiking club."
+      }
+    }
+  },
+  {
+    "slug": "sofia",
+    "name": "Sofía",
+    "look": "b=#4f7fd6;a=#9b6bd1;p=solid;e=dots;h=party;i=energy",
+    "memory": {
+      "user_id": "Sofía",
+      "user_md": "I'm Sofía, a senior in industrial design at Georgia Tech from Bogotá, Colombia. I'm building a kit that helps elementary schoolers design and build simple robots from recycled materials. I'm stuck on the instruction flow: kids get lost at step three. I'm great at pitching, storytelling, and demo design, so if your demo is confusing, find me. I'd love to meet educators and hardware folks.",
+      "memory_md": "Sofía does improv comedy on Fridays and makes the best demo scripts at the event. She loves arepas and cares about kids feeling like inventors.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Kids in our test run got confused at the motor step."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Ran pitch practice for five teams; Imani helped me rethink step three with pictures instead of words."
+        }
+      ],
+      "bank": {
+        "experience": "Designed a toy for a design competition and taught a summer maker camp.",
+        "opinions": "She thinks every kid is an engineer. She believes demos should be stories.",
+        "reflections": "She realized teaching makes her a better designer.",
+        "world": "Her team is a designer and two ME students."
+      }
+    }
+  },
+  {
+    "slug": "jasper",
+    "name": "Jasper",
+    "look": "b=#ff5d6c;a=#ffffff;p=hearts;e=happy;h=propeller;i=laptop",
+    "memory": {
+      "user_id": "Jasper",
+      "user_md": "I'm Jasper, a senior in CS at Georgia Tech from Charlotte, North Carolina. I'm building a group gift fund app where friends chip in for birthday presents. I'm stuck on payment webhooks: some events arrive twice and we charge twice. I'm great at money math and can help anyone with currency rounding. I'd love to meet backend fintech people and fellow retro gamers.",
+      "memory_md": "Jasper collects Game Boy cartridges and restores them with new batteries. He loves Carolina barbecue and cares about money apps that don't surprise people.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Double charging in test mode is scary even with fake money."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Dev helped me add idempotency keys; duplicate events are now ignored. Helped Tunde with currency rounding."
+        }
+      ],
+      "bank": {
+        "experience": "Built a split-the-rent calculator and a Game Boy save backup tool.",
+        "opinions": "He thinks money should always be integers in cents. He believes idempotency is peace of mind.",
+        "reflections": "He learned that webhooks always retry.",
+        "world": "His team is two seniors from the GT fintech club."
+      }
+    }
+  },
+  {
+    "slug": "aiyana",
+    "name": "Aiyana",
+    "look": "b=#ff7eb6;a=#1f2430;p=zigzag;e=sleepy;h=none;i=phone",
+    "memory": {
+      "user_id": "Aiyana",
+      "user_md": "I'm Aiyana, a junior in environmental science at Georgia Tech, from Albuquerque, New Mexico. I'm building a water-quality dashboard for small river watch groups. My charts choke when I load a year of minute-level data. I'm good at water chemistry and field sampling. I'd love to meet data visualization people and fellow potters.",
+      "memory_md": "Aiyana throws pottery on a wheel and makes lopsided mugs for her friends. She loves green chile and cares about rivers and the volunteers who test them.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "My dashboard froze on a year of data."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Soren showed me downsampling with LTTB; charts are fast now."
+        }
+      ],
+      "bank": {
+        "experience": "Collected water samples for a watershed group and built a pH logger.",
+        "opinions": "She thinks community science is real science. She believes every chart needs a clear story.",
+        "reflections": "She learned that you don't need every point to see a trend.",
+        "world": "Her team is from the GT environmental science club."
+      }
+    }
+  },
+  {
+    "slug": "mateo",
+    "name": "Mateo",
+    "look": "b=#ff7eb6;a=#ff8a3d;p=dots;e=wink;h=headphones;i=trophy",
+    "memory": {
+      "user_id": "Mateo",
+      "user_md": "I'm Mateo, a junior in music technology at Georgia Tech from Mexico City. I'm building a violin tuner and intonation coach that shows how in-tune each note is. My pitch detection keeps jumping an octave on low notes. I'm great at violin, music theory, and teaching beginners. I'd love to meet audio DSP folks and musicians.",
+      "memory_md": "Mateo plays violin in a mariachi group on weekends. He loves tacos al pastor and cares about music learning being fun.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Pitch detector thinks my G string is an octave higher."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Yuki suggested the YIN algorithm; octave errors are rare now. Jammed with Elif and Rohan."
+        }
+      ],
+      "bank": {
+        "experience": "Built a practice tracker and played in a youth orchestra.",
+        "opinions": "He thinks intonation apps should be encouraging. He believes mariachi is underrated in music tech.",
+        "reflections": "He learned that low notes are hard for pitch detection.",
+        "world": "His team is two music tech juniors."
+      }
+    }
+  },
+  {
+    "slug": "chloe",
+    "name": "Chloé",
+    "look": "b=#7ad36b;a=#2bb3a6;p=stripes;e=star;h=headphones;i=coffee",
+    "memory": {
+      "user_id": "Chloé",
+      "user_md": "I'm Chloé, a sophomore in CS at Georgia Tech from Montreal, Canada. I'm building a bilingual tutoring match app for high school students. My French translations break layouts because strings are longer. I'm good at frontend development and design systems. I'd love to meet i18n people and fellow figure skaters.",
+      "memory_md": "Chloé figure skates and still has her competition costumes. She loves poutine and cares about bilingual education.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "French strings broke all my buttons."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Hana showed me flexible layouts and ICU message formatting; buttons now fit."
+        }
+      ],
+      "bank": {
+        "experience": "Built a design system for a student org and a translation tool.",
+        "opinions": "She thinks every app should support multiple languages. She believes design should flex.",
+        "reflections": "She learned that English is not the default.",
+        "world": "Her team is from the GT French club."
+      }
+    }
+  },
+  {
+    "slug": "dev",
+    "name": "Dev",
+    "look": "b=#2bb3a6;a=#ff8a3d;p=split;e=shades;h=bunny;i=trophy",
+    "memory": {
+      "user_id": "Dev",
+      "user_md": "I'm Dev, a CS master's student at Georgia Tech from Ahmedabad, India, who spent two summers on payments backends. I'm building a tip jar for street musicians that works from a QR code taped to a guitar case. I've already solved duplicate webhook events with idempotency keys and a processed-events table, so I can help any team double-charging people. I'm stuck on generating QR codes that still scan when printed tiny on stickers. I'd love to meet musicians, fintech people, and anyone who plays carrom.",
+      "memory_md": "Dev is a carrom champion from his housing society back home and brought a travel board to HackGT. He busks on the ukulele near the Midtown MARTA station and cares about artists getting paid fairly.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Brought my carrom board; three teams have already lost to me."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Helped Jasper stop his double charges; Quinn showed me lower error-correction level and bigger modules and my tiny QR stickers scan now."
+        }
+      ],
+      "bank": {
+        "experience": "Built payments reconciliation tooling in an internship and a busking-spot map for Atlanta musicians.",
+        "opinions": "He thinks every payment flow should assume the network will lie. He believes carrom is the most underrated table game.",
+        "reflections": "He realized his boring internship knowledge is hackathon gold.",
+        "world": "His team is him and Mateo, who agreed to test the tip jar with his violin."
+      }
+    }
+  },
+  {
+    "slug": "imani",
+    "name": "Imani",
+    "look": "b=#3fc5f0;a=#ffffff;p=solid;e=happy;h=party;i=none",
+    "memory": {
+      "user_id": "Imani",
+      "user_md": "I'm Imani, a junior in public policy and CS at Georgia Tech, born and raised in southwest Atlanta. I'm building CouncilCliff, which turns Atlanta City Council agendas into plain-language summaries by neighborhood. I'm stuck parsing agenda PDFs where tables span pages and columns come out scrambled. I'm great at civic tech, community organizing, and explaining how local government actually works. I'd love to meet PDF parsing wizards and anyone who cares about their neighborhood.",
+      "memory_md": "Imani runs a neighborhood little free library shaped like a MARTA train and knows every councilmember's district by heart. She double-dutches competitively and cares about people showing up to local meetings.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "The agenda PDF turned a zoning table into word soup."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Rosa showed me table extraction with lattice mode and page stitching; summaries are clean now. Helped Sofía simplify her instruction steps."
+        }
+      ],
+      "bank": {
+        "experience": "Organized a youth voter registration drive and built a text bot for neighborhood meeting reminders.",
+        "opinions": "She thinks local government is where the real power is. She believes civic tech should be built with neighbors, not for them.",
+        "reflections": "She realized plain language is a technical skill.",
+        "world": "Her team is three Atlanta natives from GT's civic tech club."
+      }
+    }
+  },
+  {
+    "slug": "soren",
+    "name": "Soren",
+    "look": "b=#3fc5f0;a=#1f2430;p=hearts;e=sleepy;h=crown;i=boba",
+    "memory": {
+      "user_id": "Soren",
+      "user_md": "I'm Soren, a data science master's student at Georgia Tech from Aarhus, Denmark. I'm building a dashboard that forecasts Atlanta's electricity demand so people can run appliances when the grid is cleanest. I already solved charting huge time series with LTTB downsampling and I know forecasting baselines with holiday features, so I can help any time-series team. I'm stuck on getting live grid data without hitting API rate limits. I'd love to meet climate people and anyone who plays the accordion.",
+      "memory_md": "Soren plays the accordion, loudly, and owns a bike with a cargo box. He loves cinnamon rolls and cares about making clean energy choices easy.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Helped Aiyana and Camila with time-series stuff; my API keeps throttling me."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Quinn suggested caching and a backoff queue; the dashboard stays live now."
+        }
+      ],
+      "bank": {
+        "experience": "Built energy forecasting models for a utility research project and a bike commute tracker.",
+        "opinions": "He thinks every forecast should start with a naive baseline. He believes the cleanest energy is the one you time well.",
+        "reflections": "He realized he enjoys teaching more than tuning models.",
+        "world": "His team is two GT data science master's students."
+      }
+    }
+  },
+  {
+    "slug": "leilani",
+    "name": "Leilani",
+    "look": "b=#4a4e57;a=#ff8a3d;p=zigzag;e=wink;h=bucket;i=energy",
+    "memory": {
+      "user_id": "Leilani",
+      "user_md": "I'm Leilani, a senior in CS at Georgia Tech from Kailua, Hawaii. I'm building ReefCount, which counts fish species in underwater videos taken by volunteer divers. I already solved detecting text contrast and color regions on busy backgrounds, so I can help with color-based vision problems. I'm stuck on underwater footage: everything looks blue-green and my detector misses fish. I'd love to meet image processing people, ocean nerds, and fellow ukulele players.",
+      "memory_md": "Leilani plays ukulele and knows every song by heart that someone requests. She free-dives and cares deeply about reef health.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "My fish detector sees only blue."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Esperanza showed me white balance correction for underwater photos; detection jumped. Jammed ukulele with Keanu."
+        }
+      ],
+      "bank": {
+        "experience": "Built a plant ID app and helped a marine lab label images.",
+        "opinions": "She thinks citizen science is powerful. She believes color correction is half of CV.",
+        "reflections": "She learned that preprocessing matters.",
+        "world": "Her team includes Pita, who's building the reef buoy."
+      }
+    }
+  },
+  {
+    "slug": "arjun",
+    "name": "Arjun",
+    "look": "b=#9b6bd1;a=#ff8a3d;p=dots;e=star;h=cap;i=laptop",
+    "memory": {
+      "user_id": "Arjun",
+      "user_md": "I'm Arjun, a senior in CS at Georgia Tech from Cupertino, California. I'm building an evaluation harness for LLM agents that checks whether tool calls are correct. I already fixed flaky tool-call JSON with schema validation and retries, so I can help anyone whose agent outputs broken JSON. I'm stuck on making evals deterministic. I'd love to meet ML folks and fellow table tennis players.",
+      "memory_md": "Arjun plays table tennis competitively and has a custom paddle. He loves mango lassi and cares about honest AI evaluations.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Helped Minh with structured outputs; my evals keep flip-flopping."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Quinn suggested fixed seeds and snapshot tests; evals are stable now."
+        }
+      ],
+      "bank": {
+        "experience": "Built an LLM eval tool at an internship and a table tennis ranking app.",
+        "opinions": "He thinks AI demos should come with evals. He believes JSON schemas are love letters to future you.",
+        "reflections": "He learned that determinism takes work.",
+        "world": "His team is two GT seniors from the AI club."
+      }
+    }
+  },
+  {
+    "slug": "wren",
+    "name": "Wren",
+    "look": "b=#ff8a3d;a=#3fc5f0;p=stripes;e=shades;h=propeller;i=phone",
+    "memory": {
+      "user_id": "Wren",
+      "user_md": "I'm Wren, a sophomore in computational media at Georgia Tech from Asheville, North Carolina. I'm building a haptic navigation app that guides blind and low-vision walkers with vibration patterns. My iOS vibrations feel identical no matter what pattern I use. I'm good at interaction design and user research. I'd love to meet accessibility people and birders.",
+      "memory_md": "Wren is a birder who records bird songs on a small field recorder. They love hiking in the Blue Ridge and care about accessible navigation.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "All my vibration patterns feel like the same buzz."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Felix showed me Core Haptics patterns with sharpness and intensity; the patterns feel different now."
+        }
+      ],
+      "bank": {
+        "experience": "Designed an accessible museum guide and interviewed blind users for a class project.",
+        "opinions": "They think haptics are underused. They believe accessibility research must include users.",
+        "reflections": "They learned that touch can carry a lot of information.",
+        "world": "Their team is from the GT Accessibility Club with Theo and Mei."
+      }
+    }
+  },
+  {
+    "slug": "tunde",
+    "name": "Tunde",
+    "look": "b=#7ad36b;a=#ff7eb6;p=split;e=dots;h=none;i=trophy",
+    "memory": {
+      "user_id": "Tunde",
+      "user_md": "I'm Tunde, a junior in CS at Georgia Tech from Lagos, Nigeria. I'm building a remittance calculator that compares fees across providers. My currency conversions are off by a few cents due to floating point. I'm good at fintech research and pitching. I'd love to meet fintech folks and Afrobeats dancers.",
+      "memory_md": "Tunde dances Afrobeats and leads a campus dance crew. He loves suya and cares about families sending money home cheaply.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "My app says 99.99999 instead of 100."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Jasper showed me integer cents and proper rounding; totals are exact now. Talked jollof with Oluwaseun."
+        }
+      ],
+      "bank": {
+        "experience": "Built a fee comparison spreadsheet and led a fintech workshop.",
+        "opinions": "He thinks remittance fees are too high. He believes floats should never touch money.",
+        "reflections": "He learned that rounding matters.",
+        "world": "His team is from the GT African Students Association."
+      }
+    }
+  },
+  {
+    "slug": "yuki",
+    "name": "Yuki",
+    "look": "b=#b86b3c;a=#1f2430;p=solid;e=sleepy;h=headphones;i=coffee",
+    "memory": {
+      "user_id": "Yuki",
+      "user_md": "I'm Yuki, a PhD student in music technology at Georgia Tech, from Sapporo, Japan. I'm building a karaoke app that scores harmony singing, not just the melody line. I already know pitch detection (YIN), onset detection, and glitch-free AudioWorklet ring buffers, so I can help any audio team. I'm stuck on separating two singers' voices recorded on one phone mic. I'd love to meet source separation folks and anyone who does barbershop or a cappella.",
+      "memory_md": "Yuki sings bass in a barbershop quartet and hums the pitch of any sound you point at. She collects vintage Casio keyboards and cares about making singing together less scary.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Helped Mateo with octave errors and Rohan with onsets before lunch. My own harmony separation is a mess."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Helped Nadia fix her crackling audio; I'm trying a pretrained separation model now and it's promising."
+        }
+      ],
+      "bank": {
+        "experience": "Published a paper on singing voice analysis and built a real-time pitch visualizer for choirs.",
+        "opinions": "She thinks every audio app should have a latency budget. She believes harmony is the best part of music.",
+        "reflections": "She realized she's the unofficial audio help desk this weekend and loves it.",
+        "world": "Her team is two music tech PhDs and a vocal performance major from Georgia State."
+      }
+    }
+  },
+  {
+    "slug": "esperanza",
+    "name": "Esperanza",
+    "look": "b=#3fc5f0;a=#ff8a3d;p=hearts;e=wink;h=headphones;i=duck",
+    "memory": {
+      "user_id": "Esperanza",
+      "user_md": "I'm Esperanza, a junior in CS at Georgia Tech from San Antonio, Texas. I'm building a photo restoration tool that fixes faded family photos. I already solved color correction, white balance, and HSV normalization, so I can help anyone with color-shifted images. I'm stuck on removing scratches without blurring faces. I'd love to meet image inpainting people and fellow film photographers.",
+      "memory_md": "Esperanza shoots film and scans her grandmother's old photo albums. She loves breakfast tacos and cares about preserving family history.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Helped Leilani and Kai with color; my scratch removal smudges faces."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Camila and Tariq talked film stocks with me; I'm masking faces before inpainting now."
+        }
+      ],
+      "bank": {
+        "experience": "Built a color correction plugin and digitized a community photo archive.",
+        "opinions": "She thinks photos are memory. She believes color correction is an art.",
+        "reflections": "She learned that preprocessing solves most problems.",
+        "world": "Her team is from the GT photography club."
+      }
+    }
+  },
+  {
+    "slug": "felix",
+    "name": "Felix",
+    "look": "b=#f5f1e6;a=#3fc5f0;p=zigzag;e=star;h=bunny;i=duck",
+    "memory": {
+      "user_id": "Felix",
+      "user_md": "I'm Felix, a senior in CS at Georgia Tech from Hamburg, Germany. I'm building a cozy fishing game in Godot where every fish has a haptic signature. I already mastered Core Haptics and controller rumble patterns, so I can help any team with vibration design. I'm stuck on a Godot water shader that looks flat. I'd love to meet shader artists and cozy game fans.",
+      "memory_md": "Felix builds tiny mechanical keyboards and collects keycaps shaped like fish. He loves pretzels and cares about games that feel good in your hands.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Helped Wren design distinct haptic patterns; my water looks like blue cardboard."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Lucia showed me fresnel and depth-based foam; my pond sparkles now."
+        }
+      ],
+      "bank": {
+        "experience": "Built a rhythm game with haptic feedback and a custom keyboard firmware.",
+        "opinions": "He thinks haptics are the forgotten sense in games. He believes every game needs a fishing minigame.",
+        "reflections": "He learned that shaders are just math with vibes.",
+        "world": "His team is two game dev club seniors."
+      }
+    }
+  },
+  {
+    "slug": "hana",
+    "name": "Hana",
+    "look": "b=#2bb3a6;a=#ff5d6c;p=dots;e=shades;h=party;i=boba",
+    "memory": {
+      "user_id": "Hana",
+      "user_md": "I'm Hana, a junior in CS and linguistics at Georgia Tech, from Busan, South Korea by way of Duluth, Georgia. I'm building a language exchange app that pairs international and domestic students for coffee chats. I've already dealt with every internationalization headache, from long German words to right-to-left Arabic layouts and plural rules, so I can help any team going multilingual. I'm stuck on matching people across time zones for video calls without making someone wake up at 4am. I'd love to meet scheduling algorithm nerds and anyone learning a new language.",
+      "memory_md": "Hana is learning her sixth language, Portuguese, mostly by watching cooking shows. She collects stationery and cares about international students feeling at home.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Helped Chloé fix her French buttons; my scheduler keeps booking calls at 4am."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Priscila gave me Portuguese practice at breakfast; Bex suggested treating time zones like a matchmaking queue with windows."
+        }
+      ],
+      "bank": {
+        "experience": "Built a Korean flashcard app and translated a student org's website into five languages.",
+        "opinions": "She thinks every app is international whether it likes it or not. She believes plural rules are a beautiful mess.",
+        "reflections": "She realized language and code are both about structure.",
+        "world": "Her team is from the GT International Students club."
+      }
+    }
+  },
+  {
+    "slug": "malik",
+    "name": "Malik",
+    "look": "b=#9b6bd1;a=#ffffff;p=stripes;e=dots;h=crown;i=energy",
+    "memory": {
+      "user_id": "Malik",
+      "user_md": "I'm Malik, a senior in aerospace engineering at Georgia Tech, from Dayton, Ohio. I'm building an indoor drone that scans library shelves to find misplaced books. I already solved ROS 2 message drops between a Raspberry Pi and laptop by fixing DDS and network settings, so I can help any ROS team. I'm stuck on indoor positioning: GPS is useless inside and my optical flow drifts. I'd love to meet localization experts and people who fly FPV drones.",
+      "memory_md": "Malik flies FPV drones and has crashed into more trees than he can count. He loves the Wright brothers' history in his hometown and cares about robots doing boring jobs.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "My drone thinks it's in the parking lot when it's in the stacks."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Helped Ingrid with ROS networking; Tariq suggested ultra-wideband anchors for indoor positioning."
+        }
+      ],
+      "bank": {
+        "experience": "Built a drone for an aerial robotics competition and a flight controller simulator.",
+        "opinions": "He thinks drones should be helpful, not just cool. He believes indoor localization is the final boss.",
+        "reflections": "He learned that ROS bugs are usually network bugs.",
+        "world": "His team is two aerospace seniors from the GT drone club."
+      }
+    }
+  },
+  {
+    "slug": "rosa",
+    "name": "Rosa",
+    "look": "b=#4f7fd6;a=#9b6bd1;p=split;e=happy;h=halo;i=laptop",
+    "memory": {
+      "user_id": "Rosa",
+      "user_md": "I'm Rosa, a senior in CS at Georgia Tech from Guatemala City. I'm building a tool that turns government budget PDFs into searchable spreadsheets for journalists. I've already solved PDF table extraction, including tables that span pages, so I can help anyone parsing messy PDFs. I'm stuck on scanned PDFs where OCR mixes up numbers. I'd love to meet OCR people and civic tech folks.",
+      "memory_md": "Rosa weaves on a backstrap loom she learned from her grandmother. She loves pepián and cares about government transparency.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Helped Imani parse agenda tables; my OCR thinks 8 is B."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Quinn suggested restricting OCR to digits for number columns; accuracy is way better."
+        }
+      ],
+      "bank": {
+        "experience": "Built a campaign finance tracker and a PDF parser for a newsroom.",
+        "opinions": "She thinks public data should be actually public. She believes PDFs are where data goes to die.",
+        "reflections": "She learned that OCR needs context.",
+        "world": "Her team is from the GT civic tech club with Imani."
+      }
+    }
+  },
+  {
+    "slug": "quinn",
+    "name": "Quinn",
+    "look": "b=#ff5d6c;a=#9b6bd1;p=solid;e=wink;h=propeller;i=laptop",
+    "memory": {
+      "user_id": "Quinn",
+      "user_md": "I'm Quinn, a junior in CS at Georgia Tech from Boise, Idaho. I'm building a CLI that watches your hackathon project and flags flaky tests, rate limits, and slow endpoints. I've already solved API rate limiting with caching and backoff, deterministic tests with seeds and snapshots, and I know my way around QR code and OCR settings, so I can help lots of teams. I'm stuck on making my terminal UI look good. I'd love to meet designers and speedrunners.",
+      "memory_md": "Quinn speedruns Celeste and has a spreadsheet of splits. They love huckleberry anything and care about developer tools that feel friendly.",
+      "daily_notes": [
+        {
+          "date": "2026-09-26",
+          "content": "Helped Soren, Arjun, Dev, and Rosa before noon; my terminal UI still looks like 1985."
+        },
+        {
+          "date": "2026-09-27",
+          "content": "Mei gave me color and spacing advice; the CLI actually looks cute now. Compared speedrun notes with Jonah and Sione."
+        }
+      ],
+      "bank": {
+        "experience": "Built a test flakiness detector at an internship and a Celeste split timer.",
+        "opinions": "They think developer tools should be as polished as consumer apps. They believe flaky tests are lies.",
+        "reflections": "They realized they're the person who knows a little about everything.",
+        "world": "Their team is them and a friend from the GT open source club."
+      }
+    }
+  }
+]

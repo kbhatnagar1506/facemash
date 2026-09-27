@@ -176,7 +176,7 @@ func (h *Hub) usagePresent() map[int64]usagePresence {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, c := range h.clients {
-		if !c.joined || c.uid == 0 {
+		if !c.joined || c.uid == 0 || c.npc {
 			continue
 		}
 		p, seen := out[c.uid]

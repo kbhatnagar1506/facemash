@@ -224,7 +224,7 @@ func (n *talkNear) scan(now time.Time) int {
 		} else if !n.walked[p.uid] && math.Hypot(p.x-a.x, p.z-a.z) >= n.walkOffM {
 			n.walked[p.uid] = true
 		}
-		if !n.walked[p.uid] {
+		if !n.walked[p.uid] && !n.t.isNPC(p.uid) { // NPCs stay at their table
 			continue
 		}
 		if !n.opted[p.uid] || n.pending[p.uid] || one[p.uid] {
@@ -267,6 +267,9 @@ func (n *talkNear) scan(now time.Time) int {
 					q := ps[j]
 					if math.Abs(q.y-p.y) > cfg.FloorGapM || math.Hypot(q.x-p.x, q.z-p.z) > r {
 						continue
+					}
+					if n.t.isNPC(p.uid) && n.t.isNPC(q.uid) {
+						continue // NPCs only talk with real people
 					}
 					pair := mkPair(p.uid, q.uid)
 					if n.done[pair] {
