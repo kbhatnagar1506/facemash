@@ -31,7 +31,7 @@
     "retry_ms": 20000
   },
   "phase1": {
-    "questions": 10,
+    "questions": 20,
     "max_depth": 3,
     "objective": "Phase 1 (first impressions): get to know each human as a person, not just as a coder. Mix what they're building and stuck on with who they are: where they're from, what they do for fun, what they're into that few people share, what they care about. Start light and fun, then go deeper as they warm up (depth 1 to 3). Look for anything real they share, a project overlap or a life overlap."
   },

@@ -151,7 +151,7 @@ func (r *talkRun) run() {
 			r.finish("error")
 		}
 	}()
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute) // 20+ questions, then maybe phase 2
 	defer cancel()
 
 	// t≈0: both phones learn someone's here (their bean only)
@@ -193,8 +193,8 @@ func (r *talkRun) run() {
 	if greet[1] != "" {
 		r.say(1, "greet", "", greet[1])
 	}
-	turn, dried := 0, false
-	for ; turn < p1.Questions && plan != nil; turn++ {
+	turn := 0
+	for ; turn < p1.Questions && plan != nil; turn++ { // phase 1 always asks all of its questions
 		var next *talkPlan
 		plan, next = r.step(plan, func() *talkPlan {
 			if turn+1 < p1.Questions {
@@ -206,14 +206,6 @@ func (r *talkRun) run() {
 			break
 		}
 		plan = next
-		if r.dry() { // they keep drawing blanks: stop asking
-			if plan != nil {
-				plan.cancel()
-			}
-			turn++
-			dried = true
-			break
-		}
 	}
 
 	// checkpoint 1: the gates, and phase 2's first pick, in one jev call
@@ -238,10 +230,6 @@ func (r *talkRun) run() {
 	// phase 2, steered toward what fired
 	steer := r.steer(fired)
 	plan = first
-	if dried && plan != nil { // nothing more to find by asking: straight to the verdict
-		plan.cancel()
-		plan = nil
-	}
 	for k := 0; k < p2.Questions && plan != nil; k++ {
 		n := turn
 		var next *talkPlan
@@ -261,7 +249,7 @@ func (r *talkRun) run() {
 		}
 		turn++
 		plan = next
-		if r.dry() {
+		if r.dry() { // phase 2 is optional: blanks in a row end it early
 			if plan != nil {
 				plan.cancel()
 			}

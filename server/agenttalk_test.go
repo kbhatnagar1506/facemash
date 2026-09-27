@@ -1089,9 +1089,33 @@ func TestTalkGeminiHedgesToFallback(t *testing.T) {
 		}
 		last = l.Text
 	}
-	// nothing to find: the questions stop after limits.max_misses blanks, not after all of them
-	if max := h2.talk.cfg.Limits.MaxMisses; max > 0 && answers > max {
-		t.Fatalf("%d blank answers; it should stop after %d", answers, max)
+	if answers == 0 {
+		t.Fatal("no answers at all")
+	}
+}
+
+// Every talk asks at least phase1.questions (20), however thin the memories are.
+func TestTalkAsksTheFullFirstPhase(t *testing.T) {
+	real, err := loadTalkConfig("")
+	if err != nil || real.Phase1.Questions < 20 {
+		t.Fatalf("the shipped config should ask at least 20: %v %d", err, real.Phase1.Questions)
+	}
+	h := newTalkHarness(t)
+	h.talk.cfg.Phase1.Questions = real.Phase1.Questions // the harness shortens talks
+	bank, _ := loadTalkBank()
+	h.talk.bank = bank
+	ctx := context.Background()
+	h.store.talkSaveBrief(ctx, h.tenant, h.a, talkBrief{V: talkBriefVersion, InterruptOK: true})
+	h.store.talkSaveBrief(ctx, h.tenant, h.c, talkBrief{V: talkBriefVersion, InterruptOK: true})
+	id, _ := h.run(h.a, h.c)
+	qs := 0
+	for _, l := range h.record(id).Transcript {
+		if l.Kind == "question" {
+			qs++
+		}
+	}
+	if qs < real.Phase1.Questions {
+		t.Fatalf("asked %d questions, want at least %d", qs, real.Phase1.Questions)
 	}
 }
 
