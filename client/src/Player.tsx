@@ -15,6 +15,12 @@ const RUN = 14
 const BIKE = 24 // the Go server allows up to 30 m/s
 const SEND_HZ = 15
 
+// Campus overworld camera (Pokémon Let's Go / BDSP style): north always up, a fixed
+// high angle, a longish lens so it reads almost like the games' orthographic look.
+const OVER_FOV = 34
+const OVER_PITCH = THREE.MathUtils.degToRad(52)
+const OVER_ZOOM: [number, number] = [15, 72] // scroll / pinch range, metres to the player (15 = the hall camera's own minimum, so its zoom is untouched)
+
 export interface PlayerInfo {
   x: number
   z: number
@@ -29,7 +35,8 @@ function typing() {
 }
 
 /**
- * 'overhead': the classic top-down campus camera.
+ * 'overhead': the campus overworld camera: fixed north-up high angle that follows you;
+ * WASD / the stick move in screen directions (W = up = north). Scroll or pinch to zoom.
  * 'inside': third-person camera down in the room behind the player; drag or Q/E to turn,
  * WASD moves relative to where the camera looks. `bounds` keeps it inside the walls.
  */
@@ -130,8 +137,8 @@ export function Player({
       }
     } else {
       cam.near = 1
-      cam.fov = 40
-      yaw.current = 0 // campus: camera south of you, north up, until you turn it
+      cam.fov = OVER_FOV
+      yaw.current = 0 // campus: camera south of you, north up, always
       // left the hall mid-cinematic: stop it and drop the letterbox
       intro.current = -1
       window.dispatchEvent(new CustomEvent('cinematic', { detail: false }))
@@ -163,10 +170,11 @@ export function Player({
     }
   }, [])
 
-  // Drag to look around (inside: turn + tilt; campus: turn the overhead camera).
+  // Drag to look around (inside only: turn + tilt; the campus camera is fixed north-up).
   useEffect(() => {
     const inside = view.mode === 'inside'
     const el = gl.domElement
+    if (!inside) return
     // Only drags that start on the 3D view turn the camera, and only while a
     // button is actually held (checked per event, so it can never get stuck).
     // Tracked per pointer, so a thumb on the on-screen stick never turns the camera.
@@ -187,6 +195,45 @@ export function Player({
       window.removeEventListener('pointermove', move)
     }
   }, [view, gl])
+
+  // Campus: two-finger pinch zooms the overworld camera (the wheel is handled in App).
+  useEffect(() => {
+    if (view.mode === 'inside') return
+    const el = gl.domElement
+    const pts = new Map<number, [number, number]>()
+    let last = 0
+    const spread = () => {
+      const [a, b] = [...pts.values()]
+      return Math.hypot(a[0] - b[0], a[1] - b[1])
+    }
+    const down = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch') return
+      pts.set(e.pointerId, [e.clientX, e.clientY])
+      if (pts.size === 2) last = spread()
+    }
+    const move = (e: PointerEvent) => {
+      if (!pts.has(e.pointerId)) return
+      pts.set(e.pointerId, [e.clientX, e.clientY])
+      if (pts.size !== 2) return
+      const d = spread()
+      if (last > 10 && d > 10) zoom.current = THREE.MathUtils.clamp(zoom.current * (last / d), OVER_ZOOM[0], OVER_ZOOM[1])
+      last = d
+    }
+    const up = (e: PointerEvent) => {
+      pts.delete(e.pointerId)
+      last = pts.size === 2 ? spread() : 0
+    }
+    el.addEventListener('pointerdown', down)
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
+    return () => {
+      el.removeEventListener('pointerdown', down)
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+    }
+  }, [view, gl, zoom])
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -265,7 +312,7 @@ export function Player({
       dz += stick.z
     }
     const inside = view.mode === 'inside'
-    if (!typing()) {
+    if (inside && !typing()) {
       if (keys.has('KeyQ')) yaw.current += dt * 2.2
       if (keys.has('KeyR')) yaw.current -= dt * 2.2
     }
@@ -365,9 +412,9 @@ export function Player({
     // sprint camera: widen the view a little when running (the cinematic sets its own lens)
     if (intro.current < 0) {
       const cam = camera as THREE.PerspectiveCamera
-      const base = view.mode === 'inside' ? 60 : 40
+      const base = view.mode === 'inside' ? 60 : OVER_FOV
       const running = moving && (keys.has('ShiftLeft') || keys.has('ShiftRight') || hop.current > 0)
-      const want = base + (running ? (view.mode === 'inside' ? 8 : 4) : 0)
+      const want = base + (running ? (view.mode === 'inside' ? 8 : 3) : 0)
       if (Math.abs(cam.fov - want) > 0.05) {
         cam.fov += (want - cam.fov) * Math.min(1, dt * 5)
         cam.updateProjectionMatrix()
@@ -422,13 +469,19 @@ export function Player({
       // pitch tilts the view: up toward the balconies and ceiling, down to the floor
       camera.lookAt(p.x - sn * 3 * ps, height.current + 1.5 * ps + pitch.current * 6, p.y - c * 3 * ps)
     } else {
-      // Overhead camera: fixed pitch, follows smoothly, turns with Q/R or a drag.
-      const d = zoom.current
-      const sn = Math.sin(yaw.current)
-      const c = Math.cos(yaw.current)
-      const want = new THREE.Vector3(p.x + sn * d * 0.6, d, p.y + c * d * 0.6)
+      // Overworld camera: south of you looking north at a fixed high angle, following
+      // smoothly. Its direction never changes, so W is always "up the screen".
+      yaw.current = 0
+      zoom.current = THREE.MathUtils.clamp(zoom.current, OVER_ZOOM[0], OVER_ZOOM[1])
+      // portrait phones see a narrow strip: pull back a little so the sides aren't cramped
+      const aspect = (camera as THREE.PerspectiveCamera).aspect
+      const d = zoom.current * (aspect < 1 ? 1 + 0.55 * (1 - aspect) : 1)
+      const up = Math.sin(OVER_PITCH) * d
+      const back = Math.cos(OVER_PITCH) * d
+      const aimY = height.current + 0.8 // frame the bean, not its feet
+      const want = new THREE.Vector3(p.x, aimY + up, p.y + back)
       camera.position.lerp(want, 1 - Math.exp(-dt * 6))
-      camera.lookAt(camera.position.x - sn * d * 0.6, 0, camera.position.z - c * d * 0.6)
+      camera.lookAt(camera.position.x, camera.position.y - up, camera.position.z - back)
     }
 
     // Keep the shadow-casting sun centered on the player.
@@ -445,7 +498,9 @@ export function Player({
       light.current.position.set(sx + 34, 52, sz + 14)
       light.current.intensity = 1.9
     } else {
-      light.current.position.set(sx + 110, 55, sz + 25)
+      // Campus: a high late-morning sun, so shadows pool under trees and people like
+      // in the Pokémon overworlds instead of streaking across the lawns.
+      light.current.position.set(sx + 45, 100, sz + 40)
       light.current.intensity = 2
     }
     light.current.target.position.set(sx, 0, sz)

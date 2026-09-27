@@ -287,7 +287,7 @@ export function Hud({
       {/* no chat box: agents do the talking */}
       {TOUCH && <Stick />}
       <div className="help">
-        <kbd>WASD</kbd> move · <kbd>Shift</kbd> run · {inHall ? <>drag or <kbd>Q</kbd>/<kbd>R</kbd>/<kbd>T</kbd>/<kbd>G</kbd> look · </> : <>drag or <kbd>Q</kbd>/<kbd>R</kbd> turn · <kbd>B</kbd> bike · <kbd>M</kbd> map · </>}<kbd>E</kbd> interact · scroll to zoom
+        <kbd>WASD</kbd> move · <kbd>Shift</kbd> run · {inHall ? <>drag or <kbd>Q</kbd>/<kbd>R</kbd>/<kbd>T</kbd>/<kbd>G</kbd> look · </> : <><kbd>B</kbd> bike · <kbd>M</kbd> map · </>}<kbd>E</kbd> interact · scroll to zoom
       </div>
       {near && !eventOpen && !board && (
         <div className="dialog" onClick={act}>

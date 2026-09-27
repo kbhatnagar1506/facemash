@@ -1,34 +1,26 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Billboard, Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { Collider, type Campus, type Pt } from './map'
 import { withCutaway } from './cutaway'
-import { asphaltTexture, detailTexture, grassTexture, paverTexture, worldUV } from './campusTextures'
+import { asphaltTexture, detailTexture, dirtTexture, grassTexture, worldUV } from './campusTextures'
+import { byTile, finishInstances, roadClearance, useNearTiles, useToonRamp } from './campusKit'
+import { Butterflies, Flowers, PokeTrees, SMALL_CELL, SMALL_RADIUS, TallGrass, TREE_CELL, TREE_RADIUS, WindClock, pathMaterial, usePlacements, waterMaterial } from './overworld'
 
 const WALL = new THREE.Color('#f4ead2')
 const WALL_EVENT = new THREE.Color('#fff4c9')
 
+// Pokémon-route palette. Lawns (grass, parks, gardens...) aren't listed: they're left to
+// the tiled grass underneath so every lawn shares the same bright checker.
 const AREA_COLOR: Record<string, string> = {
-  pitch: '#6cc56b', stadium: '#6cc56b', track: '#c9674a', sports_centre: '#8fd07a',
-  park: '#7fd06a', garden: '#88d470', grass: '#86cf6a', recreation_ground: '#86cf6a',
-  wood: '#4fa653', forest: '#4fa653', scrub: '#6bb85a', grassland: '#8fd36f',
-  meadow: '#8fd36f', water: '#5fb4ea', sand: '#ecd89a', parking: '#b8bcc4',
-  fitness_centre: '#8fd07a',
+  pitch: '#93e274', stadium: '#93e274', track: '#ec8a5e', sports_centre: '#a2e585',
+  wood: '#3f9e4c', forest: '#3f9e4c', scrub: '#5fbd52', water: '#4fb6f2', sand: '#f3e0a4', parking: '#d3d6dd',
+  fitness_centre: '#a2e585',
 }
 // Draw order (lower first) so e.g. a pitch sits on top of the park around it.
 const AREA_LAYER: Record<string, number> = { parking: 1, pitch: 3, track: 2, water: 4, sand: 4 }
-
-/** Toon shading ramp: 3 hard bands give the cel-shaded Pokémon look. */
-function useToonRamp() {
-  return useMemo(() => {
-    const tex = new THREE.DataTexture(new Uint8Array([110, 190, 255]), 3, 1, THREE.RedFormat)
-    tex.minFilter = tex.magFilter = THREE.NearestFilter
-    tex.needsUpdate = true
-    return tex
-  }, [])
-}
 
 function shape(pts: Pt[]) {
   // Shapes live in the XY plane; we rotate them flat, so shape y = -world z.
@@ -40,63 +32,6 @@ function paint(geo: THREE.BufferGeometry, fn: (ny: number) => THREE.Color) {
   const colors = new Float32Array(n.count * 3)
   for (let i = 0; i < n.count; i++) fn(n.getY(i)).toArray(colors, i * 3)
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
-}
-
-/**
- * Streaming campus: the map is cut into TILE-metre tiles, and only the tiles near
- * you are built and drawn (buildings, trees, lamps, benches). Far tiles don't exist
- * at all until you walk toward them, so startup is quick and the GPU only ever
- * works on the neighbourhood you're in. Each tile also has tight bounds, so the
- * ones behind the camera are skipped too.
- */
-const TILE = 240
-const LOAD_RADIUS = 420 // metres around you that exist
-const tileKey = (x: number, z: number) => `${Math.floor(x / TILE)},${Math.floor(z / TILE)}`
-function byTile<T>(items: T[], at: (t: T) => [number, number]) {
-  const m = new Map<string, T[]>()
-  for (const it of items) {
-    const [x, z] = at(it)
-    const k = tileKey(x, z)
-    const list = m.get(k)
-    if (list) list.push(it)
-    else m.set(k, [it])
-  }
-  return m
-}
-/** Tile keys within LOAD_RADIUS of the player, re-checked twice a second. */
-function useNearTiles(focus: React.MutableRefObject<{ x: number; z: number }>, active: boolean) {
-  const calc = () => {
-    const out: string[] = []
-    const { x, z } = focus.current
-    const r = Math.ceil(LOAD_RADIUS / TILE) + 1
-    const cx = Math.floor(x / TILE)
-    const cz = Math.floor(z / TILE)
-    for (let i = -r; i <= r; i++)
-      for (let j = -r; j <= r; j++) {
-        const tx = (cx + i + 0.5) * TILE
-        const tz = (cz + j + 0.5) * TILE
-        if (Math.hypot(tx - x, tz - z) < LOAD_RADIUS + TILE * 0.71) out.push(`${cx + i},${cz + j}`)
-      }
-    return out.sort().join('|')
-  }
-  const [keys, setKeys] = useState(calc)
-  const acc = useRef(0)
-  useFrame((_, dt) => {
-    // frozen while you're inside Klaus: the hall uses its own coordinates, and building
-    // campus tiles there would steal frames from the entrance cinematic
-    if (!active) return
-    acc.current += dt
-    if (acc.current < 0.5) return
-    acc.current = 0
-    const k = calc()
-    if (k !== keys) setKeys(k)
-  })
-  return useMemo(() => new Set(keys.split('|')), [keys])
-}
-function finishInstances(mesh: THREE.InstancedMesh) {
-  mesh.instanceMatrix.needsUpdate = true
-  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
-  mesh.computeBoundingSphere()
 }
 
 function BuildingTile({ buildings, mats }: { buildings: Campus['buildings']; mats: { body: THREE.Material; line: THREE.Material } }) {
@@ -156,8 +91,20 @@ function Buildings({ campus, near }: { campus: Campus; near: Set<string> }) {
   )
 }
 
+/**
+ * A flat strip along a polyline (with round joints), carrying `aEdge`: 0 on the centre
+ * line, ±1 at the edges, which the path material uses to crumble its edges into the grass.
+ */
 function ribbon(pts: Pt[], w: number, y: number): THREE.BufferGeometry[] {
   const out: THREE.BufferGeometry[] = []
+  const edged = (g: THREE.BufferGeometry, fn: (u: number, v: number) => number) => {
+    const uv = g.getAttribute('uv')
+    const e = new Float32Array(uv.count)
+    for (let i = 0; i < uv.count; i++) e[i] = fn(uv.getX(i), uv.getY(i))
+    g.setAttribute('aEdge', new THREE.BufferAttribute(e, 1))
+    g.deleteAttribute('uv')
+    return g
+  }
   for (let i = 0; i < pts.length - 1; i++) {
     const [ax, az] = pts[i]
     const [bx, bz] = pts[i + 1]
@@ -167,134 +114,93 @@ function ribbon(pts: Pt[], w: number, y: number): THREE.BufferGeometry[] {
     g.rotateX(-Math.PI / 2)
     g.rotateY(-Math.atan2(bz - az, bx - ax))
     g.translate((ax + bx) / 2, y, (az + bz) / 2)
-    g.deleteAttribute('uv')
-    out.push(g)
+    out.push(edged(g, (_u, v) => v * 2 - 1))
     // Round joint so bends don't show gaps.
-    const c = new THREE.CircleGeometry(w / 2, 10)
+    const c = new THREE.CircleGeometry(w / 2, 8)
     c.rotateX(-Math.PI / 2)
     c.translate(bx, y, bz)
-    c.deleteAttribute('uv')
-    out.push(c)
+    out.push(edged(c, (u, v) => Math.hypot(u * 2 - 1, v * 2 - 1)))
   }
   return out
 }
 
 function Ground({ campus }: { campus: Campus }) {
-  const { areas, roads, paths } = useMemo(() => {
+  const geo = useMemo(() => {
     const sorted = [...campus.areas].sort(
       (a, b) => (AREA_LAYER[a.kind] ?? 0) - (AREA_LAYER[b.kind] ?? 0),
     )
-    const areaParts = sorted.flatMap((a, i) => {
-      const color = AREA_COLOR[a.kind]
-      if (!color) return []
-      const g = new THREE.ShapeGeometry(shape(a.pts))
-      g.rotateX(-Math.PI / 2)
-      g.translate(0, 0.02 + i * 0.00005, 0)
-      paint(g, () => new THREE.Color(color))
-      g.deleteAttribute('uv')
-      return [g]
-    })
-    const roadParts = campus.roads.filter((r) => !r.foot).flatMap((r) => ribbon(r.pts, r.w, 0.06))
-    const pathParts = campus.roads.filter((r) => r.foot).flatMap((r) => ribbon(r.pts, r.w, 0.08))
+    const flat = (kinds: (k: string) => boolean) =>
+      sorted.flatMap((a, i) => {
+        const color = AREA_COLOR[a.kind]
+        if (!color || !kinds(a.kind)) return []
+        const g = new THREE.ShapeGeometry(shape(a.pts))
+        g.rotateX(-Math.PI / 2)
+        g.translate(0, 0.02 + i * 0.00005, 0)
+        paint(g, () => new THREE.Color(color))
+        g.deleteAttribute('uv')
+        return [g]
+      })
+    const merge = (parts: THREE.BufferGeometry[]) => (parts.length ? mergeGeometries(parts) : null)
+    const cars = campus.roads.filter((r) => !r.foot)
+    const foot = campus.roads.filter((r) => r.foot)
+    const areas = merge(flat((k) => k !== 'water'))
     return {
-      areas: worldUV(mergeGeometries(areaParts)!, 6),
-      roads: worldUV(mergeGeometries(roadParts)!, 5),
-      paths: worldUV(mergeGeometries(pathParts)!, 2.4),
+      areas: areas && worldUV(areas, 6),
+      water: merge(flat((k) => k === 'water')),
+      // light kerb under every road, then the road; a darker sandy rim under every
+      // footpath, then the path (drawn in that order so crossings stay clean)
+      curbs: merge(cars.flatMap((r) => ribbon(r.pts, r.w + 0.9, 0.05))),
+      roads: worldUV(mergeGeometries(cars.flatMap((r) => ribbon(r.pts, r.w, 0.06)))!, 5),
+      rims: worldUV(mergeGeometries(foot.flatMap((r) => ribbon(r.pts, r.w + 0.7, 0.07)))!, 4),
+      paths: worldUV(mergeGeometries(foot.flatMap((r) => ribbon(r.pts, r.w, 0.08)))!, 4),
     }
   }, [campus])
-  const tex = useMemo(() => {
+  const mats = useMemo(() => {
     const grass = grassTexture()
     const [x0, z0, x1, z1] = campus.bounds
-    grass.repeat.set((x1 - x0 + 800) / 5, (z1 - z0 + 800) / 5) // 5 m tiles
-    return { grass, detail: detailTexture(), asphalt: asphaltTexture(), pavers: paverTexture() }
+    grass.repeat.set((x1 - x0 + 800) / 4, (z1 - z0 + 800) / 4) // 2 m tiles, 2 x 2 per texture
+    const dirt = dirtTexture()
+    const rim = pathMaterial(dirt, '#d9b87e', 0.4, 'rim')
+    rim.polygonOffsetFactor = rim.polygonOffsetUnits = -3
+    const path = pathMaterial(dirt, '#ffffff', 0.18, 'path')
+    path.polygonOffsetFactor = path.polygonOffsetUnits = -4
+    return { grass, detail: detailTexture(), asphalt: asphaltTexture(), rim, path, water: waterMaterial() }
   }, [campus])
+  useEffect(
+    () => () => {
+      for (const g of Object.values(geo)) g?.dispose()
+    },
+    [geo],
+  )
 
   const [x0, z0, x1, z1] = campus.bounds
   return (
     <group>
       <mesh rotation-x={-Math.PI / 2} position={[(x0 + x1) / 2, 0, (z0 + z1) / 2]} receiveShadow>
         <planeGeometry args={[x1 - x0 + 800, z1 - z0 + 800]} />
-        <meshLambertMaterial map={tex.grass} />
+        <meshLambertMaterial map={mats.grass} />
       </mesh>
-      <mesh geometry={areas} receiveShadow>
-        <meshLambertMaterial vertexColors map={tex.detail} />
+      {geo.areas && (
+        <mesh geometry={geo.areas} receiveShadow>
+          <meshLambertMaterial vertexColors map={mats.detail} />
+        </mesh>
+      )}
+      {geo.water && <mesh geometry={geo.water} material={mats.water} receiveShadow />}
+      {geo.curbs && (
+        <mesh geometry={geo.curbs} receiveShadow>
+          <meshLambertMaterial color="#eef0f2" polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-1} />
+        </mesh>
+      )}
+      <mesh geometry={geo.roads} receiveShadow>
+        <meshLambertMaterial color="#d2d5dc" map={mats.asphalt} polygonOffset polygonOffsetFactor={-2} polygonOffsetUnits={-2} />
       </mesh>
-      <mesh geometry={roads} receiveShadow>
-        <meshLambertMaterial color="#b9bdc8" map={tex.asphalt} polygonOffset polygonOffsetFactor={-1} />
-      </mesh>
-      <mesh geometry={paths} receiveShadow>
-        <meshLambertMaterial map={tex.pavers} polygonOffset polygonOffsetFactor={-2} />
-      </mesh>
+      <mesh geometry={geo.rims} material={mats.rim} receiveShadow />
+      <mesh geometry={geo.paths} material={mats.path} receiveShadow />
     </group>
   )
 }
 
-/** A fast "is (x, z) at least `pad` metres clear of every road and path edge" test. */
-function roadClearance(campus: Campus) {
-  // coarse grid of road/path samples for "too close to a road" checks
-  const CELL = 8
-  const grid = new Map<string, [number, number, number][]>()
-  for (const r of campus.roads)
-    for (let i = 1; i < r.pts.length; i++) {
-      const [ax, az] = r.pts[i - 1]
-      const [bx, bz] = r.pts[i]
-      const L = Math.hypot(bx - ax, bz - az)
-      for (let t = 0; t <= L; t += 2) {
-        const x = ax + ((bx - ax) * t) / L
-        const z = az + ((bz - az) * t) / L
-        const k = `${Math.floor(x / CELL)},${Math.floor(z / CELL)}`
-        const list = grid.get(k) ?? []
-        list.push([x, z, r.w / 2])
-        grid.set(k, list)
-      }
-    }
-  const clearOfRoads = (x: number, z: number, pad: number) => {
-    const gx = Math.floor(x / CELL)
-    const gz = Math.floor(z / CELL)
-    for (let i = -1; i <= 1; i++)
-      for (let j = -1; j <= 1; j++)
-        for (const [rx, rz, hw] of grid.get(`${gx + i},${gz + j}`) ?? []) if (Math.hypot(x - rx, z - rz) < hw + pad) return false
-    return true
-  }
-  return clearOfRoads
-}
-
-/**
- * Street trees: the OSM trees plus a row along the footpaths every ~16 m (alternating
- * sides), kept clear of buildings, roads, paths and the HackGT entrance shells.
- */
-function useTreePoints(campus: Campus) {
-  return useMemo(() => {
-    const pts: [number, number][] = campus.trees.map(([x, z]) => [x, z])
-    const coll = new Collider(campus)
-    const clearOfRoads = roadClearance(campus)
-    const shells = campus.event?.entrances ?? []
-    const taken = (x: number, z: number) => pts.some(([px, pz]) => Math.abs(px - x) < 6 && Math.abs(pz - z) < 6)
-    for (const r of campus.roads) {
-      if (!r.foot) continue
-      let side = 1
-      for (let i = 1; i < r.pts.length; i++) {
-        const [ax, az] = r.pts[i - 1]
-        const [bx, bz] = r.pts[i]
-        const L = Math.hypot(bx - ax, bz - az)
-        const nx = -(bz - az) / L
-        const nz = (bx - ax) / L
-        for (let t = 8; t < L; t += 16) {
-          const off = r.w / 2 + 2.6
-          const x = ax + ((bx - ax) * t) / L + nx * off * side
-          const z = az + ((bz - az) * t) / L + nz * off * side
-          side = -side
-          if (coll.blocked(x, z, 2.5) || !clearOfRoads(x, z, 1.8)) continue
-          if (shells.some(([sx, sz]) => Math.hypot(x - sx, z - sz) < 9) || taken(x, z)) continue
-          pts.push([x, z])
-        }
-      }
-    }
-    return pts
-  }, [campus])
-}
-
-/** Park benches and warm lamp posts along the footpaths (instanced: one draw each). */
+/** Park benches and warm lamp posts along the footpaths (instanced: one draw each), streamed like the trees. */
 function StreetFurniture({ campus, near }: { campus: Campus; near: Set<string> }) {
   const ramp = useToonRamp()
   const spots = useMemo(() => {
@@ -363,8 +269,8 @@ function StreetFurniture({ campus, near }: { campus: Campus; near: Set<string> }
       wood: new THREE.MeshToonMaterial({ color: '#a86f3e', gradientMap: ramp }),
     }
   }, [ramp])
-  const lampTiles = useMemo(() => byTile(spots.lamps, (p) => p), [spots])
-  const benchTiles = useMemo(() => byTile(spots.benches, (p) => [p[0], p[1]]), [spots])
+  const lampTiles = useMemo(() => byTile(spots.lamps, (p) => p, TREE_CELL), [spots])
+  const benchTiles = useMemo(() => byTile(spots.benches, (p) => [p[0], p[1]], TREE_CELL), [spots])
   return (
     <group>
       {[...lampTiles].filter(([k]) => near.has(k)).map(([k, pts]) => (
@@ -395,45 +301,6 @@ function StreetFurniture({ campus, near }: { campus: Campus; near: Set<string> }
             finishInstances(mesh)
           }}
         />
-      ))}
-    </group>
-  )
-}
-
-function Trees({ campus, near }: { campus: Campus; near: Set<string> }) {
-  const ramp = useToonRamp()
-  const trees = useTreePoints(campus)
-  const kit = useMemo(() => {
-    const trunk = new THREE.CylinderGeometry(0.35, 0.45, 2.2, 6)
-    const top = new THREE.IcosahedronGeometry(1, 0)
-    return { trunk, top, bark: new THREE.MeshToonMaterial({ color: '#8a5a3b', gradientMap: ramp }), leaf: new THREE.MeshToonMaterial({ gradientMap: ramp }) }
-  }, [ramp])
-  const tiles = useMemo(() => byTile(trees, (p) => p), [trees])
-  const place = (mesh: THREE.InstancedMesh | null, top: boolean, pts: [number, number][]) => {
-    if (!mesh) return
-    const m = new THREE.Matrix4()
-    const c = new THREE.Color()
-    pts.forEach(([x, z], i) => {
-      // Deterministic per-tree size/tint from its position.
-      const k = Math.abs(Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1
-      const s = 0.8 + k * 0.6
-      if (top) {
-        m.makeScale(s * 2.6, s * 2.9, s * 2.6).setPosition(x, 3.4 * s + 1.2, z)
-        mesh.setColorAt(i, c.setHSL(0.3 + k * 0.06, 0.55, 0.36 + k * 0.1))
-      } else {
-        m.makeScale(s, s, s).setPosition(x, 1.1 * s, z)
-      }
-      mesh.setMatrixAt(i, m)
-    })
-    finishInstances(mesh)
-  }
-  return (
-    <group>
-      {[...tiles].filter(([k]) => near.has(k)).map(([k, pts]) => (
-        <group key={k}>
-          <instancedMesh ref={(m) => place(m, false, pts)} args={[kit.trunk, kit.bark, pts.length]} castShadow />
-          <instancedMesh ref={(m) => place(m, true, pts)} args={[kit.top, kit.leaf, pts.length]} castShadow />
-        </group>
       ))}
     </group>
   )
@@ -471,12 +338,19 @@ function EventBeacon({ campus, onOpen }: { campus: Campus; onOpen: () => void })
 
 export function World({ campus, onOpenEvent, focus, active = true }: { campus: Campus; onOpenEvent: () => void; focus: React.MutableRefObject<{ x: number; z: number }>; active?: boolean }) {
   const near = useNearTiles(focus, active)
+  const nearTrees = useNearTiles(focus, active, TREE_CELL, TREE_RADIUS)
+  const nearSmall = useNearTiles(focus, active, SMALL_CELL, SMALL_RADIUS)
+  const place = usePlacements(campus)
   return (
     <group>
+      <WindClock active={active} />
       <Ground campus={campus} />
       <Buildings campus={campus} near={near} />
-      <Trees campus={campus} near={near} />
-      <StreetFurniture campus={campus} near={near} />
+      <PokeTrees trees={place.trees} near={nearTrees} />
+      <TallGrass tufts={place.tufts} near={nearSmall} />
+      <Flowers flowers={place.flowers} near={nearSmall} />
+      <Butterflies flowers={place.flowers} near={nearSmall} />
+      <StreetFurniture campus={campus} near={nearTrees} />
       <EventBeacon campus={campus} onOpen={onOpenEvent} />
     </group>
   )

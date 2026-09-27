@@ -512,7 +512,7 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
         <fog attach="fog" args={['#bfe6ff', 180, 700]} />
         {/* campus: sky + grass bounce; inside Klaus: warm neutral bounce off the terrazzo */}
         <hemisphereLight
-          args={room === 'hackgt' ? ['#fff6ea', '#cfc8ba', 1.45] : ['#e8f2ff', '#7faf65', 1.1]}
+          args={room === 'hackgt' ? ['#fff6ea', '#cfc8ba', 1.45] : ['#eef6ff', '#9fd07c', 1.35]}
           key={room}
         />
         {/* inside Klaus: the mezzanine's downlights, as a soft shadowless top light so the
