@@ -24,7 +24,7 @@
   },
   "proximity": {
     "radius_m": 3,
-    "dwell_ms": 3000,
+    "dwell_ms": 0,
     "floor_gap_m": 2,
     "scan_ms": 500,
     "optin_refresh_ms": 5000,

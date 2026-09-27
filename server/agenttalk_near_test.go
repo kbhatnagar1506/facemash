@@ -48,6 +48,7 @@ type nearHarness struct {
 
 func newNearHarness(t *testing.T) *nearHarness {
 	h := &nearHarness{talkHarness: newTalkHarness(t), hub: &fakeHub{}}
+	h.talk.cfg.Proximity.DwellMS = 3000 // the mechanism under test (the live config starts talks at once)
 	h.near = newTalkNear(h.talk, h.hub, h.tenant)
 	h.near.walkOffM = 0 // these tests place players directly; TestTalkNearSpawnIsNotAMeeting covers walking off
 	h.talk.near = h.near
@@ -440,7 +441,7 @@ func BenchmarkTalkNearSnapshot(b *testing.B) {
 // walked off where they appeared, and then only if they're still close.
 func TestTalkNearSpawnIsNotAMeeting(t *testing.T) {
 	h := newNearHarness(t)
-	h.near.walkOffM = talkWalkOffM
+	h.near.walkOffM = 2 // the walk-off rule itself (the live server has it off)
 	t0 := time.Now()
 	h.hub.put(h.a, "hackgt", 0, 0)
 	h.hub.put(h.b, "hackgt", 0.5, 0) // both at the door

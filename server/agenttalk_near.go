@@ -93,7 +93,7 @@ type talkNear struct {
 
 // talkWalkOffM: how far from where they appeared in a room someone must walk before they
 // can meet anyone there.
-const talkWalkOffM = 2.0
+const talkWalkOffM = 0.0 // off: a talk starts the moment two people meet
 
 type talkCell struct {
 	room string

@@ -23,6 +23,10 @@ import { hallPath } from './hall/path'
 import type { EventInfo } from './HackGTWelcome'
 import { TalkLayer } from './talk/TalkLayer'
 
+// Phone sensors (GPS, steps + compass, the walk to the reference) are switched off: you move
+// with the joystick or the keyboard only. Flip this to bring them back.
+const SENSORS = false
+
 const COLORS = ['#e0564f', '#4f7fd6', '#e89a3c', '#5aa56a', '#9b6bd1', '#d9c24a', '#3fa7b3', '#f06ba8']
 
 const clampN = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
@@ -165,7 +169,7 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
   }, [net])
   // Live location (GPS only): where you really are drives your avatar.
   // Beta mode (the default) = move with the keys, no GPS. Turn beta off → live GPS positioning.
-  const [live, setLive] = useState(() => load('gt.gps', false))
+  const [live, setLive] = useState(() => SENSORS && load('gt.gps', false))
   const { fix, status } = useLiveLocation(live && room === 'hackgt')
   const [geoCfg, setGeoCfg] = useState<GeoCfg | null>(null)
   useEffect(() => {
@@ -276,7 +280,7 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
   // compass heading, so your bean follows you instantly between GPS fixes; GPS keeps
   // correcting the drift. The compass bias and your stride length are learned on the
   // fly by comparing the step path with the GPS path over the last ~15 m.
-  const [motionOn, setMotionOn] = useState(() => load('gt.motion', false))
+  const [motionOn, setMotionOn] = useState(() => SENSORS && load('gt.motion', false))
   const motionActive = useRef(false)
   const motionStatusRef = useRef('off')
   const stepCount = useRef(0)
@@ -367,7 +371,7 @@ function Game({ campus, name, color, resume, ticket, preload }: { campus: Campus
   useEffect(() => {
     lastMeas.current = ''
     route.current = []
-    if (room === 'hackgt' && refPt && net) {
+    if (SENSORS && room === 'hackgt' && refPt && net) {
       kf.current = null
       const path = hallPath(net.position(), anchor)
       route.current = path
@@ -634,7 +638,7 @@ export default function App() {
   )
   const [me, setMe] = useState<Me | null>(null)
   // phones, first visit: one tap for location + motion, while everything loads behind it
-  const [perms, setPerms] = useState(wantsPermissions)
+  const [perms, setPerms] = useState(() => SENSORS && wantsPermissions())
   const permsDone = (r: PermResult | null) => {
     setPerms(false)
     if (!r) return
