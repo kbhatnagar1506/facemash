@@ -9,6 +9,15 @@ HackGT artwork (`client/public/hackgt/`) is from hack.gt and used for our HackGT
 - `server/`: Go WebSocket server (gorilla/websocket). Relays positions at 15 Hz, handles chat, rejects teleports, and serves the built client.
 - `scripts/build_map.py`: turns `data/osm.json` (Overpass export, query in `scripts/query.overpassql`) into `client/public/campus.json`.
 
+## Run on your Mac (one command)
+
+```
+scripts/local.sh          # builds the site, serves everything on http://localhost:8080
+```
+Sign in with http://localhost:8080/api/dev/login?email=you@local.test&next=/play (a private window
+with another email is player 2; admin@local.test opens /admin). Data lives in memory. Agent talks and
+voice turn on if ~/.facemash/gemini.key, jev.key and elevenlabs.key exist.
+
 ## Run (dev)
 
 ```bash
