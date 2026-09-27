@@ -473,10 +473,23 @@ func answerable(b *talkBrief, typ string) bool {
 	return true
 }
 
+// eligible: what may be asked, preferring what the answering agent's brief can answer. It
+// never leaves nothing to ask: without variety first, then anything (a thin brief still
+// gets asked, and the talk wraps up after limits.max_misses blanks).
 func (r *talkRun) eligible(n int, ph *talkPhase, recent map[string]bool) map[string]talkQuestion {
+	if out := r.eligibleFor(n, ph, recent, true); len(out) > 0 {
+		return out
+	}
+	if out := r.eligibleFor(n, ph, nil, true); len(out) > 0 {
+		return out
+	}
+	return r.eligibleFor(n, ph, nil, false)
+}
+
+func (r *talkRun) eligibleFor(n int, ph *talkPhase, recent map[string]bool, onlyAnswerable bool) map[string]talkQuestion {
 	share := r.bothShare()
 	var brief *talkBrief // the answering agent's
-	if s := r.sides[1-n%2]; s != nil {
+	if s := r.sides[1-n%2]; s != nil && onlyAnswerable {
 		brief = s.brief
 	}
 	byType := map[string][]talkQuestion{}
@@ -516,9 +529,6 @@ func (r *talkRun) eligible(n int, ph *talkPhase, recent map[string]bool) map[str
 		if !dealt {
 			break
 		}
-	}
-	if len(out) == 0 && len(recent) > 0 { // variety must never leave nothing to ask
-		return r.eligible(n, ph, nil)
 	}
 	return out
 }

@@ -1230,3 +1230,22 @@ func TestUsageSpeed(t *testing.T) {
 		t.Fatalf("%+v", sp)
 	}
 }
+
+// Two humans with empty briefs still get a conversation (the answerable filter falls back to
+// any question rather than leaving nothing to ask).
+func TestTalkEmptyBriefsStillAsk(t *testing.T) {
+	h := newTalkHarness(t)
+	ctx := context.Background()
+	h.store.talkSaveBrief(ctx, h.tenant, h.a, talkBrief{V: talkBriefVersion, InterruptOK: true})
+	h.store.talkSaveBrief(ctx, h.tenant, h.c, talkBrief{V: talkBriefVersion, InterruptOK: true})
+	id, _ := h.run(h.a, h.c)
+	qs := 0
+	for _, l := range h.record(id).Transcript {
+		if l.Kind == "question" {
+			qs++
+		}
+	}
+	if qs == 0 {
+		t.Fatal("empty briefs: the agents greeted and then said nothing")
+	}
+}
