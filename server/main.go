@@ -478,6 +478,9 @@ func (c *client) handle(m inbound) {
 			c.uid = uid
 			c.saved = Progress{Room: c.p.Room, X: c.p.X, Z: c.p.Z}
 			acct.saveProfile(uid, Profile{Name: c.p.Name, Color: c.p.Color, Look: c.p.Look})
+			if acct.talk != nil {
+				acct.talk.greetHost(acct.tenant, uid) // their agent meets the host's (agenttalk_host.go)
+			}
 			h.byUID[uid]++
 		}
 		c.joined = true

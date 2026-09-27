@@ -1273,3 +1273,47 @@ func TestTalkEmptyBriefsStillAsk(t *testing.T) {
 		t.Fatal("empty briefs: the agents greeted and then said nothing")
 	}
 }
+
+// Every new player's agent gets one talk with the host's, even while the host is offline
+// or already in another talk; never a second one with the same player.
+func TestHostTalksWithEveryNewPlayer(t *testing.T) {
+	h := newTalkHarness(t)
+	old := hostDelays
+	hostDelays = []time.Duration{time.Millisecond, 5 * time.Millisecond}
+	defer func() { hostDelays = old }()
+	h.talk.host = &talkHost{email: "octavian@example.com", tried: map[int64]bool{}} // h.b is the host
+	h.sink.mu.Lock()
+	h.sink.off[h.b] = true // the host doesn't have the game open
+	h.sink.mu.Unlock()
+	h.talk.greetHost(h.tenant, h.a)
+	h.talk.greetHost(h.tenant, h.c) // at the same time: the host can be in both
+	waitTalk := func(who int64) *talkRecord {
+		for i := 0; i < 400; i++ {
+			for _, rec := range h.store.talkTables().talks {
+				if (rec.A == h.b && rec.B == who) && rec.State != "live" {
+					return rec
+				}
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+		return nil
+	}
+	if r := waitTalk(h.a); r == nil {
+		t.Fatalf("host talk with A: %+v", r)
+	}
+	if r := waitTalk(h.c); r == nil {
+		t.Fatal("host talk with C (while the host was busy with A)")
+	}
+	n := len(h.store.talkTables().talks)
+	h.talk.host.tried = map[int64]bool{} // even if asked again
+	h.talk.greetHost(h.tenant, h.a)
+	time.Sleep(50 * time.Millisecond)
+	if len(h.store.talkTables().talks) != n {
+		t.Fatal("a player talks with the host only once")
+	}
+	h.talk.greetHost(h.tenant, h.b) // the host doesn't talk with themself
+	time.Sleep(20 * time.Millisecond)
+	if len(h.store.talkTables().talks) != n {
+		t.Fatal("no talk with oneself")
+	}
+}

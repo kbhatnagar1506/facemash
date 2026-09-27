@@ -154,6 +154,7 @@ type agentTalk struct {
 	sem      chan struct{}
 	briefSem chan struct{}
 	near     *talkNear // the proximity trigger, once watchProximity started it
+	host     *talkHost // everyone's first talk is with the event's host (agenttalk_host.go)
 }
 
 func (t *agentTalk) on() bool { return t != nil && t.gem != nil && t.jev != nil }
@@ -195,6 +196,7 @@ func newAgentTalk(cfg *talkConfig, acc *accounts, ts talkStore, sink talkSink) *
 	return &agentTalk{
 		cfg: cfg, bank: bank, bankVersion: ver, acc: acc, ts: ts, sink: sink,
 		live: map[string]*talkRun{}, inTalk: map[string]string{}, hot: map[string][]string{},
+		host:   &talkHost{email: talkHostEmail(), tried: map[int64]bool{}},
 		rarity: map[string]*talkRarity{}, building: map[string]chan struct{}{},
 		sem: make(chan struct{}, max(1, cfg.Limits.MaxConcurrent)), briefSem: make(chan struct{}, 2),
 	}
@@ -528,6 +530,13 @@ var (
 
 // encounter starts a talk between a and b (tenant-scoped). The show runs in the background.
 func (t *agentTalk) encounter(ctx context.Context, tenant string, a, b int64, force bool) (string, error) {
+	return t.encounterOpt(ctx, tenant, a, b, force, false)
+}
+
+// encounterOpt: host (side a is the event's host, TALK_HOST_EMAIL) talks with everyone, so
+// they need not have the game open or the switch on, may be in many talks at once, and have
+// no daily cap; unlike force, the pair still talks only once.
+func (t *agentTalk) encounterOpt(ctx context.Context, tenant string, a, b int64, force, host bool) (string, error) {
 	if !t.on() {
 		return "", errTalkOff
 	}
@@ -549,16 +558,19 @@ func (t *agentTalk) encounter(ctx context.Context, tenant string, a, b int64, fo
 	if prefB, err = t.ts.talkPrefs(ctx, tenant, b); err != nil {
 		return "", err
 	}
+	if host {
+		prefA.OptIn, prefA.Busy = true, false
+	}
 	if !prefA.OptIn || !prefB.OptIn {
 		return "", errTalkOptIn
 	}
 	if prefA.Busy || prefB.Busy {
 		return "", errTalkBusy
 	}
-	if t.cfg.Limits.RequireOnline && (!t.sink.online(a) || !t.sink.online(b)) {
+	if t.cfg.Limits.RequireOnline && ((!host && !t.sink.online(a)) || !t.sink.online(b)) {
 		return "", errTalkOffline
 	}
-	if !force {
+	if !force && !host { // the host has no daily cap (and a host talk still counts once per pair)
 		if err := t.underCaps(ctx, tenant, a, b); err != nil {
 			return "", err
 		}
@@ -575,12 +587,15 @@ func (t *agentTalk) encounter(ctx context.Context, tenant string, a, b int64, fo
 	}
 	t.mu.Lock()
 	ka, kb := memKey(tenant, a), memKey(tenant, b)
-	if t.inTalk[ka] != "" || t.inTalk[kb] != "" {
+	if (!host && t.inTalk[ka] != "") || t.inTalk[kb] != "" {
 		t.mu.Unlock()
 		release()
 		return "", errTalkBusy
 	}
-	t.inTalk[ka], t.inTalk[kb] = rec.ID, rec.ID
+	if !host {
+		t.inTalk[ka] = rec.ID
+	}
+	t.inTalk[kb] = rec.ID
 	t.mu.Unlock()
 	unmark := func() {
 		t.mu.Lock()
