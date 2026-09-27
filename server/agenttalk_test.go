@@ -252,6 +252,7 @@ func newTalkHarness(t *testing.T) *talkHarness {
 		a, _, _ := store.SignIn(ctx, tenant, user{Sub: "g-" + email, Email: email, Name: name, Given: given})
 		store.SaveProfile(ctx, tenant, a.ID, Profile{Name: given, Look: "b=#ff8a3d;h=cap"})
 		store.talkSavePrefs(ctx, tenant, a.ID, talkPrefs{OptIn: true})
+		b.V = talkBriefVersion // current: not rebuilt in the background
 		store.talkSaveBrief(ctx, tenant, a.ID, b)
 		return a.ID
 	}
@@ -818,7 +819,7 @@ func TestTalkTenantIsolation(t *testing.T) {
 		t.Fatal("viewing from another tenant must fail")
 	}
 	// rarity only counts this event's briefs
-	h.store.talkSaveBrief(ctx, "otherevent", h.x, talkBrief{Rare: []string{"tabla"}})
+	h.store.talkSaveBrief(ctx, "otherevent", h.x, talkBrief{Rare: []string{"tabla"}, V: talkBriefVersion})
 	r := h.talk.rarityFor(ctx, h.tenant)
 	if r.n != 3 || r.count("tabla", h.talk.cfg.generic) != 2 {
 		t.Fatalf("rarity leaks across tenants: n=%d tabla=%d", r.n, r.count("tabla", h.talk.cfg.generic))
@@ -1093,5 +1094,108 @@ func TestTalkBankLoads(t *testing.T) {
 	}
 	if ver != "fixture" && gated == 0 {
 		t.Fatal("the bank should have consent-gated questions")
+	}
+}
+
+// The agents get to know the humans as people: never two project questions in a row
+// (pick.max_work_streak), and the personal side of the bank does get asked.
+func TestTalkAlternatesWorkAndPersonal(t *testing.T) {
+	h := newTalkHarness(t)
+	if h.talk.cfg.Pick.MaxWorkStreak != 1 || len(h.talk.cfg.Pick.WorkTypes) == 0 {
+		t.Fatalf("config: %+v", h.talk.cfg.Pick)
+	}
+	id, _ := h.run(h.a, h.b)
+	rec := h.record(id)
+	work := map[string]bool{}
+	for _, typ := range h.talk.cfg.Pick.WorkTypes {
+		work[typ] = true
+	}
+	var types []string
+	personal := 0
+	for _, l := range rec.Transcript {
+		if l.Kind != "question" {
+			continue
+		}
+		typ := h.talk.bankType(l.QID)
+		if n := len(types); n > 0 && work[typ] && work[types[n-1]] {
+			t.Errorf("two project questions in a row: %v then %s", types, typ)
+		}
+		if !work[typ] {
+			personal++
+		}
+		types = append(types, typ)
+	}
+	if len(types) < 2 || personal == 0 {
+		t.Fatalf("question types: %v", types)
+	}
+}
+
+func TestBriefLifeAndVersion(t *testing.T) {
+	b := cleanBrief(talkBrief{Life: []string{"grew up in Kochi", "rock climbing", "teaches kids to code", "chess", "fifth"}}, false)
+	if len(b.Life) != 4 {
+		t.Fatalf("life is capped at 4: %v", b.Life)
+	}
+	h := newTalkHarness(t)
+	ctx := context.Background()
+	old := talkBrief{OneLine: "old brief"} // made before life existed
+	h.store.talkSaveBrief(ctx, h.tenant, h.c, old)
+	got, err := h.talk.briefFor(ctx, h.tenant, h.c, talkPrefs{OptIn: true})
+	if err != nil || got.OneLine != "old brief" {
+		t.Fatalf("an old brief is used right away: %v %+v", err, got)
+	}
+	for i := 0; i < 400; i++ { // and rebuilt in the background
+		if b, _ := h.store.talkBrief(ctx, h.tenant, h.c); b != nil && b.V == talkBriefVersion {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("an old brief should be rebuilt at the current version")
+}
+
+// Every bank question has a casual wording for the chat; jev still sees the plain one.
+func TestBankSaysEveryQuestionCasually(t *testing.T) {
+	bank, _ := loadTalkBank()
+	if len(bank) < 200 {
+		t.Fatalf("bank: %d questions", len(bank))
+	}
+	for _, q := range bank {
+		s := q.said()
+		if q.Say == "" || !strings.HasSuffix(s, "?") || strings.Contains(strings.ToLower(s), "your human") || len(strings.Fields(s)) > 25 {
+			t.Errorf("%s: %q", q.ID, s)
+		}
+	}
+}
+
+// jev chooses from at most pick.max_options questions, dealt across every type (fast, varied).
+func TestTalkOptionsCappedAndBalanced(t *testing.T) {
+	h := newTalkHarness(t)
+	bank, _ := loadTalkBank()
+	h.talk.bank = bank
+	r := &talkRun{t: h.talk, rec: &talkRecord{}, asked: map[string]bool{}, sides: [2]*talkSide{{}, {}}}
+	ph := h.talk.cfg.Phase2
+	opts := r.eligible(1, &ph, nil)
+	if len(opts) != h.talk.cfg.Pick.MaxOptions {
+		t.Fatalf("options: %d, want %d", len(opts), h.talk.cfg.Pick.MaxOptions)
+	}
+	per := map[string]int{}
+	for _, q := range opts {
+		per[q.Type]++
+	}
+	lo, hi := 1<<30, 0
+	for _, n := range per {
+		lo, hi = min(lo, n), max(hi, n)
+	}
+	if len(per) < 9 || hi-lo > 1 && lo < 3 {
+		t.Fatalf("not balanced across types: %v", per)
+	}
+}
+
+func TestUsageSpeed(t *testing.T) {
+	sp := usageSpeedOf(usageTalkTimes{talks: 2, questions: 25,
+		picks:   []usagePickTime{{ms: 300, options: 60}, {ms: 500, options: 60}, {ms: 1500, options: 60, failed: true}},
+		firstMS: []float64{400, 600}, tookMS: []float64{1000, 1400}})
+	if sp.Picks != 3 || sp.PickP50MS != 500 || sp.PickP90MS != 1500 || sp.PickFailed != 1 || sp.AvgOptions != 60 ||
+		sp.FirstWordsP50MS != 400 || sp.AnswerP50MS != 1000 || sp.QuestionsPerTalk != 12.5 {
+		t.Fatalf("%+v", sp)
 	}
 }

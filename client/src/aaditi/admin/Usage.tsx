@@ -47,6 +47,7 @@ export function UsageView({ store, now }: { store: AdminStore; now: number }) {
         {u && (
           <>
             <Hours u={u} />
+            {u.speed && <Speed s={u.speed} />}
             <div className="u-cols">
               <Top u={u} />
               <Services u={u} />
@@ -134,6 +135,32 @@ function Hours({ u }: { u: Usage }) {
           <span key={x.hour}>{i % 4 === 0 ? label(x.hour) : ''}</span>
         ))}
       </div>
+    </section>
+  )
+}
+
+const msec = (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(1)} s` : `${Math.round(v)} ms`)
+
+// how snappy the agent talks are: jev's pick of the next question, and the answers
+function Speed({ s }: { s: NonNullable<Usage['speed']> }) {
+  return (
+    <section className="u-card">
+      <div className="u-head">
+        <span>AGENT TALK SPEED</span>
+        <span className="dim">
+          last {s.hours_back} h · {fmtInt(s.talks)} talks · {num1(s.questions_per_talk)} questions each
+        </span>
+      </div>
+      {s.picks || s.answers ? (
+        <div className="hub-stats u-stats">
+          <Tile v={msec(s.pick_p50_ms)} k="picking the next question (median)" sub={`90% under ${msec(s.pick_p90_ms)} · from ${Math.round(s.avg_options)} choices`} />
+          <Tile v={fmtInt(s.pick_failed)} k="picks that timed out" sub={`of ${fmtInt(s.picks)} (a fallback question is asked)`} />
+          <Tile v={msec(s.first_words_p50_ms)} k="to an answer's first words (median)" sub={`90% under ${msec(s.first_words_p90_ms)}`} />
+          <Tile v={msec(s.answer_p50_ms)} k="to the whole answer (median)" sub={`${fmtInt(s.answers)} answers`} />
+        </div>
+      ) : (
+        <p className="u-empty">No agent talks in the last {s.hours_back} hours.</p>
+      )}
     </section>
   )
 }
