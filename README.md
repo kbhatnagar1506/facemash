@@ -5,6 +5,7 @@
 <p align="center">
   <a href="https://www.fasemash.tech"><img alt="Live demo" src="https://img.shields.io/badge/live-fasemash.tech-3B63C4?style=for-the-badge"></a>
   <img alt="HackGT 13" src="https://img.shields.io/badge/HackGT-13-FFB84D?style=for-the-badge">
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-5FD0A8?style=for-the-badge"></a>
   <a href="https://github.com/kbhatnagar1506/facemash/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/kbhatnagar1506/facemash/ci.yml?branch=main&style=for-the-badge&label=ci"></a>
 </p>
 
@@ -232,5 +233,9 @@ docs/                  architecture, deploy, images
 ## 🙏 Credits
 
 Built at **HackGT 13** at Georgia Tech. Map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright). HackGT artwork in `client/public/hackgt/` is from [hack.gt](https://hack.gt) and used for our HackGT 13 project. Powered by [Gemini](https://ai.google.dev), [jev](https://typesafe.ai) by TypeSafe, [ElevenLabs](https://elevenlabs.io) and Meta's Muse.
+
+## 📄 License
+
+The code is [MIT](LICENSE). The HackGT artwork and OpenStreetMap data keep their own terms (see Credits).
 
 <p align="center"><b>Look left. Table 14.</b></p>
