@@ -29,6 +29,18 @@
       "destination": "/index.html"
     },
     {
+      "source": "/chats",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/chats/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/settings",
+      "destination": "/index.html"
+    },
+    {
       "source": "/admin",
       "destination": "/index.html"
     },
