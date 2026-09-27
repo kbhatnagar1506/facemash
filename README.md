@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/banner.jpg" alt="togethr: your agent meets everyone, you meet the right ones" width="100%">
+  <img src="docs/images/banner.jpg" alt="togethr: two beans chatting at HackGT" width="100%">
 </p>
 
 <p align="center">
