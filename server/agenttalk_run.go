@@ -38,6 +38,7 @@ type talkRun struct {
 	iceReady chan struct{}
 	iceOnce  sync.Once
 	expiry   *time.Timer
+	fired1   []string // checkpoint 1's positive gates (main loop only)
 }
 
 func sideName(i int) string { return [2]string{"a", "b"}[i] }
@@ -212,6 +213,7 @@ func (r *talkRun) run() {
 	gates, first, err := r.checkpoint1(ctx, turn)
 	r.mark("checkpoint1")
 	fired := r.fired(gates)
+	r.fired1 = fired
 	if err != nil || len(fired) == 0 || r.redFlag(gates) {
 		if first != nil {
 			first.cancel()
@@ -984,7 +986,17 @@ func (r *talkRun) steer(fired []string) string {
 
 // talkFires is the fire rule: the LOWER of the two values, the better of soon and
 // talk-again, and a real reason.
+// talkOverall: the five checkpoint-2 scores (0-5) as one percent, the same number the admin
+// shows (adminScores.overall).
+func talkOverall(scores map[string]float64) float64 {
+	mean := (scores["value_a"] + scores["value_b"] + scores["soon"] + scores["talk_again"] + scores["small_talk"]) / 5
+	return math.Round(math.Max(0, math.Min(100, mean/5*100))*10) / 10
+}
+
 func talkFires(c *talkConfig, scores map[string]float64, reason string) bool {
+	if c.Fire.OverallMin > 0 {
+		return talkOverall(scores) >= c.Fire.OverallMin
+	}
 	return math.Min(scores["value_a"], scores["value_b"]) >= c.Fire.ValueMin &&
 		math.Max(scores["soon"], scores["talk_again"]) >= c.Fire.SoonOrAgainMin &&
 		reason != "" && reason != "none"
@@ -1032,8 +1044,17 @@ func (r *talkRun) checkpoint2(ctx context.Context) (map[string]any, bool) {
 		opener = ""
 	}
 	fire := talkFires(cfg, scores, reason)
+	if fire && reason == "none" { // a good talk without one standout reason: what fired at checkpoint 1
+		reason = "team"
+		for _, g := range r.fired1 {
+			if _, ok := reasons[g]; ok {
+				reason = g
+				break
+			}
+		}
+	}
 	return map[string]any{
-		"scores": scores, "reason": reason, "opener": opener, "fire": fire,
+		"scores": scores, "reason": reason, "opener": opener, "fire": fire, "overall": talkOverall(scores),
 		"min_value": math.Min(scores["value_a"], scores["value_b"]), "soon_or_again": math.Max(scores["soon"], scores["talk_again"]),
 	}, fire
 }

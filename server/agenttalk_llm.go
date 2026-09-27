@@ -130,6 +130,9 @@ type talkConfig struct {
 		Opener talkChoiceQ           `json:"opener"`
 	} `json:"checkpoint2"`
 	Fire struct {
+		// OverallMin (percent, 0 = off): a match when jev's five checkpoint-2 scores average
+		// at least this (the % the admin shows). Otherwise the stricter rule below.
+		OverallMin     float64 `json:"overall_min"`
 		ValueMin       float64 `json:"value_min"`
 		SoonOrAgainMin float64 `json:"soon_or_again_min"`
 	} `json:"fire"`

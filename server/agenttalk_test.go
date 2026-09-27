@@ -501,6 +501,7 @@ func TestTalkCheckpoint1StopsWarmly(t *testing.T) {
 
 func TestTalkFireRuleUsesLowerValue(t *testing.T) {
 	cfg, _ := loadTalkConfig("")
+	cfg.Fire.OverallMin = 0 // the strict rule, when overall_min is off
 	hi := cfg.Fire.ValueMin + 1
 	lo := cfg.Fire.ValueMin - 1
 	soon := cfg.Fire.SoonOrAgainMin
@@ -522,16 +523,46 @@ func TestTalkFireRuleUsesLowerValue(t *testing.T) {
 	if talkFires(cfg, map[string]float64{"value_a": 5, "value_b": 5, "soon": 5, "talk_again": 5}, "none") {
 		t.Fatal("reason none never fires")
 	}
-	// end to end: jev scores B's value low
+}
+
+// The live rule: jev's five scores averaged as a percent, 55 and up is a match.
+func TestTalkFireRuleOverall(t *testing.T) {
+	cfg, _ := loadTalkConfig("")
+	if cfg.Fire.OverallMin != 55 {
+		t.Fatalf("overall_min = %v, want 55", cfg.Fire.OverallMin)
+	}
+	at := func(v float64) map[string]float64 {
+		return map[string]float64{"value_a": v, "value_b": v, "soon": v, "talk_again": v, "small_talk": v}
+	}
+	if talkFires(cfg, at(2.7), "team") { // 54%
+		t.Fatal("54% must not match")
+	}
+	if !talkFires(cfg, at(2.8), "team") { // 56%
+		t.Fatal("56% should match")
+	}
+	// the talk that looked harsh: 65%, both values under 3
+	if !talkFires(cfg, map[string]float64{"value_a": 2.7, "value_b": 2.5, "soon": 3.9, "talk_again": 3.1, "small_talk": 4.2}, "team") {
+		t.Fatal("65% should match")
+	}
+	// end to end: under 55 is no match; over 55 with no standout reason still matches
 	h := newTalkHarness(t)
-	h.jev.scores = map[string]float64{"value_a": 5, "value_b": 1, "soon": 5, "talk_again": 5}
+	h.jev.scores = at(2.5)
 	id, v := h.run(h.a, h.b)
 	if v["match"] != false {
-		t.Fatalf("lower value should block: %v", v)
+		t.Fatalf("50%% should not match: %v", v)
 	}
-	rec := h.record(id)
-	if rec.Verdict["min_value"].(float64) != 1 {
-		t.Fatalf("verdict should record the lower value: %v", rec.Verdict)
+	if o := h.record(id).Verdict["overall"].(float64); o != 50 {
+		t.Fatalf("verdict should record the overall: %v", o)
+	}
+	h2 := newTalkHarness(t)
+	h2.jev.scores = at(3.5)
+	h2.jev.reason = "none"
+	id, v = h2.run(h2.a, h2.b)
+	if v["match"] != true {
+		t.Fatalf("70%% should match even without a standout reason: %v", v)
+	}
+	if r := h2.record(id).Verdict["reason"]; r == "none" || r == "" {
+		t.Fatalf("a match needs a reason for the icebreaker, got %v", r)
 	}
 }
 
