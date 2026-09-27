@@ -61,6 +61,7 @@ function Shell({
   )
 
   useFrame(({ clock, camera }) => {
+    if (!active) return // inside Klaus: the campus is hidden
     const t = clock.elapsedTime + seed
     spin.current.position.y = 2.8 + Math.sin(t * 2) * 0.18
     // face the camera wherever it has been turned, with a gentle sway

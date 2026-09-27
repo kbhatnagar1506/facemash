@@ -6,7 +6,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { Collider, type Campus, type Pt } from './map'
 import { withCutaway } from './cutaway'
 import { asphaltTexture, detailTexture, dirtTexture, grassTexture, worldUV } from './campusTextures'
-import { byTile, finishInstances, roadClearance, useNearTiles, useToonRamp } from './campusKit'
+import { TILE, byTile, finishInstances, roadClearance, tileKey, useNearTiles, useToonRamp } from './campusKit'
 import { Butterflies, Flowers, PokeTrees, SMALL_CELL, SMALL_RADIUS, TallGrass, TREE_CELL, TREE_RADIUS, WindClock, pathMaterial, usePlacements, waterMaterial } from './overworld'
 
 const WALL = new THREE.Color('#f4ead2')
@@ -124,13 +124,41 @@ function ribbon(pts: Pt[], w: number, y: number): THREE.BufferGeometry[] {
   return out
 }
 
-function Ground({ campus }: { campus: Campus }) {
+// The ground is streamed like everything else: parks, roads and paths are cut into tiles and
+// only the ones within GROUND_RADIUS of you are built and drawn (the whole map is ~400k
+// vertices; the overworld camera never sees past ~150 m). Areas bigger than a couple of
+// tiles are drawn always, so a big park never vanishes at the edge of the range.
+const GROUND_RADIUS = 280
+
+type GroundArea = { a: Campus['areas'][number]; i: number }
+type GroundSeg = { a: Pt; b: Pt; w: number; foot: boolean }
+type GroundMats = ReturnType<typeof groundMaterials>
+
+function groundMaterials(campus: Campus) {
+  const grass = grassTexture()
+  const [x0, z0, x1, z1] = campus.bounds
+  grass.repeat.set((x1 - x0 + 800) / 4, (z1 - z0 + 800) / 4) // 2 m tiles, 2 x 2 per texture
+  const dirt = dirtTexture()
+  const rim = pathMaterial(dirt, '#d9b87e', 0.4, 'rim')
+  rim.polygonOffsetFactor = rim.polygonOffsetUnits = -3
+  const path = pathMaterial(dirt, '#ffffff', 0.18, 'path')
+  path.polygonOffsetFactor = path.polygonOffsetUnits = -4
+  return {
+    grass,
+    rim,
+    path,
+    water: waterMaterial(),
+    areas: new THREE.MeshLambertMaterial({ vertexColors: true, map: detailTexture() }),
+    curbs: new THREE.MeshLambertMaterial({ color: '#eef0f2', polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }),
+    roads: new THREE.MeshLambertMaterial({ color: '#d2d5dc', map: asphaltTexture(), polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
+  }
+}
+
+/** One tile's worth of ground (or the always-drawn big areas). */
+function GroundPiece({ areas, segs, mats }: { areas: GroundArea[]; segs: GroundSeg[]; mats: GroundMats }) {
   const geo = useMemo(() => {
-    const sorted = [...campus.areas].sort(
-      (a, b) => (AREA_LAYER[a.kind] ?? 0) - (AREA_LAYER[b.kind] ?? 0),
-    )
     const flat = (kinds: (k: string) => boolean) =>
-      sorted.flatMap((a, i) => {
+      areas.flatMap(({ a, i }) => {
         const color = AREA_COLOR[a.kind]
         if (!color || !kinds(a.kind)) return []
         const g = new THREE.ShapeGeometry(shape(a.pts))
@@ -141,38 +169,68 @@ function Ground({ campus }: { campus: Campus }) {
         return [g]
       })
     const merge = (parts: THREE.BufferGeometry[]) => (parts.length ? mergeGeometries(parts) : null)
-    const cars = campus.roads.filter((r) => !r.foot)
-    const foot = campus.roads.filter((r) => r.foot)
-    const areas = merge(flat((k) => k !== 'water'))
+    const cars = segs.filter((r) => !r.foot)
+    const foot = segs.filter((r) => r.foot)
+    const lay = (list: GroundSeg[], extra: number, y: number) => list.flatMap((r) => ribbon([r.a, r.b], r.w + extra, y))
+    const uv = (g: THREE.BufferGeometry | null, size: number) => g && worldUV(g, size)
     return {
-      areas: areas && worldUV(areas, 6),
+      areas: uv(merge(flat((k) => k !== 'water')), 6),
       water: merge(flat((k) => k === 'water')),
       // light kerb under every road, then the road; a darker sandy rim under every
       // footpath, then the path (drawn in that order so crossings stay clean)
-      curbs: merge(cars.flatMap((r) => ribbon(r.pts, r.w + 0.9, 0.05))),
-      roads: worldUV(mergeGeometries(cars.flatMap((r) => ribbon(r.pts, r.w, 0.06)))!, 5),
-      rims: worldUV(mergeGeometries(foot.flatMap((r) => ribbon(r.pts, r.w + 0.7, 0.07)))!, 4),
-      paths: worldUV(mergeGeometries(foot.flatMap((r) => ribbon(r.pts, r.w, 0.08)))!, 4),
+      curbs: merge(lay(cars, 0.9, 0.05)),
+      roads: uv(merge(lay(cars, 0, 0.06)), 5),
+      rims: uv(merge(lay(foot, 0.7, 0.07)), 4),
+      paths: uv(merge(lay(foot, 0, 0.08)), 4),
     }
-  }, [campus])
-  const mats = useMemo(() => {
-    const grass = grassTexture()
-    const [x0, z0, x1, z1] = campus.bounds
-    grass.repeat.set((x1 - x0 + 800) / 4, (z1 - z0 + 800) / 4) // 2 m tiles, 2 x 2 per texture
-    const dirt = dirtTexture()
-    const rim = pathMaterial(dirt, '#d9b87e', 0.4, 'rim')
-    rim.polygonOffsetFactor = rim.polygonOffsetUnits = -3
-    const path = pathMaterial(dirt, '#ffffff', 0.18, 'path')
-    path.polygonOffsetFactor = path.polygonOffsetUnits = -4
-    return { grass, detail: detailTexture(), asphalt: asphaltTexture(), rim, path, water: waterMaterial() }
-  }, [campus])
+  }, [areas, segs])
   useEffect(
     () => () => {
       for (const g of Object.values(geo)) g?.dispose()
     },
     [geo],
   )
+  return (
+    <group>
+      {geo.areas && <mesh geometry={geo.areas} material={mats.areas} receiveShadow />}
+      {geo.water && <mesh geometry={geo.water} material={mats.water} receiveShadow />}
+      {geo.curbs && <mesh geometry={geo.curbs} material={mats.curbs} receiveShadow />}
+      {geo.roads && <mesh geometry={geo.roads} material={mats.roads} receiveShadow />}
+      {geo.rims && <mesh geometry={geo.rims} material={mats.rim} receiveShadow />}
+      {geo.paths && <mesh geometry={geo.paths} material={mats.path} receiveShadow />}
+    </group>
+  )
+}
 
+function Ground({ campus, near }: { campus: Campus; near: Set<string> }) {
+  const tiles = useMemo(() => {
+    const sorted = [...campus.areas].sort((a, b) => (AREA_LAYER[a.kind] ?? 0) - (AREA_LAYER[b.kind] ?? 0))
+    const big: GroundArea[] = []
+    const areas = new Map<string, GroundArea[]>()
+    const segs = new Map<string, GroundSeg[]>()
+    const add = <T,>(m: Map<string, T[]>, k: string, v: T) => {
+      const list = m.get(k)
+      if (list) list.push(v)
+      else m.set(k, [v])
+    }
+    sorted.forEach((a, i) => {
+      if (!AREA_COLOR[a.kind]) return
+      const xs = a.pts.map((p) => p[0])
+      const zs = a.pts.map((p) => p[1])
+      const [x0, x1, z0, z1] = [Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs)]
+      if (x1 - x0 > TILE * 2 || z1 - z0 > TILE * 2) big.push({ a, i })
+      else add(areas, tileKey((x0 + x1) / 2, (z0 + z1) / 2), { a, i })
+    })
+    for (const r of campus.roads)
+      for (let k = 1; k < r.pts.length; k++) {
+        const a = r.pts[k - 1]
+        const b = r.pts[k]
+        add(segs, tileKey((a[0] + b[0]) / 2, (a[1] + b[1]) / 2), { a, b, w: r.w, foot: r.foot })
+      }
+    return { big, areas, segs, keys: [...new Set([...areas.keys(), ...segs.keys()])] }
+  }, [campus])
+  const mats = useMemo(() => groundMaterials(campus), [campus])
+  const none: never[] = []
   const [x0, z0, x1, z1] = campus.bounds
   return (
     <group>
@@ -180,22 +238,12 @@ function Ground({ campus }: { campus: Campus }) {
         <planeGeometry args={[x1 - x0 + 800, z1 - z0 + 800]} />
         <meshLambertMaterial map={mats.grass} />
       </mesh>
-      {geo.areas && (
-        <mesh geometry={geo.areas} receiveShadow>
-          <meshLambertMaterial vertexColors map={mats.detail} />
-        </mesh>
-      )}
-      {geo.water && <mesh geometry={geo.water} material={mats.water} receiveShadow />}
-      {geo.curbs && (
-        <mesh geometry={geo.curbs} receiveShadow>
-          <meshLambertMaterial color="#eef0f2" polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-1} />
-        </mesh>
-      )}
-      <mesh geometry={geo.roads} receiveShadow>
-        <meshLambertMaterial color="#d2d5dc" map={mats.asphalt} polygonOffset polygonOffsetFactor={-2} polygonOffsetUnits={-2} />
-      </mesh>
-      <mesh geometry={geo.rims} material={mats.rim} receiveShadow />
-      <mesh geometry={geo.paths} material={mats.path} receiveShadow />
+      {tiles.big.length > 0 && <GroundPiece areas={tiles.big} segs={none} mats={mats} />}
+      {tiles.keys
+        .filter((k) => near.has(k))
+        .map((k) => (
+          <GroundPiece key={k} areas={tiles.areas.get(k) ?? none} segs={tiles.segs.get(k) ?? none} mats={mats} />
+        ))}
     </group>
   )
 }
@@ -307,10 +355,11 @@ function StreetFurniture({ campus, near }: { campus: Campus; near: Set<string> }
 }
 
 /** Golden light pillar + floating sign over Klaus, visible across campus. */
-function EventBeacon({ campus, onOpen }: { campus: Campus; onOpen: () => void }) {
+function EventBeacon({ campus, onOpen, active }: { campus: Campus; onOpen: () => void; active: boolean }) {
   const ev = campus.event
   const sign = useRef<THREE.Group>(null!)
   useFrame(({ clock }) => {
+    if (!active) return // inside Klaus: the campus is hidden, nothing to animate
     const t = clock.elapsedTime
     if (sign.current) sign.current.position.y = ev!.h + 16 + Math.sin(t * 1.6) * 1.2
   })
@@ -324,7 +373,7 @@ function EventBeacon({ campus, onOpen }: { campus: Campus; onOpen: () => void })
       </mesh>
       <group ref={sign}>
         <Billboard>
-          <Html center distanceFactor={60} zIndexRange={[10, 0]}>
+          <Html center distanceFactor={60} zIndexRange={[10, 0]} style={{ display: active ? undefined : 'none' }}>
             <button className="event-sign" onClick={onOpen}>
               <span className="event-sign-title">HackGT</span>
               <span className="event-sign-sub">@ Klaus</span>
@@ -337,21 +386,21 @@ function EventBeacon({ campus, onOpen }: { campus: Campus; onOpen: () => void })
 }
 
 export function World({ campus, onOpenEvent, focus, active = true }: { campus: Campus; onOpenEvent: () => void; focus: React.MutableRefObject<{ x: number; z: number }>; active?: boolean }) {
-  const near = useNearTiles(focus, active)
+  const near = useNearTiles(focus, active, TILE, GROUND_RADIUS)
   const nearTrees = useNearTiles(focus, active, TREE_CELL, TREE_RADIUS)
   const nearSmall = useNearTiles(focus, active, SMALL_CELL, SMALL_RADIUS)
   const place = usePlacements(campus)
   return (
     <group>
       <WindClock active={active} />
-      <Ground campus={campus} />
+      <Ground campus={campus} near={near} />
       <Buildings campus={campus} near={near} />
       <PokeTrees trees={place.trees} near={nearTrees} />
       <TallGrass tufts={place.tufts} near={nearSmall} />
       <Flowers flowers={place.flowers} near={nearSmall} />
       <Butterflies flowers={place.flowers} near={nearSmall} />
       <StreetFurniture campus={campus} near={nearTrees} />
-      <EventBeacon campus={campus} onOpen={onOpenEvent} />
+      <EventBeacon campus={campus} onOpen={onOpenEvent} active={active} />
     </group>
   )
 }
